@@ -35,6 +35,7 @@
   - 火山方舟 Seedream 5.0 Pro：**PASS**（关闭安全体验模式后，1024×1024 测试成功）。
   - 豆包视觉模型：当前账号无可用模型；视觉质检先走 DOM/几何规则。
   - 火山 TTS：**尚未配置**，M4 前需要 AppID + Access Token。
+- 角色包：ChatGPT 生成的首个洛琪希正面立绘已处理为 `character_packs/roxy/roxy_calm_standing_01.png`（1080×1920 RGBA，本地，gitignored）；Seedream 不能生成洛琪希。
 - 代码：还没有 `app/`、`compose.yaml`、前端；M1 从零开始。
 
 ---
@@ -96,8 +97,13 @@ roxy_pipline/
 │  ├─ AI科普视频Agent系统架构选型方案.md
 │  ├─ decisions-architecture.md
 │  └─ assets/roxy_reference.webp   # 本地保留，gitignore
+├─ character_packs/
+│  └─ roxy/                        # 本地洛琪希 pack，gitignore
+│     ├─ manifest.json
+│     └─ roxy_calm_standing_01.png
 └─ scripts/
-   └─ check_llm.py
+   ├─ check_llm.py
+   └─ prepare_character_asset.py   # 白底 → 透明 1080x1920
 ```
 
 M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/domains/providers）、`templates/`、`prompts/`、`assets/`、`character_packs/`、`migrations/`、`tests/`、`web/`。
@@ -178,6 +184,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 
 - 公开仓库不提交洛琪希参考图/立绘；`docs/assets/roxy_reference.webp` 已 gitignore。
 - Seedream 版权过滤：带“洛琪希”名字、参考图，或高度相似的“蓝发魔女 + 长风衣”描述，会返回 `OutputImageSensitiveContentDetected.PolicyViolation`；不要用改词/裁剪参考图的方式绕过。AI 生成只用于原创角色/背景/装饰；洛琪希 pack 自绘或外包。
+- ChatGPT 在线生图可用于本地洛琪希候选（用户自用、非商业）；产物只放 `character_packs/roxy/`（gitignored），不要提交公开仓库。处理脚本：`scripts/prepare_character_asset.py`。
 - 原创角色/背景 AI 生成后必须人工筛选、去背景、统一尺寸、入库；不要每期重生成。
 - AI 生成的洛琪希衍生图仍受 C-01～C-06 约束；生成服务条款也要看。
 - 字体/BGM 只用 OFL 或已授权素材。
@@ -206,3 +213,4 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 
 - Seedream 5.0 Pro 原创角色生成成功：1088×1920 → 裁到 1080×1920，纯白底 RGB，产物 `tmp/original_girl_01_1080x1920.png`。
 - 洛琪希特定形象被版权过滤：带名称、参考图或高度相似描述都返回 `OutputImageSensitiveContentDetected.PolicyViolation`；Roxy pack 改为自绘/外包，AI 生成只用于原创角色/背景/装饰。
+- ChatGPT 在线生图产出首个洛琪希正面立绘；用 `prepare_character_asset.py` 去白底、裁到 1080×1920，存入 `character_packs/roxy/`（本地，gitignored）。
