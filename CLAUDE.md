@@ -61,7 +61,7 @@ Playwright/Chromium + ffmpeg + LangGraph（仅 AI 子图）；前端 React + Vit
 
 - 文本/代码主模型：DeepSeek `deepseek-flash`（当前 Key 只开放这个模型）。
 - 豆包 Pro：仅备选/A-B，不阻塞主流程。
-- 图像素材：火山方舟 Seedream 5.0 Pro，生成候选后**人工筛选、固定资产化**。
+- 图像素材：火山方舟 Seedream 5.0 Pro，生成候选后**人工筛选、固定资产化**；仅限原创角色/背景/装饰，洛琪希会被版权过滤，不能 AI 复刻。
 - 视觉质检：DOM/几何规则优先；视觉模型可选，不作为关键路径。
 - **含文字的信息卡片必须用 HTML 渲染**，不得用图像生成模型。
 

@@ -112,7 +112,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 |---|---|---|
 | 文本/代码主模型 | `DEEPSEEK_MODEL=deepseek-flash` | ✅ 可用 |
 | 文本备选/A-B | `ARK_MODEL_STRONG=doubao-seed-2-1-pro-260915` | ✅ 可用 |
-| 图像素材 | `ARK_IMAGE_MODEL=doubao-seedream-5-0-pro-260628` | ✅ 可用（需人工筛选） |
+| 图像素材 | `ARK_IMAGE_MODEL=doubao-seedream-5-0-pro-260628` | ✅ 可用（原创角色/背景；洛琪希会被版权过滤） |
 | 视觉质检 | `ARK_MODEL_VISION` | ❌ 无可用模型；先 DOM 规则 |
 | TTS | `VOLC_TTS_APP_ID` / `VOLC_TTS_ACCESS_TOKEN` | ⏳ 待提供 |
 
@@ -144,8 +144,8 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - 输出规格：1920×1080、25fps、H.264/AAC 48kHz。
 - 所有动画由 `renderAt(tMs)` 计算，禁用 CSS animation / `Date.now()` / `Math.random()`；随机用固定 seed。
 - 镜头片段编码参数必须完全一致，最终 `-c copy` 拼接。
-- 含文字卡片用 HTML；图像生成只做角色/背景/装饰。
-- 角色/背景素材生成后固定资产化，不每期重生成。
+- 含文字卡片用 HTML；图像生成只做原创角色/背景/装饰。
+- 原创角色/背景素材生成后固定资产化，不每期重生成。
 
 ---
 
@@ -177,7 +177,8 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 ### 5.4 素材与版权
 
 - 公开仓库不提交洛琪希参考图/立绘；`docs/assets/roxy_reference.webp` 已 gitignore。
-- 角色/背景 AI 生成后必须人工筛选、去背景、统一尺寸、入库；不要每期重生成。
+- Seedream 版权过滤：带“洛琪希”名字、参考图，或高度相似的“蓝发魔女 + 长风衣”描述，会返回 `OutputImageSensitiveContentDetected.PolicyViolation`；不要用改词/裁剪参考图的方式绕过。AI 生成只用于原创角色/背景/装饰；洛琪希 pack 自绘或外包。
+- 原创角色/背景 AI 生成后必须人工筛选、去背景、统一尺寸、入库；不要每期重生成。
 - AI 生成的洛琪希衍生图仍受 C-01～C-06 约束；生成服务条款也要看。
 - 字体/BGM 只用 OFL 或已授权素材。
 
@@ -200,3 +201,8 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - GitHub 仓库 `Tsuki11111/roxy-pipeline` 创建（Public）；initial commit 与文档规范化 commit 已推送（网络曾中断，重试后成功）。
 - `.gitignore` 排除 `.env`、洛琪希参考图、`tmp/`、私有 character pack。
 - 新建 `CLAUDE.md` / `HANDOFF.md` / `README.md`，按 ItsMyGo 的文档分工规范化。
+
+### 2026-10-26 · 角色素材测试
+
+- Seedream 5.0 Pro 原创角色生成成功：1088×1920 → 裁到 1080×1920，纯白底 RGB，产物 `tmp/original_girl_01_1080x1920.png`。
+- 洛琪希特定形象被版权过滤：带名称、参考图或高度相似描述都返回 `OutputImageSensitiveContentDetected.PolicyViolation`；Roxy pack 改为自绘/外包，AI 生成只用于原创角色/背景/装饰。

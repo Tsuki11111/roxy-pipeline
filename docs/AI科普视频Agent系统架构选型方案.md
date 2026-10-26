@@ -22,7 +22,7 @@
 | 架构形态 | 模块化单体 + 进程级拆分 | 一套代码库，按进程拆成 api / workflow / agent / media / render，先不付微服务成本 |
 | 工作流 | PostgreSQL 状态机 + Celery | 需求的状态机、断点续跑、局部重跑用“数据库状态 + 幂等节点 + 内容寻址缓存”即可；Temporal 作为规模化备选 |
 | AI 子图编排 | LangGraph + PostgreSQL checkpointer | 脚本/分镜/QC 的循环、条件分支和局部中断用图表达；媒体流水线仍由 DB 状态机 + Celery 负责 |
-| 素材生成 | 火山方舟 Seedream（可替换） | 角色/背景/装饰用 AI 生成候选，人工筛选后固定资产化；含文字卡片仍用 HTML |
+| 素材生成 | 火山方舟 Seedream（可替换） | 原创角色/背景/装饰用 AI 生成候选，人工筛选后固定资产化；含文字卡片仍用 HTML |
 | 渲染 | Playwright + 确定性逐帧 + ffmpeg | 信息卡片用 HTML 渲染保证文字 100% 准确；逐帧可控、可按镜头缓存、可复现 |
 | 存储 | PostgreSQL + MinIO | 元数据进 DB，大文件走 S3 兼容对象存储；本地文件系统只用于测试 |
 | 前端 | React + Vite + Ant Design | 内部运营/审片后台，表格、表单、编辑器密集，AntD 最省事 |
@@ -139,7 +139,7 @@
 | TTS | 云 TTS 适配层 | 火山 / MiniMax / 阿里云 | 云优先、按量付费、免 GPU 运维 | CosyVoice 2 自建 |
 | 强制对齐 | TTS 原生时间戳优先，WhisperX 兜底 | WhisperX 最新稳定版 | 字级时间戳决定字幕节奏 | ctc-forced-aligner |
 | 视觉质检 | DOM/几何规则优先 + 可配置视觉模型 | 豆包 Vision / Qwen-VL / GLM-4V | 文字溢出、裁切先用 DOM 规则；视觉模型只做语义抽查，不阻塞 | 纯规则 |
-| 图像生成 | 火山方舟 Seedream（或 OpenAI-compatible 图像 API） | Seedream 5.x | 角色/背景/装饰候选；固定参考图/seed；人工筛选后入库 | 其他图像 API |
+| 图像生成 | 火山方舟 Seedream（或 OpenAI-compatible 图像 API） | Seedream 5.x | 原创角色/背景/装饰候选；固定参考图/seed；人工筛选后入库 | 其他图像 API |
 | 渲染 | Playwright + Chromium + Jinja2 + ffmpeg | 版本全部钉死 | 文字准确、逐帧可控、可按镜头缓存 | Remotion（评估项） |
 | 前端 | React + Vite + TypeScript + Ant Design 5 | 最新稳定版 | 后台表格/表单密集，AntD 组件全 | Next.js（不需要 SSR） |
 | 反向代理 | Nginx | 1.27+ | 静态资源、API 代理、SSE 关闭缓冲 | Caddy |
@@ -303,7 +303,7 @@ TTS（逐句合成）
 | `roxy.render.card` | workflow | render-worker | 卡片 HTML → PNG |
 | `roxy.render.shot` | workflow | render-worker | 镜头逐帧 → MP4 片段 |
 | `roxy.render.concat` | workflow | render-worker | 视频拼接、封面、封装 |
-| `roxy.asset.imagegen` | workflow / asset | asset-worker | 生成角色/背景候选，后处理与入库 |
+| `roxy.asset.imagegen` | workflow / asset | asset-worker | 生成原创角色/背景候选，后处理与入库 |
 | `roxy.dlq` | RabbitMQ | 人工/告警 | 死信，保留原始消息与堆栈 |
 
 **队列纪律：**
@@ -1074,6 +1074,7 @@ prompt 模板 + 参考图 + seed
 **记录与合规：**
 
 - `asset` 记录 prompt、model、seed、reference、provider request id、许可证/条款，便于复现和追责。
+- 2026-10-26 实测：Seedream 5.0 Pro 对“洛琪希”名称、参考图或高度相似的蓝发魔女描述返回 `OutputImageSensitiveContentDetected.PolicyViolation`；AI 生成不能复刻洛琪希，只用于原创角色/背景/装饰；Roxy pack 需自绘/外包。
 - AI 生成的洛琪希衍生图仍受 C-01～C-06 约束，仅非商业同人使用。
 - 生成服务条款可能限制商用/再分发，入库时记录并遵守。
 
@@ -1138,7 +1139,7 @@ prompt 模板 + 参考图 + seed
 | GET | `/episodes/{id}/output` | 成片/封面/元数据/字幕的预签名 URL | 登录用户 |
 | GET | `/episodes/{id}/package` | 发布包清单 | 登录用户 |
 | POST | `/assets` | 上传角色/背景/字体 | admin |
-| POST | `/assets/generate` | 生成角色/背景候选 | admin |
+| POST | `/assets/generate` | 生成原创角色/背景候选 | admin |
 | GET | `/assets/candidates` | 候选列表 | 登录用户 |
 | POST | `/assets/{id}/approve` | 候选入库 | admin |
 | POST | `/assets/{id}/reject` | 拒绝候选 | admin |
@@ -1244,7 +1245,7 @@ Content-Type: application/json
 | TTS API | 逐句合成 | 48kHz WAV；字级时间戳；并发配额；音色固定 |
 | 强制对齐 | 补齐时间戳 | WhisperX/ctc-forced-aligner；中文模型；CPU/GPU 均可 |
 | 视觉模型 API | 抽帧质检 | 结构化 verdict；图片压缩后上传；不传整片 |
-| 图像生成 API | 角色/背景/装饰候选 | Seedream / OpenAI-compatible；固定参考图/seed；人工筛选后入库 |
+| 图像生成 API | 原创角色/背景/装饰候选 | Seedream / OpenAI-compatible；固定参考图/seed；人工筛选后入库 |
 | MinIO S3 API | 资产与产物 | 预签名 URL；生命周期；校验和 |
 | ffmpeg | 编码、拼接、混流、响度 | 版本固定；参数统一；ffprobe 校验 |
 | 外部信息源 | RSS/GitHub/关键词 | 超时、限长、清洗、SSRF 防护、不可信数据 |
