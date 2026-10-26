@@ -27,7 +27,7 @@
 
 - 需求文档 v1.2、架构方案 v1.3、ADR-001～005 已写完。
 - GitHub 仓库已创建：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
-- 本地 initial commit 已提交；推送受 GitHub 网络影响，若没有 upstream，重试 `git push -u origin main`。
+- 本地 initial commit 与文档规范化 commit 已推送到 `origin/main`（2026-10-26）。
 - `.env`、洛琪希参考图、`tmp/` 已由 `.gitignore` 排除；仓库只提交 `.env.example`。
 - 模型验证：
   - DeepSeek `deepseek-flash`：**PASS**。
@@ -197,6 +197,6 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - 架构选型方案完成并更新到 v1.3：方案 A（Python 模块化单体 + 进程级拆分 + Celery）、LangGraph 边界、Seedream 素材生成、HTML 卡片边界。
 - ADR-001～005 写入 `docs/decisions-architecture.md`。
 - 模型验证：DeepSeek `deepseek-flash` PASS；火山 Seed 2.1 Pro/Lite PASS；Seedream 5.0 Pro PASS；Turbo 未开通；视觉模型无权限。
-- GitHub 仓库 `Tsuki11111/roxy-pipeline` 创建（Public）；本地 initial commit 完成；推送因 GitHub 网络中断待重试。
+- GitHub 仓库 `Tsuki11111/roxy-pipeline` 创建（Public）；initial commit 与文档规范化 commit 已推送（网络曾中断，重试后成功）。
 - `.gitignore` 排除 `.env`、洛琪希参考图、`tmp/`、私有 character pack。
 - 新建 `CLAUDE.md` / `HANDOFF.md` / `README.md`，按 ItsMyGo 的文档分工规范化。
