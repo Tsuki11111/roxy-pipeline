@@ -1,0 +1,30 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# copyrighted / private assets
+docs/assets/roxy_reference.webp
+private/
+character_packs/*
+!character_packs/placeholder/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# node
+node_modules/
+dist/
+.vite/
+
+# runtime data
+data/
+tmp/
+
+# logs
+*.log
