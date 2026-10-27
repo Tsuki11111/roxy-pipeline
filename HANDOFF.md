@@ -35,7 +35,7 @@
   - 火山方舟 Seedream 5.0 Pro：**PASS**（关闭安全体验模式后，1024×1024 测试成功）。
   - 豆包视觉模型：当前账号无可用模型；视觉质检先走 DOM/几何规则。
   - 火山 TTS：**尚未配置**，M4 前需要 AppID + Access Token。
-- 角色包：ChatGPT 生成的首个洛琪希正面立绘已处理为 `character_packs/roxy/roxy_calm_standing_01.png`（1080×1920 RGBA，本地，gitignored）；Seedream 不能生成洛琪希。
+- 角色包：正式资产选用豆包版 `character_packs/roxy/roxy_calm_standing_01.png`（1080×1920 RGBA，水印已排除，本地，gitignored）；ChatGPT 版留在 `alternates/`。Seedream 不能生成洛琪希。
 - 代码：还没有 `app/`、`compose.yaml`、前端；M1 从零开始。
 
 ---
@@ -100,7 +100,9 @@ roxy_pipline/
 ├─ character_packs/
 │  └─ roxy/                        # 本地洛琪希 pack，gitignore
 │     ├─ manifest.json
-│     └─ roxy_calm_standing_01.png
+│     ├─ roxy_calm_standing_01.png # 正式（豆包版，水印已排除）
+│     └─ alternates/
+│        └─ roxy_calm_standing_01_chatgpt.png
 └─ scripts/
    ├─ check_llm.py
    └─ prepare_character_asset.py   # 白底 → 透明 1080x1920
@@ -215,6 +217,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - 豆包生成图右下角带“豆包 AI 生成”水印；直接入成片会让 alpha bbox 扩大、角色缩小偏移，并在每个镜头出现。
 - 给 `prepare_character_asset.py` 增加 `--keep-largest-component`：只保留角色主体，水印作为孤立小组件被排除。
 - 处理结果：`tmp/roxy_doubao_01_1080x1920.png`，角色完整、水印已排除；是否正式入库待确认豆包条款。
+- 用户选定豆包版为正式资产：`character_packs/roxy/roxy_calm_standing_01.png`；ChatGPT 版移到 `alternates/`，manifest 升到 v2。
 
 ### 2026-10-26 · 角色素材测试
 
