@@ -31,7 +31,7 @@
 | AI 子图 | LangGraph + PostgreSQL checkpointer —— 只做脚本/分镜/QC |
 | 渲染 | Playwright + Chromium + Jinja2 + ffmpeg |
 | 文本模型 | DeepSeek `deepseek-flash`（主）；火山方舟豆包 Pro（备选/A-B） |
-| 图像生成 | 火山方舟 Seedream 5.0 Pro（原创角色/背景/装饰候选） |
+| 图像生成 | 火山方舟 Seedream 5.0 Pro（背景/舞台/演示物件；角色立绘由用户提供） |
 | 前端 | React + Vite + TypeScript + Ant Design |
 | 部署 | Docker Compose + Nginx |
 | 可观测 | structlog + Prometheus/Grafana + Sentry（后续） |
@@ -61,7 +61,7 @@
 
 1. `episode.status` 是业务事实来源；LangGraph checkpoint 只是图运行状态。
 2. 媒体任务（TTS、Chromium、ffmpeg）不进 LangGraph；由状态机 + Celery 调度。
-3. 含文字的信息卡片必须用 HTML 渲染；图像生成只做原创角色/背景/装饰。
+3. 含文字的信息卡片必须用 HTML 渲染；Seedream 只做背景/舞台/演示物件。
 4. 镜头是缓存和并行的最小单位；局部改一句只重跑受影响的镜头和拼接。
 
 ## 当前进度
@@ -102,7 +102,7 @@ docker compose up -d
 |---|---|---|
 | 文本/代码主模型 | `DEEPSEEK_MODEL=deepseek-flash` | ✅ 可用 |
 | 文本备选/A-B | `ARK_MODEL_STRONG=doubao-seed-2-1-pro-260915` | ✅ 可用 |
-| 图像素材 | `ARK_IMAGE_MODEL=doubao-seedream-5-0-pro-260628` | ✅ 可用 |
+| 图像素材 | `ARK_IMAGE_MODEL=doubao-seedream-5-0-pro-260628` | ✅ 可用（背景/舞台/演示物件） |
 | 视觉质检 | `ARK_MODEL_VISION` | ❌ 暂无；先 DOM 规则 |
 | TTS | `VOLC_TTS_APP_ID` / `VOLC_TTS_ACCESS_TOKEN` | ⏳ 待配置 |
 
@@ -127,6 +127,7 @@ docker compose up -d
 ## 说明
 
 - 仓库**不包含**受版权保护的角色参考图、立绘、BGM 或未授权字体；洛琪希资产包由使用者本地提供并遵守非商业同人约束。
-- Seedream 实测会对洛琪希名称、参考图或高度相似特征触发版权过滤；AI 生成只用于原创角色/背景/装饰，不能复刻洛琪希。
+- 洛琪希等版权角色立绘由用户提供；Seedream 只做背景/舞台/演示物件，不能复刻洛琪希。
+- Seedream 实测会对洛琪希名称、参考图或高度相似特征触发版权过滤；不要尝试绕过。
 - 公开仓库只保留文字规格和后续的原创占位素材（占位素材尚未创建）。
 - 许可证待定；在选定前保留所有权利。

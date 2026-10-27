@@ -36,6 +36,7 @@
   - 豆包视觉模型：当前账号无可用模型；视觉质检先走 DOM/几何规则。
   - 火山 TTS：**尚未配置**，M4 前需要 AppID + Access Token。
 - 角色包：正式资产选用豆包版 `character_packs/roxy/roxy_calm_standing_01.png`（1080×1920 RGBA，水印已排除，本地，gitignored）；ChatGPT 版留在 `alternates/`。Seedream 不能生成洛琪希。
+- 资产分工（2026-10-27）：角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
 - 代码：还没有 `app/`、`compose.yaml`、前端；M1 从零开始。
 
 ---
@@ -152,8 +153,21 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - 输出规格：1920×1080、25fps、H.264/AAC 48kHz。
 - 所有动画由 `renderAt(tMs)` 计算，禁用 CSS animation / `Date.now()` / `Math.random()`；随机用固定 seed。
 - 镜头片段编码参数必须完全一致，最终 `-c copy` 拼接。
-- 含文字卡片用 HTML；图像生成只做原创角色/背景/装饰。
-- 原创角色/背景素材生成后固定资产化，不每期重生成。
+- 含文字卡片用 HTML；Seedream 只做背景/舞台/演示物件（无文字空壳）。
+- 背景/演示物件生成后固定资产化，不每期重生成。
+
+### 4.5 资产生产分工
+
+| 资产 | 生产者 | 说明 |
+|---|---|---|
+| 洛琪希等版权角色立绘 | 用户（ChatGPT/豆包/自绘） | 系统不调用 Seedream；pack 在 `character_packs/roxy/`，不提交公开仓库 |
+| 背景/舞台层 | Seedream | 纸纹、木纹台面、桌面 |
+| 演示物件 | Seedream | 终端/浏览器/气泡卡片外框、道具；只出无文字空壳 |
+| 含文字信息卡片 | HTML/CSS | 文字和版式由代码控制 |
+| 图标 | SVG 优先；需要 AI 版时 Seedream 图标表 | 统一线条风格 |
+| 封面/片头片尾 | Seedream + 模板 | 复用背景，不每期重生成 |
+
+Seedream 首版约 10–15 张：背景 3–4、演示物件 4–6、图标表 1、封面/片头片尾 2–4。
 
 ---
 
@@ -211,6 +225,11 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - GitHub 仓库 `Tsuki11111/roxy-pipeline` 创建（Public）；initial commit 与文档规范化 commit 已推送（网络曾中断，重试后成功）。
 - `.gitignore` 排除 `.env`、洛琪希参考图、`tmp/`、私有 character pack。
 - 新建 `CLAUDE.md` / `HANDOFF.md` / `README.md`，按 ItsMyGo 的文档分工规范化。
+
+### 2026-10-27 · 资产生产分工
+
+- 用户确认：洛琪希等版权角色立绘由用户提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
+- 写入 ADR-006；Seedream 首版清单约 10–15 张（背景 3–4、物件 4–6、图标表 1、封面/片头片尾 2–4）。
 
 ### 2026-10-27 · 豆包立绘水印检查
 
