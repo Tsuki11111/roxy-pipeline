@@ -1,0 +1,103 @@
+name: roxy-pipeline
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: roxy-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-roxy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-roxy-dev}
+      POSTGRES_DB: ${POSTGRES_DB:-roxy}
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - roxy-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-roxy} -d ${POSTGRES_DB:-roxy}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    container_name: roxy-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-roxy}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-roxy-dev}
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:${RABBITMQ_PORT:-5673}:5672"
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15673}:15672"
+    volumes:
+      - roxy-rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: roxy-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6380}:6379"
+    volumes:
+      - roxy-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    container_name: roxy-minio
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-roxy}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-roxy-dev}
+      TZ: Asia/Shanghai
+    ports:
+      - "${MINIO_API_PORT:-9100}:9000"
+      - "${MINIO_CONSOLE_PORT:-9101}:9001"
+    volumes:
+      - roxy-minio-data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: roxy-minio-init
+    depends_on:
+      - minio
+    restart: "no"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do
+          sleep 2
+        done
+        mc mb --ignore-existing local/"$$MINIO_BUCKET_ASSETS"
+        mc mb --ignore-existing local/"$$MINIO_BUCKET_ARTIFACTS"
+        mc mb --ignore-existing local/"$$MINIO_BUCKET_OUTPUT"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-roxy}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-roxy-dev}
+      MINIO_BUCKET_ASSETS: ${MINIO_BUCKET_ASSETS:-roxy-assets}
+      MINIO_BUCKET_ARTIFACTS: ${MINIO_BUCKET_ARTIFACTS:-roxy-artifacts}
+      MINIO_BUCKET_OUTPUT: ${MINIO_BUCKET_OUTPUT:-roxy-output}
+
+volumes:
+  roxy-postgres-data:
+  roxy-rabbitmq-data:
+  roxy-redis-data:
+  roxy-minio-data:
+
+networks:
+  default:
+    name: roxy-net
