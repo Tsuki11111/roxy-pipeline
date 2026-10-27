@@ -7,6 +7,7 @@ background connected to the image border, so ivory clothing is preserved.
 Usage:
     python scripts/prepare_character_asset.py input.webp output.png
     python scripts/prepare_character_asset.py input.webp output.png --preview preview.png
+    python scripts/prepare_character_asset.py input.webp output.png --keep-largest-component
 """
 
 from __future__ import annotations
@@ -41,6 +42,18 @@ def remove_white_background(im: Image.Image, threshold: int = 242) -> Image.Imag
     return Image.fromarray(np.dstack([arr, alpha]), "RGBA")
 
 
+def keep_largest_component(im: Image.Image) -> Image.Image:
+    arr = np.asarray(im).copy()
+    foreground = arr[..., 3] > 0
+    labels, count = ndimage.label(foreground)
+    if count <= 1:
+        return im
+    sizes = ndimage.sum(foreground, labels, range(1, count + 1))
+    keep = int(np.argmax(sizes)) + 1
+    arr[labels != keep, 3] = 0
+    return Image.fromarray(arr, "RGBA")
+
+
 def fit_canvas(
     im: Image.Image,
     canvas: tuple[int, int],
@@ -69,12 +82,19 @@ def main() -> None:
     parser.add_argument("--canvas", default="1080x1920")
     parser.add_argument("--top-margin", type=int, default=60)
     parser.add_argument("--threshold", type=int, default=242)
+    parser.add_argument(
+        "--keep-largest-component",
+        action="store_true",
+        help="drop small isolated foreground elements such as a corner watermark",
+    )
     parser.add_argument("--preview", type=Path, help="optional paper-background preview")
     args = parser.parse_args()
 
     width, height = (int(x) for x in args.canvas.lower().split("x"))
     im = Image.open(args.input).convert("RGB")
     rgba = remove_white_background(im, args.threshold)
+    if args.keep_largest_component:
+        rgba = keep_largest_component(rgba)
     result = fit_canvas(rgba, (width, height), args.top_margin)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     result.save(args.output)

@@ -70,6 +70,7 @@ Playwright/Chromium + ffmpeg + LangGraph（仅 AI 子图）；前端 React + Vit
 - `.env` 已在 `.gitignore`；仓库只提交 `.env.example`。
 - `docs/assets/roxy_reference.webp` 已 gitignore，不随公开仓库分发。
 - `character_packs/*` 默认忽略，只允许 `character_packs/placeholder/`。
+- AI 生成图带可见水印（如“豆包 AI 生成”）时不得直接入成片；先确认服务条款，允许再用脚本排除/遮罩。
 - `tmp/`、`data/` 忽略；生成的样片/帧不要提交。
 
 ### 5. 运行环境

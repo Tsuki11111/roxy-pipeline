@@ -185,6 +185,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - 公开仓库不提交洛琪希参考图/立绘；`docs/assets/roxy_reference.webp` 已 gitignore。
 - Seedream 版权过滤：带“洛琪希”名字、参考图，或高度相似的“蓝发魔女 + 长风衣”描述，会返回 `OutputImageSensitiveContentDetected.PolicyViolation`；不要用改词/裁剪参考图的方式绕过。AI 生成只用于原创角色/背景/装饰；洛琪希 pack 自绘或外包。
 - ChatGPT 在线生图可用于本地洛琪希候选（用户自用、非商业）；产物只放 `character_packs/roxy/`（gitignored），不要提交公开仓库。处理脚本：`scripts/prepare_character_asset.py`。
+- 豆包生成图右下角有“豆包 AI 生成”水印；不要直接入成片。脚本可用 `--keep-largest-component` 排除孤立水印；使用前先确认豆包条款是否允许去除/隐藏水印。
 - 原创角色/背景 AI 生成后必须人工筛选、去背景、统一尺寸、入库；不要每期重生成。
 - AI 生成的洛琪希衍生图仍受 C-01～C-06 约束；生成服务条款也要看。
 - 字体/BGM 只用 OFL 或已授权素材。
@@ -208,6 +209,12 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - GitHub 仓库 `Tsuki11111/roxy-pipeline` 创建（Public）；initial commit 与文档规范化 commit 已推送（网络曾中断，重试后成功）。
 - `.gitignore` 排除 `.env`、洛琪希参考图、`tmp/`、私有 character pack。
 - 新建 `CLAUDE.md` / `HANDOFF.md` / `README.md`，按 ItsMyGo 的文档分工规范化。
+
+### 2026-10-27 · 豆包立绘水印检查
+
+- 豆包生成图右下角带“豆包 AI 生成”水印；直接入成片会让 alpha bbox 扩大、角色缩小偏移，并在每个镜头出现。
+- 给 `prepare_character_asset.py` 增加 `--keep-largest-component`：只保留角色主体，水印作为孤立小组件被排除。
+- 处理结果：`tmp/roxy_doubao_01_1080x1920.png`，角色完整、水印已排除；是否正式入库待确认豆包条款。
 
 ### 2026-10-26 · 角色素材测试
 
