@@ -69,6 +69,7 @@ Playwright/Chromium + ffmpeg + LangGraph（仅 AI 子图）；前端 React + Vit
 
 - `.env` 已在 `.gitignore`；仓库只提交 `.env.example`。
 - **资产分工**：洛琪希等版权角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字信息卡片仍用 HTML。
+- **当前阶段（2026-10-27 起）只生成人物立绘**；背景/舞台/演示物件暂停，等系统工作流实现后由 Seedream 按需求生成。
 - `docs/assets/roxy_reference.webp` 已 gitignore，不随公开仓库分发。
 - `character_packs/*` 默认忽略，只允许 `character_packs/placeholder/`。
 - AI 生成图带可见水印（如“豆包 AI 生成”）时不得直接入成片；先确认服务条款，允许再用脚本排除/遮罩。

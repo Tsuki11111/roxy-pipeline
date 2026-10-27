@@ -37,6 +37,7 @@
   - 火山 TTS：**尚未配置**，M4 前需要 AppID + Access Token。
 - 角色包：正式资产选用豆包版 `character_packs/roxy/roxy_calm_standing_01.png`（1080×1920 RGBA，水印已排除，本地，gitignored）；ChatGPT 版留在 `alternates/`。Seedream 不能生成洛琪希。
 - 资产分工（2026-10-27）：角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
+- 当前阶段只生成角色立绘，按 **5 张/轮**推进；背景/舞台/演示物件暂停，等系统工作流实现后由 Seedream 按需求生成。
 - AI 主题扩展：需求新增 R-17～R-28（讲解指向/白板/敲键盘/调试翻车/灵光一现/怀疑审视等），核心 6 个提示词在 `character_packs/roxy/ai_pose_prompts.md`（本地）。背景已出纸纹 + 木地板；道具在生成中。
 - 代码：还没有 `app/`、`compose.yaml`、前端；M1 从零开始。
 
@@ -49,6 +50,7 @@
 1. **确认 initial commit 已推到 GitHub**：`git status -sb` 应显示 `main...origin/main`；没有就 `git push -u origin main`。
 2. **确认运行环境**：本机 Docker Desktop/WSL2 是否可用；VM 是否已挂 ≥200GB 数据盘；8080/8443/9100/9101 是否空闲。
 3. **确认 TTS 凭据**（不阻塞 M1）：火山语音 AppID + Access Token；如果换 MiniMax/阿里云，准备好对应凭据。
+4. **角色立绘按 5 张/轮推进**：Round 1 = R-02～R-06；提示词已发；生成后处理入库。背景/道具暂停，等 M3 工作流实现后再生成。
 
 ### 2.2 M1：渲染链路打通
 
@@ -229,6 +231,11 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 - GitHub 仓库 `Tsuki11111/roxy-pipeline` 创建（Public）；initial commit 与文档规范化 commit 已推送（网络曾中断，重试后成功）。
 - `.gitignore` 排除 `.env`、洛琪希参考图、`tmp/`、私有 character pack。
 - 新建 `CLAUDE.md` / `HANDOFF.md` / `README.md`，按 ItsMyGo 的文档分工规范化。
+
+### 2026-10-27 · 角色立绘改为 5 张/轮
+
+- 暂停生成非角色图片；背景/舞台/演示物件等 M3 工作流实现后由 Seedream 按需求生成。
+- 角色立绘按 5 张/轮推进；分轮计划写入 `character_packs/roxy/checklist.md`，Round 1 = R-02～R-06。
 
 ### 2026-10-27 · AI 主题立绘扩展 + 背景/道具
 
