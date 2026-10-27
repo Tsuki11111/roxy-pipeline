@@ -33,6 +33,8 @@ def remove_white_background(im: Image.Image, threshold: int = 242) -> Image.Imag
         | set(labels[:, 0])
         | set(labels[:, -1])
     )
+    # label 0 is every pixel that is not near-white; never treat it as background
+    border_labels.discard(0)
     background = np.isin(labels, list(border_labels))
     # Remove the anti-aliased white fringe, but keep dark outlines and tinted clothing.
     halo = ndimage.binary_dilation(background, iterations=2) & (arr.min(axis=2) > 225)
