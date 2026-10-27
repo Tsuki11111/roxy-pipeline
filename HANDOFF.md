@@ -41,9 +41,14 @@
 - Batch 3 已完成：R-08 害羞、R-12 震惊、R-13 微笑、R-14 沉思、R-15 气鼓鼓，共 16 张入库；首版最低 18 张，还差 2 张（R-10 坐姿 + 至少 1 个闭/开口变体）。
 - Batch 4 已完成：R-10 坐姿、R-01v 平静开口（重生成替换闭嘴版）、R-02v 疑惑开口、R-16v 说话闭口、R-18 白板讲解，共 21 张；最低 18 张已达标。
 - Batch 5 已完成：R-19 敲键盘、R-20 调试翻车、R-21 灵光一现、R-22 怀疑审视，共 25 张；剩余 AI 主题 R-23～R-28 共 6 张。
-- R-19 待重做：旧站立版笔记本是悬空的，改为“坐在木桌前、笔记本放在桌上”的坐姿版 `roxy_typing_sitting_01.png`；旧图保留备用。
+- R-19 已完成重做：坐姿木桌版 `roxy_typing_sitting_01.png` 入正式资产；旧站立版移到 `alternates/`。
+- Batch 7 已完成：R-28 被代码包围、R-29 跳跃欢呼、R-30 奔跑、R-31 后仰失衡、R-32 伸手抓取入库，共 35 张；R-29 保留 220px 脚下空档。
+- Batch 8 已完成：R-33 抱 GPU、R-34 放大镜、R-35 推白板（场景资产 1536×1799 紧裁切）、R-36 大喇叭、R-37 提示牌入库，共 40 张。
+- Batch 9 已完成：R-38 拉网线（场景资产 1124×1819，左边缘/网线底部贴画布边，用户接受）、R-39 抱 AI 机器人、R-40 举灯泡、R-41 修服务器、R-42 端托盘入库，共 45 张。
 - Batch 6 已完成：R-23 戴眼镜、R-24 咖啡、R-25 摊手、R-26 数据展示、R-27 庆祝，共 30 张；只剩 R-28 被代码包围。
 - M1 渲染链路原型已跑通：手写 3 镜头 JSON → 舞台 HTML → Playwright 逐帧 → ffmpeg；12 秒/300 帧/1920×1080/25fps/H.264/AAC，单进程约 160 秒。
+- 角色换姿势已改为双层交叉淡入 + 横移（180ms），字幕和卡片同步短淡入；参考片实测换姿势约 0.2 秒，不是硬切。
+- M1.1 API/DB 骨架已完成：`compose.infra.yml`、FastAPI 应用、SQLAlchemy 模型、Alembic 初始迁移；`/health` 正常，7 条测试通过。
 - 资产分工（2026-10-27）：角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
 - 当前阶段只生成角色立绘，按 **5 张/批**推进；背景/舞台/演示物件暂停，等系统工作流实现后由 Seedream 按需求生成。
 - AI 主题扩展：需求新增 R-17～R-28（讲解指向/白板/敲键盘/调试翻车/灵光一现/怀疑审视等），核心 6 个提示词在 `character_packs/roxy/ai_pose_prompts.md`（本地）。背景已出纸纹 + 木地板；道具在生成中。
@@ -79,12 +84,16 @@
 - `app/render/`：models / timeline / cards / stage / capture / encode。
 - 舞台模板 `templates/stage/` 与 5 类卡片模板 `templates/cards/`。
 - `specs/demo_episode.json`：3 镜头、12 秒；`scripts/render_demo.py` 输出 `tmp/render_demo/demo_episode.mp4`。
-- `uv run pytest` 4 条通过；demo 视频 1920×1080 / 25fps / H.264 / AAC 48kHz。
+- `uv run pytest` 7 条通过；demo 视频 1920×1080 / 25fps / H.264 / AAC 48kHz。
+- `compose.infra.yml`：Postgres / RabbitMQ / Redis / MinIO + minio-init，端口避开现有栈（5433/5673/15673/6380/9100/9101）。
+- FastAPI：`app/api`、`app/models`、`app/schemas`、`app/core`；`/health`、`/api/v1/series`、`/api/v1/episodes`。
+- Alembic 初始迁移：`series` / `episode` / `script_line` / `shot` / `node_run`；本地默认 SQLite，Postgres 通过 `DATABASE_URL` 切换。
 
 **还没做：**
 
-- `compose.infra.yml`、FastAPI API、Alembic/数据库、Celery/RabbitMQ 队列。
+- Celery/RabbitMQ 任务队列、状态机 dispatcher/outbox。
 - 独立 `render-worker` 进程与并行渲染（当前是单进程 CLI）。
+- 资产 `anchor_x/anchor_y/scale`，动态/场景资产的舞台位置。
 - golden frame 回归测试（当前只验了单次渲染）。
 - `character_packs/placeholder/` 与可公开复现的 demo 素材（当前引用本地 Roxy pack + tmp 背景）。
 
@@ -110,7 +119,7 @@
 
 ## 3. 项目结构
 
-当前仓库（只有文档，没有代码）：
+当前仓库（M1 渲染 + M1.1 API/DB）：
 
 ```text
 roxy_pipline/
@@ -133,20 +142,30 @@ roxy_pipline/
 │     └─ alternates/
 │        └─ roxy_calm_standing_01_chatgpt.png
 ├─ app/
-│  └─ render/                      # M1 渲染原型
-│     ├─ models.py
-│     ├─ timeline.py
-│     ├─ cards.py
-│     ├─ stage.py
-│     ├─ capture.py
-│     └─ encode.py
+│  ├─ render/                      # M1 渲染原型
+│  │  ├─ models.py
+│  │  ├─ timeline.py
+│  │  ├─ cards.py
+│  │  ├─ stage.py
+│  │  ├─ capture.py
+│  │  └─ encode.py
+│  ├─ core/config.py               # pydantic-settings
+│  ├─ db/                          # Base + async session
+│  ├─ models/core.py               # series/episode/script_line/shot/node_run
+│  ├─ schemas/core.py              # API schemas
+│  └─ api/                         # FastAPI app + routes
+├─ migrations/                     # Alembic
+├─ alembic.ini
+├─ compose.infra.yml               # Postgres/RabbitMQ/Redis/MinIO
 ├─ templates/
 │  ├─ stage/                       # stage.html/css/renderer.js
 │  └─ cards/                       # 5 类卡片 HTML
 ├─ specs/
 │  └─ demo_episode.json            # 3 镜头 12 秒 demo
 ├─ tests/
-│  └─ test_timeline.py
+│  ├─ conftest.py
+│  ├─ test_timeline.py
+│  └─ test_api.py
 ├─ pyproject.toml
 ├─ uv.lock
 └─ scripts/
@@ -187,6 +206,18 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - 渲染成片：`uv run python scripts/render_demo.py`
 - 只出静帧：`uv run python scripts/render_demo.py --stills-only --still-ms 2000 --still-out tmp/render_demo/still_2s.png`
 - 当前单进程速度约 **0.53 秒/帧**；10 分钟片约 2.3 小时，后续必须并行 render worker。
+
+### 4.2.1 API / 基础设施（M1.1）
+
+- 本地无 Docker 时默认 SQLite，先迁移再启动：
+  `uv run alembic upgrade head`
+  `uv run uvicorn app.api.main:app --reload --port 8000`
+  打开 `http://localhost:8000/docs`。
+- 使用 compose 基础设施：
+  `docker compose -f compose.infra.yml up -d`
+  然后把 `.env` 的 `DATABASE_URL` 改为 `postgresql+asyncpg://roxy:roxy-dev@localhost:5433/roxy`，再跑迁移。
+- 端口避开现有栈：Postgres 5433、RabbitMQ 5673/15673、Redis 6380、MinIO 9100/9101。
+- 本机 Docker Desktop 当前未启动；compose 文件已通过 `docker compose config` 语法校验，实际启动在 VM 上验证。
 
 ### 4.3 Git 与提交
 
@@ -278,6 +309,7 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 - 单进程渲染约 0.53 秒/帧：300 帧 12 秒片约 160 秒；10 分钟片约 2.3 小时，必须并行化。
 - `specs/demo_episode.json` 引用本地 `character_packs/roxy/` 和 `tmp/seedream_assets/`；这些不进公开仓库，公开复现需要 placeholder pack。
 - Windows 控制台输出中文可能乱码，不影响文件；需要时设 `PYTHONUTF8=1`。
+- 本机 Docker Desktop 未启动：`compose.infra.yml` 只做了 `docker compose config` 校验，实际容器启动要在 VM 上验证。
 
 ---
 
@@ -297,9 +329,50 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 
 - 旧版 R-19 是站立、笔记本悬空；用户要求改成人物坐在木桌前、笔记本电脑放在桌面上打字。
 - 新资产命名 `roxy_typing_sitting_01.png`，提示词已更新到 `character_packs/roxy/ai_pose_prompts.md`。
-- 豆包容易把桌子和电脑画出边界，提示词已加“画面边界最高优先级”：所有物体完整在画布内、四周至少 60px 空白、禁用特写/广角、笔记本不能悬浮。
-- 旧 `roxy_typing_standing_01.png` 不再作为正式 R-19，保留在 pack 里备用。
-- 开发暂停，等新立绘生成后继续 M1.1。
+- 豆包容易把桌子和电脑画出边界，提示词已加“画面边界最高优先级”：窄桌（约肩宽 2.3 倍）、上/下/左/右留白 60/100/60/120px、桌子右端距右边缘 ≥100px、禁用特写/广角、笔记本不能悬浮。
+- 旧 `roxy_typing_standing_01.png` 已移到 `alternates/`，不再作为正式 R-19。
+- 新版已生成并处理为 1080×1920 RGBA，边界检查通过（桌子右侧/桌腿/笔记本完整）；未提交。
+
+### 2026-10-27 · M1.1 API/DB 骨架完成
+
+- 新增 `compose.infra.yml`：Postgres 17 / RabbitMQ 4 / Redis 7 / MinIO + minio-init；端口避开现有栈。
+- 新增 FastAPI 应用：`/health`、`/api/v1/series`、`/api/v1/episodes`，OpenAPI 正常。
+- 新增 SQLAlchemy 模型与 Alembic 初始迁移：`series` / `episode` / `script_line` / `shot` / `node_run`。
+- 本地默认 SQLite，`uv run alembic upgrade head` 建表；`uv run pytest` 7 条通过；uvicorn smoke test 通过。
+- Docker Desktop 本机未启动，compose 只做了 `config` 校验；实际容器启动待 VM。
+- 未提交。
+
+### 2026-10-27 · 角色换姿势过渡优化
+
+- 用户反馈 demo 人物切换太突兀；下载参考视频（BV1BgH36DE7y，360p）抽帧分析，换姿势约 0.2 秒完成，带轻微滑动/淡入，不是硬切。
+- 舞台改为双层角色图层：新姿势 180ms 内从右侧 36px 滑入并淡入，旧姿势左移 30px 并淡出；字幕和卡片的淡入同步缩短。
+- 重新渲染 demo 验证；未提交。
+
+### 2026-10-27 · Batch 9 完成
+
+- R-38 拉网线、R-39 抱 AI 机器人、R-40 举灯泡、R-41 修服务器、R-42 端托盘全部入库。
+- manifest 升到 v14，共 45 个正式资产；R-38 为 1124×1819 紧裁场景资产，服务器左边缘/网线底部贴画布边，用户明确接受。
+- R-41 为 1228×1887 紧裁场景资产；R-40 的光线被组件过滤掉，只保留灯泡。
+- 未提交。
+
+### 2026-10-27 · Batch 8 完成
+
+- R-33 抱 GPU、R-34 放大镜检查日志、R-35 推白板、R-36 大喇叭、R-37 举空白提示牌入库；manifest 升到 v12，共 40 个正式资产。
+- R-35 重生成后白板完整；因为横向场景在 1080×1920 画布上会留大片透明区，改用 `prepare_character_asset.py --tight` 输出 1536×1799 的紧裁场景资产，stage 需要自定义缩放/锚点。
+- 物件互动资产的道具都保持空白，文字/图表后续由 HTML 合成；未提交。
+
+### 2026-10-27 · Batch 7 动态动作完成
+
+- R-28 被代码包围、R-29 跳跃欢呼、R-30 奔跑、R-31 后仰失衡、R-32 伸手抓取入库。
+- manifest 升到 v10，共 35 个正式资产；R-29 用 `--bottom-padding 220` 保留腾空高度。
+- 动态姿势在舞台里不能统一按“脚底贴地”处理，M1.1 需要给每个 asset 增加垂直偏移/锚点；R-30 这类跑动姿势还要注意朝向。
+- 未提交。
+
+### 2026-10-27 · Batch 8 物件互动扩展
+
+- 用户要求人物多与物件互动；新增 R-33 抱 GPU/服务器、R-34 放大镜检查日志、R-35 推移动白板、R-36 拿大喇叭、R-37 举空白提示牌。
+- 提示词写入 `character_packs/roxy/ai_pose_prompts.md`；道具保持简洁、无文字/品牌/图标，文字后期 HTML 合成。
+- 与 Batch 7 动态动作分开生成，每批 5 张；未提交。
 
 ### 2026-10-27 · M1 渲染链路原型跑通
 

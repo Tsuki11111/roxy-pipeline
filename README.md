@@ -14,7 +14,7 @@
 **AI 科普视频自动生成 Agent 系统**：从选题、脚本、分镜，到逐句 TTS、卡片/逐帧渲染、ffmpeg 拼接和质检的全自动流水线。
 
 **定位**：个人自用项目；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守[需求文档第 11 章](docs/AI科普视频Agent系统需求分析文档.md)。
-**当前阶段**：架构设计完成；M1 渲染链路原型已跑通（手写镜头 JSON → 3 镜头 12 秒 MP4），API/DB/队列尚未接入。
+**当前阶段**：M1 渲染原型 + M1.1 API/DB 骨架已跑通（FastAPI + SQLAlchemy + Alembic + compose infra）；队列/worker 待接。
 
 ---
 
@@ -71,7 +71,7 @@
 | 需求分析 v1.2 | ✅ 2026-10-26 |
 | 架构选型 v1.3 + ADR-001～005 | ✅ 2026-10-26 |
 | 仓库初始化 + 文档规范化 | ✅ 2026-10-26 |
-| M1 渲染链路（手写脚本 → 成片） | 🚧 渲染原型已跑通；API/DB/队列待接 |
+| M1 渲染链路 + M1.1 API/DB | 🚧 渲染原型与 API/DB 骨架已跑通；队列/worker 待接 |
 | M2 脚本 Agent（LangGraph） | ⏳ |
 | M3 分镜 Agent + 节奏规则 + AI 素材 | ⏳ |
 | M4 质检与全流程自动化 | ⏳ |
@@ -99,7 +99,25 @@ uv run python scripts/render_demo.py --stills-only --still-ms 2000 --still-out t
 
 > 当前 demo 引用本地 `character_packs/roxy/` 与 `tmp/seedream_assets/`，这些素材不进公开仓库；公开复现需要后续补 placeholder pack。
 
-### 模型校验 / API / Web
+### M1.1 API / 基础设施
+
+本地无 Docker 时默认 SQLite：
+
+```bash
+uv run alembic upgrade head
+uv run uvicorn app.api.main:app --reload --port 8000
+# http://localhost:8000/docs
+```
+
+使用 compose 基础设施（Postgres / RabbitMQ / Redis / MinIO）：
+
+```bash
+docker compose -f compose.infra.yml up -d
+# 把 .env 的 DATABASE_URL 改为 postgresql+asyncpg://roxy:roxy-dev@localhost:5433/roxy
+uv run alembic upgrade head
+```
+
+### 模型校验
 
 ```bash
 cp .env.example .env
@@ -107,7 +125,7 @@ cp .env.example .env
 uv run python scripts/check_llm.py --live
 ```
 
-FastAPI + Docker Compose 一键启动还在 M1 后续阶段，尚未实现。
+Celery/RabbitMQ worker 与 Web 前端还在 M1.2 之后，尚未接入。
 
 ## 模型配置
 

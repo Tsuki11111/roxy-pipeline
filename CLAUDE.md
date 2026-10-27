@@ -19,7 +19,7 @@
 AI 科普视频自动生成 Agent 系统：选题 → 脚本 → 分镜 → 逐句 TTS/对齐 → HTML 卡片/逐帧渲染 → ffmpeg 拼接 → 质检。
 
 - **个人自用项目**；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守需求文档第 11 章。
-- **当前阶段**：架构设计完成；M1 渲染链路原型已跑通（手写镜头 JSON → MP4），API/DB/队列未接。
+- **当前阶段**：M1 渲染原型 + M1.1 API/DB 骨架已跑通（FastAPI/SQLAlchemy/Alembic/compose infra）；队列/worker 未接。
 - **GitHub**：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
 - **仓库不包含**：`.env`、洛琪希参考图/立绘、`tmp/`、私有 character pack。
 
@@ -34,6 +34,7 @@ AI 科普视频自动生成 Agent 系统：选题 → 脚本 → 分镜 → 逐�
   3. **[README.md](README.md)** —— 精简报告，内容一律以 HANDOFF 为准。
 - **收到用户补充的新约束，立刻写进文档**，不要只留在对话里。
 - **提交信息用 Conventional Commits，描述用中文**：`feat` / `fix` / `docs` / `refactor` / `test` / `chore` 等。
+- **小改动不自动 commit/push**：小范围文档、提示词、清单调整留在工作区并口头说明；只有大功能、结构调整、里程碑或用户明确要求时才提交推送。
 - **不擅自换技术栈**。见 README 技术栈表；有异议先讨论，再改文档。
 - **先跑通再优化**；但状态机幂等、缓存键、渲染确定性这些地基不能省。
 - **任何 Key / Token 只进本地 `.env`**；不要写进文档、代码、提交信息或聊天回复。
