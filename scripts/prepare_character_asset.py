@@ -60,6 +60,7 @@ def fit_canvas(
     im: Image.Image,
     canvas: tuple[int, int],
     top_margin: int,
+    bottom_padding: int = 0,
 ) -> Image.Image:
     alpha = np.asarray(im)[..., 3]
     ys, xs = np.where(alpha > 0)
@@ -68,12 +69,14 @@ def fit_canvas(
     bbox = (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1)
     crop = im.crop(bbox)
     cw, ch = crop.size
-    max_w, max_h = canvas[0], canvas[1] - top_margin
+    max_w, max_h = canvas[0], canvas[1] - top_margin - bottom_padding
     scale = min(max_w / cw, max_h / ch)
     nw, nh = max(1, round(cw * scale)), max(1, round(ch * scale))
     resized = crop.resize((nw, nh), Image.LANCZOS)
     out = Image.new("RGBA", canvas, (0, 0, 0, 0))
-    out.alpha_composite(resized, ((canvas[0] - nw) // 2, canvas[1] - nh))
+    x = (canvas[0] - nw) // 2
+    y = canvas[1] - bottom_padding - nh
+    out.alpha_composite(resized, (x, y))
     return out
 
 
@@ -83,6 +86,12 @@ def main() -> None:
     parser.add_argument("output", type=Path)
     parser.add_argument("--canvas", default="1080x1920")
     parser.add_argument("--top-margin", type=int, default=60)
+    parser.add_argument(
+        "--bottom-padding",
+        type=int,
+        default=0,
+        help="keep space below the lowest pixel (use for jump/air poses)",
+    )
     parser.add_argument("--threshold", type=int, default=242)
     parser.add_argument(
         "--keep-largest-component",
@@ -90,6 +99,11 @@ def main() -> None:
         help="drop small isolated foreground elements such as a corner watermark",
     )
     parser.add_argument("--preview", type=Path, help="optional paper-background preview")
+    parser.add_argument(
+        "--tight",
+        action="store_true",
+        help="save a tight crop instead of 1080x1920 (for scene/prop assets)",
+    )
     args = parser.parse_args()
 
     width, height = (int(x) for x in args.canvas.lower().split("x"))
@@ -97,7 +111,14 @@ def main() -> None:
     rgba = remove_white_background(im, args.threshold)
     if args.keep_largest_component:
         rgba = keep_largest_component(rgba)
-    result = fit_canvas(rgba, (width, height), args.top_margin)
+    if args.tight:
+        alpha = np.asarray(rgba)[..., 3]
+        ys, xs = np.where(alpha > 0)
+        if len(xs) == 0:
+            raise SystemExit("no foreground pixels left after background removal")
+        result = rgba.crop((int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1))
+    else:
+        result = fit_canvas(rgba, (width, height), args.top_margin, args.bottom_padding)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     result.save(args.output)
     print(f"saved {args.output} {result.size}")

@@ -1,18 +1,24 @@
 const bg = document.getElementById("bg");
 const floor = document.getElementById("floor");
-const character = document.getElementById("character");
+const characterLayers = [
+  document.getElementById("character-a"),
+  document.getElementById("character-b"),
+];
 const card = document.getElementById("card");
 const subtitle = document.getElementById("subtitle");
 const progress = document.getElementById("progress");
 const watermark = document.getElementById("watermark");
 
 const POSITIONS = { left: 210, center: 660, right: 1120 };
+const TRANSITION_MS = 180;
 
 let payload = null;
 let shots = [];
 let progressItems = [];
 let currentShot = -1;
 let currentCharacter = "";
+let activeLayer = 0;
+let transition = null;
 
 function easeOutCubic(x) {
   return 1 - Math.pow(1 - x, 3);
@@ -32,9 +38,97 @@ function preload(urls) {
   );
 }
 
+function hideLayer(layer) {
+  layer.style.display = "none";
+  layer.style.opacity = "0";
+}
+
+function hideCharacters() {
+  characterLayers.forEach(hideLayer);
+  currentCharacter = "";
+  transition = null;
+}
+
+function applyCharacterStyle(layer, character, offsetX = 0, breath = 0) {
+  layer.style.left = `${POSITIONS[character.position] ?? POSITIONS.left}px`;
+  layer.style.height = `${character.height_px}px`;
+  layer.style.transform = `translateX(${offsetX.toFixed(2)}px) translateY(${breath.toFixed(2)}px)`;
+}
+
+function startCharacterTransition(character, startMs) {
+  if (currentCharacter === character.src) return;
+
+  if (!currentCharacter) {
+    activeLayer = 0;
+    const layer = characterLayers[0];
+    layer.src = character.src;
+    layer.style.display = "block";
+    layer.style.opacity = "1";
+    layer.style.zIndex = "3";
+    applyCharacterStyle(layer, character);
+    hideLayer(characterLayers[1]);
+    currentCharacter = character.src;
+    transition = null;
+    return;
+  }
+
+  const from = activeLayer;
+  const to = activeLayer === 0 ? 1 : 0;
+  const oldLayer = characterLayers[from];
+  const newLayer = characterLayers[to];
+
+  newLayer.src = character.src;
+  newLayer.style.display = "block";
+  newLayer.style.opacity = "0";
+  newLayer.style.zIndex = "4";
+  oldLayer.style.zIndex = "3";
+  applyCharacterStyle(newLayer, character, 20, 0);
+  currentCharacter = character.src;
+  transition = { from, to, start: startMs, duration: TRANSITION_MS };
+}
+
+function updateCharacter(character, tMs, localMs) {
+  const breath = character.motion === "idle_breathe" ? Math.sin(localMs / 700) * 3 : 0;
+
+  if (transition) {
+    const p = Math.min(1, Math.max(0, (tMs - transition.start) / transition.duration));
+    const eased = easeOutCubic(p);
+    const oldLayer = characterLayers[transition.from];
+    const newLayer = characterLayers[transition.to];
+
+    applyCharacterStyle(oldLayer, character, -30 * eased, breath);
+    oldLayer.style.opacity = (1 - eased).toFixed(3);
+    applyCharacterStyle(newLayer, character, 36 * (1 - eased), breath);
+    newLayer.style.opacity = eased.toFixed(3);
+
+    if (p >= 1) {
+      activeLayer = transition.to;
+      hideLayer(oldLayer);
+      newLayer.style.zIndex = "3";
+      newLayer.style.opacity = "1";
+      applyCharacterStyle(newLayer, character, 0, breath);
+      transition = null;
+    }
+    return;
+  }
+
+  const layer = characterLayers[activeLayer];
+  layer.style.display = "block";
+  layer.style.opacity = "1";
+  layer.style.zIndex = "3";
+  applyCharacterStyle(layer, character, 0, breath);
+  hideLayer(characterLayers[activeLayer === 0 ? 1 : 0]);
+}
+
 window.initStage = async function (data) {
   payload = data;
   shots = data.shots;
+  currentShot = -1;
+  currentCharacter = "";
+  transition = null;
+  activeLayer = 0;
+  characterLayers.forEach(hideLayer);
+
   watermark.textContent = data.watermark;
   bg.src = data.background;
   floor.src = data.floor;
@@ -76,18 +170,6 @@ window.renderAt = function (tMs) {
 
   if (index !== currentShot) {
     currentShot = index;
-    if (shot.character) {
-      if (currentCharacter !== shot.character.src) {
-        character.src = shot.character.src;
-        currentCharacter = shot.character.src;
-      }
-      character.style.display = "block";
-      character.style.left = `${POSITIONS[shot.character.position] ?? POSITIONS.left}px`;
-      character.style.height = `${shot.character.height_px}px`;
-    } else {
-      character.style.display = "none";
-    }
-
     if (shot.card_html) {
       card.innerHTML = shot.card_html;
       card.style.display = "block";
@@ -98,20 +180,30 @@ window.renderAt = function (tMs) {
   }
 
   if (shot.character) {
-    const breath =
-      shot.character.motion === "idle_breathe" ? Math.sin(local / 700) * 3 : 0;
-    character.style.transform = `translateY(${breath.toFixed(2)}px)`;
+    if (currentCharacter !== shot.character.src) {
+      startCharacterTransition(shot.character, shot.start_ms);
+    }
+    updateCharacter(shot.character, t, local);
+  } else {
+    hideCharacters();
   }
 
-  const cardT = Math.min(1, Math.max(0, (local - 80) / 320));
+  const cardT = Math.min(1, Math.max(0, (local - 60) / 240));
   card.style.opacity = cardT.toFixed(3);
   card.style.transform = `translateY(${((1 - easeOutCubic(cardT)) * 18).toFixed(2)}px) scale(${(
     0.97 + 0.03 * easeOutCubic(cardT)
   ).toFixed(3)})`;
 
   const chunk = shot.subtitle_chunks.find((c) => t >= c.start_ms && t < c.end_ms);
-  subtitle.textContent = chunk ? chunk.text : "";
-  subtitle.style.opacity = chunk ? "1" : "0";
+  if (chunk) {
+    const chunkT = Math.min(1, Math.max(0, (t - chunk.start_ms) / 70));
+    subtitle.textContent = chunk.text;
+    subtitle.style.opacity = chunkT.toFixed(3);
+    subtitle.style.transform = `translateX(-50%) translateY(${((1 - chunkT) * 4).toFixed(1)}px)`;
+  } else {
+    subtitle.textContent = "";
+    subtitle.style.opacity = "0";
+  }
 
   progressItems.forEach((item, i) => {
     item.classList.toggle("active", i === shot.section_index);
