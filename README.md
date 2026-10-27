@@ -85,6 +85,7 @@
 git clone https://github.com/Tsuki11111/roxy-pipeline.git
 cd roxy-pipeline
 UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple uv sync
+uv run playwright install chromium
 uv run pytest -q
 uv run python scripts/render_demo.py
 ```
