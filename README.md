@@ -14,7 +14,7 @@
 **AI 科普视频自动生成 Agent 系统**：从选题、脚本、分镜，到逐句 TTS、卡片/逐帧渲染、ffmpeg 拼接和质检的全自动流水线。
 
 **定位**：个人自用项目；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守[需求文档第 11 章](docs/AI科普视频Agent系统需求分析文档.md)。
-**当前阶段**：架构设计完成，代码尚未开始。仓库只包含文档、环境模板和模型校验脚本。
+**当前阶段**：架构设计完成；M1 渲染链路原型已跑通（手写镜头 JSON → 3 镜头 12 秒 MP4），API/DB/队列尚未接入。
 
 ---
 
@@ -71,7 +71,7 @@
 | 需求分析 v1.2 | ✅ 2026-10-26 |
 | 架构选型 v1.3 + ADR-001～005 | ✅ 2026-10-26 |
 | 仓库初始化 + 文档规范化 | ✅ 2026-10-26 |
-| M1 渲染链路（手写脚本 → 成片） | ⏳ 下一步 |
+| M1 渲染链路（手写脚本 → 成片） | 🚧 渲染原型已跑通；API/DB/队列待接 |
 | M2 脚本 Agent（LangGraph） | ⏳ |
 | M3 分镜 Agent + 节奏规则 + AI 素材 | ⏳ |
 | M4 质检与全流程自动化 | ⏳ |
@@ -79,22 +79,34 @@
 
 ## 快速开始
 
-**代码尚未实现**；当前只能克隆文档和运行模型校验。M1 完成后会补 `docker compose up` 一键启动。
+### M1 本地渲染（已可运行）
 
 ```bash
 git clone https://github.com/Tsuki11111/roxy-pipeline.git
 cd roxy-pipeline
-cp .env.example .env
-# 在 .env 填入 DeepSeek / 火山方舟 / TTS 凭据
-python scripts/check_llm.py --live
+UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple uv sync
+uv run pytest -q
+uv run python scripts/render_demo.py
 ```
 
-M1 目标启动方式（待实现）：
+输出：`tmp/render_demo/demo_episode.mp4`（3 镜头、12 秒、1920×1080、25fps、H.264/AAC）。
+只出静帧调布局：
 
 ```bash
-docker compose up -d
-# 打开 http://localhost:8080
+uv run python scripts/render_demo.py --stills-only --still-ms 2000 --still-out tmp/render_demo/still_2s.png
 ```
+
+> 当前 demo 引用本地 `character_packs/roxy/` 与 `tmp/seedream_assets/`，这些素材不进公开仓库；公开复现需要后续补 placeholder pack。
+
+### 模型校验 / API / Web
+
+```bash
+cp .env.example .env
+# 在 .env 填入 DeepSeek / 火山方舟 / TTS 凭据
+uv run python scripts/check_llm.py --live
+```
+
+FastAPI + Docker Compose 一键启动还在 M1 后续阶段，尚未实现。
 
 ## 模型配置
 

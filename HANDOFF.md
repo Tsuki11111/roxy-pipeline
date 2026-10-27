@@ -42,6 +42,7 @@
 - Batch 4 已完成：R-10 坐姿、R-01v 平静开口（重生成替换闭嘴版）、R-02v 疑惑开口、R-16v 说话闭口、R-18 白板讲解，共 21 张；最低 18 张已达标。
 - Batch 5 已完成：R-19 敲键盘、R-20 调试翻车、R-21 灵光一现、R-22 怀疑审视，共 25 张；剩余 AI 主题 R-23～R-28 共 6 张。
 - Batch 6 已完成：R-23 戴眼镜、R-24 咖啡、R-25 摊手、R-26 数据展示、R-27 庆祝，共 30 张；只剩 R-28 被代码包围。
+- M1 渲染链路原型已跑通：手写 3 镜头 JSON → 舞台 HTML → Playwright 逐帧 → ffmpeg；12 秒/300 帧/1920×1080/25fps/H.264/AAC，单进程约 160 秒。
 - 资产分工（2026-10-27）：角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
 - 当前阶段只生成角色立绘，按 **5 张/批**推进；背景/舞台/演示物件暂停，等系统工作流实现后由 Seedream 按需求生成。
 - AI 主题扩展：需求新增 R-17～R-28（讲解指向/白板/敲键盘/调试翻车/灵光一现/怀疑审视等），核心 6 个提示词在 `character_packs/roxy/ai_pose_prompts.md`（本地）。背景已出纸纹 + 木地板；道具在生成中。
@@ -70,6 +71,21 @@
 4. `character_packs/placeholder/`：先放 1 套占位立绘/背景，保证渲染链路能跑。
 5. 手写 3–5 个镜头的 `shot.json`，跑通“卡片 → 镜头片段 → concat → 成片”。
 6. golden frame 测试：同一输入重复渲染，像素差异在阈值内。
+
+**已完成（2026-10-27）：**
+
+- `pyproject.toml` + `uv` 环境；Playwright 钉在 1.59（复用本机 Chromium）。
+- `app/render/`：models / timeline / cards / stage / capture / encode。
+- 舞台模板 `templates/stage/` 与 5 类卡片模板 `templates/cards/`。
+- `specs/demo_episode.json`：3 镜头、12 秒；`scripts/render_demo.py` 输出 `tmp/render_demo/demo_episode.mp4`。
+- `uv run pytest` 4 条通过；demo 视频 1920×1080 / 25fps / H.264 / AAC 48kHz。
+
+**还没做：**
+
+- `compose.infra.yml`、FastAPI API、Alembic/数据库、Celery/RabbitMQ 队列。
+- 独立 `render-worker` 进程与并行渲染（当前是单进程 CLI）。
+- golden frame 回归测试（当前只验了单次渲染）。
+- `character_packs/placeholder/` 与可公开复现的 demo 素材（当前引用本地 Roxy pack + tmp 背景）。
 
 ### 2.3 M1 之后再动
 
@@ -115,10 +131,28 @@ roxy_pipline/
 │     ├─ roxy_calm_standing_01.png # 正式（豆包版，水印已排除）
 │     └─ alternates/
 │        └─ roxy_calm_standing_01_chatgpt.png
+├─ app/
+│  └─ render/                      # M1 渲染原型
+│     ├─ models.py
+│     ├─ timeline.py
+│     ├─ cards.py
+│     ├─ stage.py
+│     ├─ capture.py
+│     └─ encode.py
+├─ templates/
+│  ├─ stage/                       # stage.html/css/renderer.js
+│  └─ cards/                       # 5 类卡片 HTML
+├─ specs/
+│  └─ demo_episode.json            # 3 镜头 12 秒 demo
+├─ tests/
+│  └─ test_timeline.py
+├─ pyproject.toml
+├─ uv.lock
 └─ scripts/
    ├─ check_llm.py
    ├─ prepare_character_asset.py
-   └─ generate_seedream_image.py   # 白底 → 透明 1080x1920
+   ├─ generate_seedream_image.py
+   └─ render_demo.py               # 手写镜头 → MP4
 ```
 
 M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/domains/providers）、`templates/`、`prompts/`、`assets/`、`character_packs/`、`migrations/`、`tests/`、`web/`。
@@ -142,7 +176,18 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - 校验脚本：`python scripts/check_llm.py --live`（DeepSeek 必检，Ark 可选）；`--require-ark` 把 Ark 当必检。
 - 图像生成测试产物在 `tmp/seedream_probe.png`（gitignore）。
 
-### 4.2 Git 与提交
+### 4.2 本地渲染环境（M1）
+
+- 依赖安装（PyPI 直连容易卡，国内镜像更快）：
+  `UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple uv sync`
+- Playwright 钉在 **1.59.0**，复用本机 `chromium-1217`；升级 Playwright 前先确认对应 Chromium 已安装，否则 `uv run playwright install chromium`。
+- ffmpeg 用 `imageio-ffmpeg` 自带二进制（`imageio-ffmpeg==0.6.0`，含 libx264/AAC），本机不需要系统 ffmpeg。
+- 测试：`uv run pytest -q`
+- 渲染成片：`uv run python scripts/render_demo.py`
+- 只出静帧：`uv run python scripts/render_demo.py --stills-only --still-ms 2000 --still-out tmp/render_demo/still_2s.png`
+- 当前单进程速度约 **0.53 秒/帧**；10 分钟片约 2.3 小时，后续必须并行 render worker。
+
+### 4.3 Git 与提交
 
 - Remote：`origin` → `https://github.com/Tsuki11111/roxy-pipeline.git`
 - 分支：`main`
@@ -151,7 +196,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
   - `feat(render): 增加镜头级 ffmpeg 编码`
 - **不要提交**：`.env`、`docs/assets/roxy_reference.webp`、`tmp/`、`data/`、私有 `character_packs/*`。
 
-### 4.3 Docker 与端口
+### 4.4 Docker 与端口
 
 - 部署目标：Ubuntu 24.04 VM，Docker 29 / Compose 2.40。
 - 本项目资源命名以 `roxy-` 开头；Postgres 库 `roxy`；Redis key 前缀 `roxy:`；MinIO bucket `roxy-*`。
@@ -160,7 +205,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - 根分区约 18GB 不够；数据盘挂 `/data`，`PGDATA`、`MINIO_DATA`、备份都指过去。
 - MinIO 预签名 URL 要区分 `MINIO_INTERNAL_ENDPOINT`（容器内 `http://minio:9000`）与 `MINIO_PUBLIC_ENDPOINT`（浏览器可访问的外部地址）。
 
-### 4.4 渲染约定
+### 4.5 渲染约定
 
 - 输出规格：1920×1080、25fps、H.264/AAC 48kHz。
 - 所有动画由 `renderAt(tMs)` 计算，禁用 CSS animation / `Date.now()` / `Math.random()`；随机用固定 seed。
@@ -168,7 +213,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - 含文字卡片用 HTML；Seedream 只做背景/舞台/演示物件（无文字空壳）。
 - 背景/演示物件生成后固定资产化，不每期重生成。
 
-### 4.5 资产生产分工
+### 4.6 资产生产分工
 
 | 资产 | 生产者 | 说明 |
 |---|---|---|
@@ -224,6 +269,15 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 - VM 根分区 18GB 不能放 MinIO 数据；先挂数据盘。
 - 2 期并行需要约 8–16 vCPU / 32GB；资源不足先单期串行。
 
+### 5.6 M1 渲染环境
+
+- PyPI 直连会卡住：`uv sync` 用 `UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple`。
+- Playwright 1.64 需要新 Chromium（1248），本机只有 1217；把 `playwright` 钉在 `==1.59.0`，避免重下浏览器。
+- 本机没有系统 ffmpeg；用 `imageio-ffmpeg` 自带二进制，已确认有 libx264/AAC。
+- 单进程渲染约 0.53 秒/帧：300 帧 12 秒片约 160 秒；10 分钟片约 2.3 小时，必须并行化。
+- `specs/demo_episode.json` 引用本地 `character_packs/roxy/` 和 `tmp/seedream_assets/`；这些不进公开仓库，公开复现需要 placeholder pack。
+- Windows 控制台输出中文可能乱码，不影响文件；需要时设 `PYTHONUTF8=1`。
+
 ---
 
 ## 6. 历史记录
@@ -237,6 +291,14 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 - GitHub 仓库 `Tsuki11111/roxy-pipeline` 创建（Public）；initial commit 与文档规范化 commit 已推送（网络曾中断，重试后成功）。
 - `.gitignore` 排除 `.env`、洛琪希参考图、`tmp/`、私有 character pack。
 - 新建 `CLAUDE.md` / `HANDOFF.md` / `README.md`，按 ItsMyGo 的文档分工规范化。
+
+### 2026-10-27 · M1 渲染链路原型跑通
+
+- 新建 `pyproject.toml` + `uv.lock`；Playwright 钉 1.59，ffmpeg 用 `imageio-ffmpeg`。
+- 新增 `app/render/`（models / timeline / cards / stage / capture / encode）、舞台与 5 类卡片模板、`specs/demo_episode.json`、`scripts/render_demo.py`。
+- 3 镜头 / 12 秒 / 300 帧 demo 输出成功：1920×1080、25fps、H.264、AAC 48kHz；单进程约 160 秒。
+- `uv run pytest` 4 条通过；静帧模式可快速调布局。
+- 未接 API/DB/队列；当前是单进程 CLI，后续拆 render-worker 并做并行渲染。
 
 ### 2026-10-27 · Batch 6 完成
 

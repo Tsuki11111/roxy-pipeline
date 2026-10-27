@@ -1,0 +1,252 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #111;
+}
+
+#stage {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: #f5f0e6;
+  color: #2b2b2b;
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+}
+
+#bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+}
+
+#floor {
+  position: absolute;
+  left: 0;
+  bottom: 52px;
+  width: 100%;
+  height: 300px;
+  object-fit: cover;
+  z-index: 2;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 18%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 18%);
+}
+
+#character {
+  position: absolute;
+  left: 210px;
+  bottom: 52px;
+  height: 1000px;
+  width: auto;
+  z-index: 3;
+  filter: drop-shadow(0 10px 10px rgba(43, 43, 43, 0.22));
+}
+
+#card {
+  position: absolute;
+  right: 80px;
+  top: 150px;
+  width: 820px;
+  z-index: 4;
+  display: none;
+}
+
+#subtitle {
+  position: absolute;
+  left: 50%;
+  bottom: 104px;
+  transform: translateX(-50%);
+  max-width: 1500px;
+  padding: 14px 30px;
+  background: rgba(30, 30, 35, 0.88);
+  color: #fff;
+  border-radius: 14px;
+  font-size: 38px;
+  line-height: 1.4;
+  text-align: center;
+  white-space: nowrap;
+  z-index: 6;
+}
+
+#progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  background: rgba(30, 30, 35, 0.94);
+  z-index: 7;
+}
+
+.progress-item {
+  position: relative;
+  color: #8f949c;
+  font-size: 20px;
+  letter-spacing: 0.04em;
+}
+
+.progress-item.active {
+  color: #fff;
+  font-weight: 700;
+}
+
+.progress-item.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -14px;
+  height: 3px;
+  background: #fff;
+}
+
+#watermark {
+  position: absolute;
+  top: 24px;
+  right: 30px;
+  color: rgba(43, 43, 43, 0.45);
+  font-size: 20px;
+  z-index: 8;
+}
+
+/* ---------- cards ---------- */
+
+.card {
+  box-sizing: border-box;
+  width: 100%;
+  color: #2b2b2b;
+}
+
+.chat-bubble {
+  position: relative;
+  padding: 34px 38px;
+  background: #fffdf7;
+  border: 3px solid #2b2b2b;
+  border-radius: 20px;
+  box-shadow: 10px 10px 0 rgba(43, 43, 43, 0.16);
+  font-size: 36px;
+  line-height: 1.55;
+}
+
+.chat-bubble::after {
+  content: "";
+  position: absolute;
+  left: -22px;
+  top: 64px;
+  width: 34px;
+  height: 34px;
+  background: #fffdf7;
+  border-left: 3px solid #2b2b2b;
+  border-bottom: 3px solid #2b2b2b;
+  transform: rotate(45deg);
+}
+
+.chat-label {
+  display: inline-block;
+  margin-bottom: 14px;
+  padding: 2px 14px;
+  background: #2b2b2b;
+  color: #fff;
+  border-radius: 999px;
+  font-size: 20px;
+  line-height: 1.6;
+}
+
+.chat-text {
+  white-space: pre-wrap;
+}
+
+.terminal {
+  overflow: hidden;
+  background: #1e1e2e;
+  border: 3px solid #11111b;
+  border-radius: 16px;
+  box-shadow: 10px 10px 0 rgba(0, 0, 0, 0.24);
+  color: #cdd6f4;
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 18px;
+  background: #181825;
+}
+
+.terminal-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #f38ba8;
+}
+
+.terminal-dot:nth-child(2) {
+  background: #f9e2af;
+}
+
+.terminal-dot:nth-child(3) {
+  background: #a6e3a1;
+}
+
+.terminal-body {
+  padding: 28px 32px;
+  font-size: 30px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.browser {
+  overflow: hidden;
+  background: #fff;
+  border: 3px solid #2b2b2b;
+  border-radius: 16px;
+  box-shadow: 10px 10px 0 rgba(43, 43, 43, 0.16);
+}
+
+.browser-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 18px;
+  background: #ece7dc;
+  border-bottom: 3px solid #2b2b2b;
+}
+
+.browser-body {
+  padding: 28px 32px;
+  font-size: 34px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.pure-text {
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  font-size: 54px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+  white-space: pre-wrap;
+}
+
+.icon {
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  font-size: 120px;
+  text-align: center;
+  line-height: 1.2;
+}

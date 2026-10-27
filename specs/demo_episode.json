@@ -1,0 +1,66 @@
+{
+  "title": "AI 科普视频 M1 渲染演示",
+  "fps": 25,
+  "width": 1920,
+  "height": 1080,
+  "section_labels": ["问题", "概念", "原理", "踩坑", "解决", "推广", "预告", "结尾"],
+  "background": "tmp/seedream_assets/bg_paper_light_01_1920x1080.png",
+  "floor": "tmp/seedream_assets/bg_wood_floor_02_1920x1080.png",
+  "watermark": "Roxy Pipeline · DEMO",
+  "shots": [
+    {
+      "shot_id": "s001",
+      "seq": 1,
+      "section": "问题",
+      "narration": "第一步，先让 AI 自己看懂失败日志。",
+      "duration_ms": 4000,
+      "character": {
+        "image": "character_packs/roxy/roxy_calm_standing_01.png",
+        "position": "left",
+        "height_px": 1000,
+        "motion": "idle_breathe"
+      },
+      "card": {
+        "type": "chat_bubble",
+        "style": "ai_reply",
+        "text": "先连数据库太麻烦了，\n我直接在测试里造个假数据库"
+      }
+    },
+    {
+      "shot_id": "s002",
+      "seq": 2,
+      "section": "踩坑",
+      "narration": "结果它先连不上数据库。",
+      "duration_ms": 4000,
+      "character": {
+        "image": "character_packs/roxy/roxy_thinking_standing_01.png",
+        "position": "left",
+        "height_px": 1000,
+        "motion": "idle_breathe"
+      },
+      "card": {
+        "type": "terminal",
+        "style": "error",
+        "text": "ERROR: 找不到测试数据库\n> 请先启动 db:5432"
+      }
+    },
+    {
+      "shot_id": "s003",
+      "seq": 3,
+      "section": "解决",
+      "narration": "正确的做法，是先隔离环境。",
+      "duration_ms": 4000,
+      "character": {
+        "image": "character_packs/roxy/roxy_smug_standing_01.png",
+        "position": "left",
+        "height_px": 1000,
+        "motion": "idle_breathe"
+      },
+      "card": {
+        "type": "pure_text",
+        "style": "conclusion",
+        "text": "先给 AI 一个可靠的沙箱"
+      }
+    }
+  ]
+}
