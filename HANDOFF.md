@@ -37,6 +37,7 @@
   - 火山 TTS：**尚未配置**，M4 前需要 AppID + Access Token。
 - 角色包：正式资产选用豆包版 `character_packs/roxy/roxy_calm_standing_01.png`（1080×1920 RGBA，水印已排除，本地，gitignored）；ChatGPT 版留在 `alternates/`。Seedream 不能生成洛琪希。
 - 资产分工（2026-10-27）：角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
+- AI 主题扩展：需求新增 R-17～R-28（讲解指向/白板/敲键盘/调试翻车/灵光一现/怀疑审视等），核心 6 个提示词在 `character_packs/roxy/ai_pose_prompts.md`（本地）。背景已出纸纹 + 木地板；道具在生成中。
 - 代码：还没有 `app/`、`compose.yaml`、前端；M1 从零开始。
 
 ---
@@ -101,12 +102,15 @@ roxy_pipline/
 ├─ character_packs/
 │  └─ roxy/                        # 本地洛琪希 pack，gitignore
 │     ├─ manifest.json
+│     ├─ checklist.md
+│     ├─ ai_pose_prompts.md
 │     ├─ roxy_calm_standing_01.png # 正式（豆包版，水印已排除）
 │     └─ alternates/
 │        └─ roxy_calm_standing_01_chatgpt.png
 └─ scripts/
    ├─ check_llm.py
-   └─ prepare_character_asset.py   # 白底 → 透明 1080x1920
+   ├─ prepare_character_asset.py
+   └─ generate_seedream_image.py   # 白底 → 透明 1080x1920
 ```
 
 M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/domains/providers）、`templates/`、`prompts/`、`assets/`、`character_packs/`、`migrations/`、`tests/`、`web/`。
@@ -167,7 +171,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 | 图标 | SVG 优先；需要 AI 版时 Seedream 图标表 | 统一线条风格 |
 | 封面/片头片尾 | Seedream + 模板 | 复用背景，不每期重生成 |
 
-Seedream 首版约 10–15 张：背景 3–4、演示物件 4–6、图标表 1、封面/片头片尾 2–4。
+Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1、封面/片头片尾 2–4。
 
 ---
 
@@ -226,10 +230,16 @@ Seedream 首版约 10–15 张：背景 3–4、演示物件 4–6、图标表 1
 - `.gitignore` 排除 `.env`、洛琪希参考图、`tmp/`、私有 character pack。
 - 新建 `CLAUDE.md` / `HANDOFF.md` / `README.md`，按 ItsMyGo 的文档分工规范化。
 
+### 2026-10-27 · AI 主题立绘扩展 + 背景/道具
+
+- 需求新增 R-17～R-28：讲解指向、白板讲解、敲键盘、调试翻车、灵光一现、怀疑审视、戴眼镜、咖啡、悬浮终端、数据展示、庆祝、被代码包围。
+- 核心 6 个立绘提示词写入 `character_packs/roxy/ai_pose_prompts.md`；R-01 已完成，其余按主题补齐。
+- Seedream 生成纸纹 + 木地板背景（1920×1080）；终端/白板/AI 机器人/神经网络道具在 `tmp/seedream_assets/props/` 生成中。
+
 ### 2026-10-27 · 资产生产分工
 
 - 用户确认：洛琪希等版权角色立绘由用户提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
-- 写入 ADR-006；Seedream 首版清单约 10–15 张（背景 3–4、物件 4–6、图标表 1、封面/片头片尾 2–4）。
+- 写入 ADR-006；Seedream 首版清单约 12–17 张（背景 3–4、物件 6–8、图标表 1、封面/片头片尾 2–4）。
 
 ### 2026-10-27 · 豆包立绘水印检查
 
