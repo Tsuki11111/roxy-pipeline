@@ -358,7 +358,7 @@ TTS（逐句合成）
 | 表 | 关键字段 | 说明 |
 |---|---|---|
 | `series` | id, name, voice_profile JSONB, section_labels JSONB, character_pack_id, watermark, template_version, non_commercial | 系列配置根；配置变更要版本化 |
-| `episode` | id, series_id, topic_id, title, target_duration_s, status, health, current_node, output_path, version, render_spec JSONB, script_meta JSONB, created_at | `version` 做乐观锁；`health` 表示 OK/WARNING/BLOCKED；`render_spec` 是 M1.2 手工渲染 spec 的临时桥，M3 后由 `shot` 表生成；`script_meta` 存大纲/分段/校验快照 |
+| `episode` | id, series_id, topic_id, title, target_duration_s, status, health, current_node, output_path, version, render_spec JSONB, script_meta JSONB, storyboard_meta JSONB, created_at | `version` 做乐观锁；`health` 表示 OK/WARNING/BLOCKED；`render_spec` 是 M1.2 手工渲染 spec 的临时桥，M3 后由 shot 表生成；`script_meta`/`storyboard_meta` 存生成与校验快照 |
 | `topic_candidate` | id, series_id, source, title, hook, audience, fit_score, est_sections, raw JSONB, status | 抓取原文放 `raw`，只作数据，不作指令 |
 | `script_line` | id, episode_id, seq, speaker, section, text, char_count, version | `seq` 唯一且连续；`char_count` 由服务端计算 |
 | `shot` | id, episode_id, script_line_id, seq, duration_ms, card_type, card_payload JSONB, character_image, character_position, bg, transition, cache_key, template_version | `cache_key` 唯一索引；`script_line_id` 允许 1:N（MVP 默认 1:1） |
@@ -965,6 +965,8 @@ F-17 的多模态分镜评审可在 M3 后用“分镜缩略图拼图 + 多模�
 
 **设计注意：** 分镜 Agent 的任务不是“发挥创意”，而是在有限语法里做正确选择。规则引擎负责硬约束，LLM 负责语义匹配；两者不能混在一起。
 
+> M3 实现：LLM 只输出语义选择，代码做 schema 归一化；连续同卡片、角色连续超限、章节末卡片、时长越界由确定性修复器处理，最多 4 轮，保证 F-15 硬规则。
+
 ### 11.4 TTS 与强制对齐
 
 **Provider 接口：**
@@ -1204,8 +1206,12 @@ prompt 模板 + 参考图 + seed
 | POST | `/script-lines/{line_id}/regenerate` | 重生成单句 | operator/admin |
 | POST | `/episodes/{id}/script/validate` | 重新校验 | operator/admin |
 | GET | `/episodes/{id}/storyboard` | 分镜表 + 节奏报告 | 登录用户 |
+| POST | `/episodes/{id}/actions/generate-storyboard` | 生成分镜 | operator/admin |
+| POST | `/episodes/{id}/actions/retry-storyboard` | 重跑失败的分镜生成 | operator/admin |
+| POST | `/episodes/{id}/actions/regenerate-storyboard` | 重新生成分镜 | operator/admin |
+| POST | `/episodes/{id}/actions/confirm-storyboard` | 确认分镜，进入 VOICING | operator/admin |
+| POST | `/episodes/{id}/actions/build-render-spec` | 由 shot 表生成渲染 spec | operator/admin |
 | PATCH | `/shots/{shot_id}` | 编辑单个镜头 | operator/admin |
-| POST | `/episodes/{id}/storyboard/regenerate` | 重生成分镜 | operator/admin |
 | GET | `/episodes/{id}/rhythm-report` | 节奏规则检查结果 | 登录用户 |
 | GET | `/episodes/{id}/qc` | 质检报告 | 登录用户 |
 | POST | `/reviews/{review_id}/resolve` | 处理人工介入项 | reviewer/admin |

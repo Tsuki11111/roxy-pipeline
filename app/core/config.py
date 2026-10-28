@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     script_roxy_ratio_max: float = 0.30
     script_min_lines_for_ratio: int = 20
 
+    storyboard_max_repairs: int = 2
+
     celery_task_always_eager: bool = False
     outbox_poll_interval_s: float = 5.0
     render_dir: str = "./tmp/renders"

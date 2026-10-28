@@ -8,6 +8,7 @@ import time
 from typing import Protocol
 
 import httpx
+from json_repair import repair_json
 
 from app.core.config import get_settings
 
@@ -35,14 +36,18 @@ def extract_json(content: str) -> dict:
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text)
+
+    candidate = text
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        candidate = text[start : end + 1]
+
     try:
-        value = json.loads(text)
+        value = json.loads(candidate)
     except json.JSONDecodeError:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start < 0 or end <= start:
-            raise
-        value = json.loads(text[start : end + 1])
+        value = repair_json(candidate, return_objects=True)
+
     if not isinstance(value, dict):
         raise ValueError("LLM response is not a JSON object")
     return value
@@ -128,6 +133,11 @@ class DeepSeekClient:
                 result = extract_json(content)
             except Exception as exc:
                 last_error = exc
+                logger.warning(
+                    "LLM returned invalid JSON (attempt %d): %s",
+                    attempt + 1,
+                    content[:500],
+                )
                 if attempt == 2:
                     break
                 await asyncio.sleep(1)

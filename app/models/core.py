@@ -97,6 +97,8 @@ class Episode(Base):
     render_spec: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # M2: outline/sections/validation snapshot for the script review gate.
     script_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # M3: rhythm report and storyboard generation metadata.
+    storyboard_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(

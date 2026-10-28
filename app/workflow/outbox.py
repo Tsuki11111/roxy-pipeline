@@ -14,6 +14,8 @@ def queue_for(event_type: str) -> str:
         return "render"
     if event_type.startswith("script."):
         return "agent"
+    if event_type.startswith("storyboard."):
+        return "agent"
     return "workflow"
 
 

@@ -23,7 +23,7 @@
 
 ## 1. 当前状态一句话
 
-**M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent 已跑通（2026-10-28）。**
+**M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent 已跑通（2026-10-28）。**
 
 - 需求文档 v1.2、架构方案 v1.3、ADR-001～005 已写完。
 - GitHub 仓库已创建：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
@@ -54,13 +54,18 @@
 - M1.1 API/DB 骨架已完成：`compose.infra.yml`、FastAPI 应用、SQLAlchemy 模型、Alembic 初始迁移；`/health` 正常，7 条测试通过。
 - M1.2 队列/状态机/渲染 worker 骨架已完成：`outbox_event` + dispatcher、`app/workflow/`（Celery 路由、状态机、render_service、render_tasks）、`render.shot` 按镜头并行、`render.concat` 回写 episode；eager 模式单镜头 0.5 秒端到端输出 MP4。
 - M1.2 API：`PUT /episodes/{id}/render-spec`、`POST /episodes/{id}/actions/render`，以及 confirm-topic/confirm-script/cancel/publish 状态闸口；`Episode.render_spec` 是 M1.2 的临时手工 spec，等 M2/M3 生成分镜后替换。
-- M1.2 渲染增强：`CharacterSpec` 增加 `anchor_x/anchor_y/scale`；新增公开 `character_packs/placeholder/` 与 `specs/demo_placeholder.json`；golden frame 回归测试；当前 27 条测试通过（含 M2）。
+- M1.2 渲染增强：`CharacterSpec` 增加 `anchor_x/anchor_y/scale`；新增公开 `character_packs/placeholder/` 与 `specs/demo_placeholder.json`；golden frame 回归测试；当前 39 条测试通过（含 M2/M3）。
 - 本机 Docker 已启动；Postgres 17 + RabbitMQ 4.4 + Redis 7 实机联调通过：API → outbox → Celery → 3 镜头 6.00 秒占位成片 READY。
 - RabbitMQ 4.4 默认禁止 Celery 的临时非独占回复队列，`infra/rabbitmq.conf` 已开启 `deprecated_features.permit.transient_nonexcl_queues`；Celery 升级后复查。
 - M2 脚本 Agent 已跑通：LangGraph `script_graph`（outline → sections → lines → validate → repair ≤2 次），DeepSeek `deepseek-flash`，产物写入 `script_line` + `episode.script_meta`。
 - M2 API：confirm-topic 转 SCRIPTING 并投 `script.generate`；`GET /episodes/{id}/script`、`PATCH /script-lines/{id}`、`POST /episodes/{id}/script/validate`、confirm-script（校验通过才进 STORYBOARDING）、retry/regenerate-script。
 - M2 实测：真实 DeepSeek 生成 30 句 / 347 字 / 校验通过；假 LLM 任务入库 24 句、状态 SCRIPT_REVIEW、node SUCCESS。
 - M2 暂用 `MemorySaver`；Postgres checkpointer、模型自检（F-10 的语气/事实检查）和 `model_call_log` 成本表还没接。
+- M3 分镜 Agent 已跑通：`storyboard_graph` 按章节让 DeepSeek 选镜头，代码做 schema 归一化 + 确定性节奏修复（连续 3 同卡片、角色连续 5、章节末 icon/pure_text、时长 1.5–6s）。
+- M3 API：generate/retry/regenerate-storyboard、`GET /episodes/{id}/storyboard`、storyboard/validate、confirm-storyboard（进 VOICING）、`PATCH /shots/{id}`、build-render-spec。
+- M3 实测：29 句脚本生成 29 镜头、4 种卡片、角色占比 75.9%、节奏校验 valid；confirm 进 VOICING，build-render-spec 生成 29 镜头 spec，静帧已出图。
+- LLM JSON 增加 `json-repair` 兜底；分镜单次输出上限提高到 `max(2000, 行数×220)`，避免截断。
+- M3 待补：Seedream 背景/物件候选（用户暂停）、半身反应镜头/角色位移未接入分镜、P1 多模态分镜评审。
 - 资产分工（2026-10-27）：角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
 - 当前阶段只生成角色立绘，按 **5 张/批**推进；背景/舞台/演示物件暂停，等系统工作流实现后由 Seedream 按需求生成。
 - AI 主题扩展：需求新增 R-17～R-28（讲解指向/白板/敲键盘/调试翻车/灵光一现/怀疑审视等），核心 6 个提示词在 `character_packs/roxy/ai_pose_prompts.md`（本地）。背景已出纸纹 + 木地板；道具在生成中。
@@ -75,7 +80,7 @@
 1. **确认 initial commit 已推到 GitHub**：`git status -sb` 应显示 `main...origin/main`；没有就 `git push -u origin main`。
 2. **确认运行环境**：本机 Docker Desktop/WSL2 是否可用；VM 是否已挂 ≥200GB 数据盘；8080/8443/9100/9101 是否空闲。
 3. **确认 TTS 凭据**（不阻塞 M1）：火山语音 AppID + Access Token；如果换 MiniMax/阿里云，准备好对应凭据。
-4. **M2 脚本 Agent 已完成**：真实 DeepSeek 已验证；下一步 M3 分镜 Agent，或先补 M2.1（Postgres checkpointer、模型自检、成本日志、章级重生成）。
+4. **M3 分镜 Agent 已完成**：真实脚本生成 29 镜头、节奏校验通过、render_spec 已生成；下一步 M4 TTS/对齐，或先补 M3.1（Seedream 背景/物件、半身反应镜头、角色位移）。
 5. **M1.2 实机已验证**：`docker compose -f compose.infra.yml up -d` 起 Postgres/RabbitMQ/Redis，按 §4.2.2 启动 worker（加 `agent` 队列）、beat、API，再用 `scripts/queue_demo_render.py` 验证渲染链路。
 
 ### 2.2 M1：渲染链路打通
@@ -117,12 +122,12 @@
 - 状态机与人工闸口 API：confirm-topic / confirm-script / cancel / publish。
 - `render.episode` 拆分为 `render.shot` 按镜头并行，`render.concat` 拼接并回写 episode；eager 模式单镜头端到端输出 0.5 秒 MP4。
 - `anchor_x/anchor_y/scale`；公开 placeholder pack + `specs/demo_placeholder.json`；golden frame 回归测试。
-- 当前 27 条测试通过（含 M2）。
+- 当前 39 条测试通过（含 M2/M3）。
 
 ### 2.3 M1 之后再动
 
 - **M2**：`script_graph`（LangGraph），DeepSeek `deepseek-flash` 生成大纲/分段/逐句。**已完成**；待补 Postgres checkpointer、模型自检、成本日志、章级重生成。
-- **M3**：`storyboard_graph` + 节奏规则；Seedream 素材候选 + 人工入库。
+- **M3**：`storyboard_graph` + 节奏规则；Seedream 素材候选 + 人工入库。**分镜与节奏已完成**；Seedream 资产、半身镜头、角色位移待补。
 - **M4**：TTS/对齐/质检；视觉质检先用 DOM 规则。
 - **M5**：局部重渲染、断点续跑、成本报表。
 
@@ -191,6 +196,15 @@ roxy_pipline/
 │  │  ├─ script_service.py
 │  │  ├─ prompts.py
 │  │  └─ tasks.py                  # script.generate
+│  ├─ storyboard/                  # M3 分镜 Agent
+│  │  ├─ graph.py
+│  │  ├─ grammar.py
+│  │  ├─ rhythm.py
+│  │  ├─ models.py
+│  │  ├─ service.py
+│  │  ├─ tasks.py                  # storyboard.generate
+│  │  ├─ prompts.py
+│  │  └─ spec_builder.py           # shot → EpisodeSpec
 │  ├─ providers/llm.py             # DeepSeek client
 │  ├─ core/config.py               # pydantic-settings
 │  ├─ db/                          # Base + async session
@@ -200,7 +214,9 @@ roxy_pipline/
 ├─ migrations/                     # Alembic
 ├─ alembic.ini
 ├─ compose.infra.yml               # Postgres/RabbitMQ/Redis/MinIO
-├─ prompts/script/                 # system/outline/sections/lines/repair
+├─ prompts/
+│  ├─ script/                      # system/outline/sections/lines/repair
+│  └─ storyboard/                  # system/generate
 ├─ templates/
 │  ├─ stage/                       # stage.html/css/renderer.js
 │  └─ cards/                       # 5 类卡片 HTML
@@ -219,6 +235,11 @@ roxy_pipline/
 │  ├─ test_script_validation.py
 │  ├─ test_script_graph.py
 │  ├─ test_script_api.py
+│  ├─ test_storyboard_rhythm.py
+│  ├─ test_storyboard_graph.py
+│  ├─ test_storyboard_spec.py
+│  ├─ test_storyboard_api.py
+│  ├─ test_llm_json.py
 │  └─ golden/placeholder_still.png
 ├─ pyproject.toml
 ├─ uv.lock
@@ -285,7 +306,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
   `uv run celery -A app.workflow.celery_app beat -l info`
 - `-c` 是同时渲染的 Chromium 数量：2 vCPU/2GB 先 `-c 1`，4 核以上再 `-c 2`。
 - Windows 本机 Celery 默认 prefork 不可用：调试加 `--pool=solo`（单并发）；并行渲染在 Ubuntu VM 上用默认 prefork `-c N`。
-- 队列：`workflow`（状态推进/outbox 补投）、`agent`（`script.generate`）、`render`（`render.episode` / `render.shot` / `render.concat`）。
+- 队列：`workflow`（状态推进/outbox 补投）、`agent`（`script.generate` / `storyboard.generate`）、`render`（`render.episode` / `render.shot` / `render.concat`）。
 - 触发真实队列渲染：`uv run python scripts/queue_demo_render.py --base-url http://localhost:8000`。
 - beat 每 5 秒执行 `workflow.dispatch_outbox`，把 PENDING 事件投到 RabbitMQ；失败按指数退避，5 次后置 FAILED。
 - `CELERY_TASK_ALWAYS_EAGER=true` 只用于任务级测试；在 async dispatcher 里同步执行 task 会和事件循环冲突。
@@ -301,6 +322,16 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - 失败重跑：`POST /api/v1/episodes/{id}/actions/retry-script`；整份重生成：`POST /api/v1/episodes/{id}/actions/regenerate-script`。
 - Prompt 在 `prompts/script/`；prompt 文件 hash 与 `script-graph-1` 会进入 `NodeRun.input_hash`。
 - 当前 checkpointer 是 `MemorySaver`；worker 重启后同一 thread 的图状态不保留，但 `script_line` / `script_meta` 已落库。
+
+### 4.2.4 分镜 Agent（M3）
+
+- 确认脚本后 episode 进入 STORYBOARDING，再调 `POST /api/v1/episodes/{id}/actions/generate-storyboard`；任务投到 `agent` 队列。
+- 查看/校验分镜：`GET /api/v1/episodes/{id}/storyboard`、`POST /api/v1/episodes/{id}/storyboard/validate`。
+- 编辑单镜头：`PATCH /api/v1/shots/{shot_id}`，支持 card_type / character_image / character_position / duration_ms / bg / transition / motion；修改后会自动重算节奏。
+- `POST /api/v1/episodes/{id}/actions/confirm-storyboard` 校验通过后进入 VOICING。
+- `POST /api/v1/episodes/{id}/actions/build-render-spec` 把 shot 表转成 `EpisodeSpec` 存回 `episode.render_spec`，之后可直接调 `actions/render` 渲染。
+- 节奏规则是纯函数（`app/storyboard/rhythm.py`）；LLM 只负责语义选镜，违规由确定性修复器兜底，最多修 4 轮。
+- 分镜生成使用 `prompts/storyboard/`；`shot.cache_key` 由台词文本、卡片类型、payload、角色图和模板版本计算。
 
 ### 4.3 Git 与提交
 
@@ -400,6 +431,15 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 ---
 
 ## 6. 历史记录
+
+### 2026-10-28 · M3 分镜 Agent
+
+- 新增 `app/storyboard/`：视觉语法、节奏规则/确定性修复器、LangGraph `storyboard_graph`、shot 持久化、shot → `EpisodeSpec` 构建器。
+- 分镜生成按章节调用 DeepSeek，代码归一化 schema；节奏违规由纯函数修复，不依赖 LLM 重排。
+- 新增 `episode.storyboard_meta` 迁移 `d4e5f6a7b8c9`；新增分镜查看/校验/确认/重生成、`PATCH /shots`、`build-render-spec` API。
+- 实测真实脚本生成 29 镜头、4 种卡片、角色占比 75.9%、节奏 valid；confirm 进 VOICING；render_spec 29 镜头，静帧正常。
+- JSON 解析增加 `json-repair` 兜底；分镜输出上限提高，测试 39 条通过。
+- 待补：Seedream 背景/物件、半身反应镜头与角色位移、P1 多模态分镜评审。
 
 ### 2026-10-28 · M2 脚本 Agent
 

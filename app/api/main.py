@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 import app.models  # noqa: F401 - register SQLAlchemy models
-from app.api.routes import episodes, health, script_lines, series
+from app.api.routes import episodes, health, script_lines, series, shots
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import engine
@@ -31,6 +31,7 @@ app.include_router(health.router)
 app.include_router(series.router)
 app.include_router(episodes.router)
 app.include_router(script_lines.router)
+app.include_router(shots.router)
 
 
 @app.get("/")

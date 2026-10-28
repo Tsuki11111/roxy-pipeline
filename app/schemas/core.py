@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.agents.script_validation import ValidationResult
 from app.models.core import EpisodeStatus, NodeStatus
+from app.storyboard.models import RhythmReport
 
 
 class HealthResponse(BaseModel):
@@ -59,6 +60,7 @@ class EpisodeRead(BaseModel):
     output_path: str | None
     render_spec: dict | None
     script_meta: dict | None
+    storyboard_meta: dict | None
     version: int
     created_at: datetime
     updated_at: datetime
@@ -135,3 +137,27 @@ class ScriptLineUpdate(BaseModel):
 class ScriptLineUpdateResult(BaseModel):
     line: ScriptLineRead
     validation: ValidationResult
+
+
+class StoryboardRead(BaseModel):
+    episode_id: str
+    status: EpisodeStatus
+    meta: dict | None
+    shots: list[ShotRead]
+    rhythm: RhythmReport
+
+
+class ShotUpdate(BaseModel):
+    card_type: str | None = None
+    card_style: str | None = None
+    character_image: str | None = None
+    character_position: str | None = None
+    duration_ms: int | None = None
+    bg: str | None = None
+    transition: str | None = None
+    motion: str | None = None
+
+
+class ShotUpdateResult(BaseModel):
+    shot: ShotRead
+    rhythm: RhythmReport
