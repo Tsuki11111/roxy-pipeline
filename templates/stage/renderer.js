@@ -50,9 +50,18 @@ function hideCharacters() {
 }
 
 function applyCharacterStyle(layer, character, offsetX = 0, breath = 0) {
-  layer.style.left = `${POSITIONS[character.position] ?? POSITIONS.left}px`;
-  layer.style.height = `${character.height_px}px`;
-  layer.style.transform = `translateX(${offsetX.toFixed(2)}px) translateY(${breath.toFixed(2)}px)`;
+  const stageWidth = payload?.width ?? 1920;
+  const left =
+    character.anchor_x != null
+      ? character.anchor_x * stageWidth
+      : POSITIONS[character.position] ?? POSITIONS.left;
+  const bottom = character.anchor_y != null ? character.anchor_y : 52;
+  const scale = character.scale ?? 1;
+  const anchorShift = character.anchor_x != null ? " translateX(-50%)" : "";
+  layer.style.left = `${left}px`;
+  layer.style.bottom = `${bottom}px`;
+  layer.style.height = `${character.height_px * scale}px`;
+  layer.style.transform = `translateX(${offsetX.toFixed(2)}px)${anchorShift} translateY(${breath.toFixed(2)}px)`;
 }
 
 function startCharacterTransition(character, startMs) {

@@ -53,6 +53,12 @@ class NodeStatus(str, enum.Enum):
     STALE = "STALE"
 
 
+class OutboxStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    DISPATCHED = "DISPATCHED"
+    FAILED = "FAILED"
+
+
 class Series(Base):
     __tablename__ = "series"
 
@@ -87,6 +93,8 @@ class Episode(Base):
     health: Mapped[str] = mapped_column(String(20), default="OK")
     current_node: Mapped[str | None] = mapped_column(String(100), nullable=True)
     output_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # M1.2 bridge: a hand-written render spec until storyboard/TTS generate shots.
+    render_spec: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -183,3 +191,33 @@ class NodeRun(Base):
     output_ref: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     episode: Mapped[Episode] = relationship(back_populates="node_runs")
+
+
+class OutboxEvent(Base):
+    __tablename__ = "outbox_event"
+    __table_args__ = (
+        Index("ix_outbox_status_available", "status", "available_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    episode_id: Mapped[str | None] = mapped_column(
+        ForeignKey("episode.id", ondelete="CASCADE"), index=True, nullable=True
+    )
+    event_type: Mapped[str] = mapped_column(String(100), index=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[OutboxStatus] = mapped_column(
+        SAEnum(OutboxStatus, native_enum=False, length=20),
+        default=OutboxStatus.PENDING,
+        index=True,
+    )
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    dispatched_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -8,6 +8,8 @@ Usage:
     python scripts/prepare_character_asset.py input.webp output.png
     python scripts/prepare_character_asset.py input.webp output.png --preview preview.png
     python scripts/prepare_character_asset.py input.webp output.png --keep-largest-component
+    python scripts/prepare_character_asset.py input.webp output.png --remove-corner-watermark
+    python scripts/prepare_character_asset.py input.webp output.png --crop-bottom 160 --keep-largest-component
 """
 
 from __future__ import annotations
@@ -56,6 +58,47 @@ def keep_largest_component(im: Image.Image) -> Image.Image:
     return Image.fromarray(arr, "RGBA")
 
 
+def remove_corner_watermark(
+    im: Image.Image,
+    width_ratio: float = 0.36,
+    height_ratio: float = 0.20,
+    min_brightness: int = 195,
+    max_saturation: int = 24,
+    dilate: int = 2,
+) -> Image.Image:
+    """Erase a light, low-saturation corner watermark from the foreground.
+
+    The watermark often overlaps the character (e.g. Doubao text over a braid),
+    so it cannot be dropped as a separate component. Mask bright, low-saturation
+    pixels in the bottom-right region and fill them from the nearest opaque
+    pixel; pixels over the already-transparent background are left untouched.
+    """
+    arr = np.array(im)
+    h, w = arr.shape[:2]
+    x0 = int(w * (1 - width_ratio))
+    y0 = int(h * (1 - height_ratio))
+    roi = arr[y0:, x0:]
+    rgb = roi[..., :3].astype(int)
+    alpha = roi[..., 3] > 0
+    low = rgb.min(axis=2)
+    sat = rgb.max(axis=2) - low
+    mask = np.zeros((h, w), dtype=bool)
+    mask[y0:, x0:] = alpha & (low >= min_brightness) & (sat <= max_saturation)
+    if not mask.any():
+        return im
+    mask = ndimage.binary_dilation(mask, iterations=dilate) & (arr[..., 3] > 0)
+    valid = (~mask) & (arr[..., 3] > 0)
+    if not valid.any():
+        return im
+    indices = ndimage.distance_transform_edt(
+        ~valid, return_distances=False, return_indices=True
+    )
+    filled = arr[..., :3][indices[0], indices[1]]
+    arr[..., :3][mask] = filled[mask]
+    arr[..., 3][mask] = 255
+    return Image.fromarray(arr, "RGBA")
+
+
 def fit_canvas(
     im: Image.Image,
     canvas: tuple[int, int],
@@ -98,6 +141,17 @@ def main() -> None:
         action="store_true",
         help="drop small isolated foreground elements such as a corner watermark",
     )
+    parser.add_argument(
+        "--remove-corner-watermark",
+        action="store_true",
+        help="erase a light bottom-right watermark that overlaps the character",
+    )
+    parser.add_argument(
+        "--crop-bottom",
+        type=int,
+        default=0,
+        help="crop this many pixels from the bottom before processing (watermark-safe)",
+    )
     parser.add_argument("--preview", type=Path, help="optional paper-background preview")
     parser.add_argument(
         "--tight",
@@ -108,7 +162,11 @@ def main() -> None:
 
     width, height = (int(x) for x in args.canvas.lower().split("x"))
     im = Image.open(args.input).convert("RGB")
+    if args.crop_bottom:
+        im = im.crop((0, 0, im.width, im.height - args.crop_bottom))
     rgba = remove_white_background(im, args.threshold)
+    if args.remove_corner_watermark:
+        rgba = remove_corner_watermark(rgba)
     if args.keep_largest_component:
         rgba = keep_largest_component(rgba)
     if args.tight:

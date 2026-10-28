@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     app_secret_key: str = "dev-only-change-me"
     jwt_secret: str = "dev-only-change-me"
 
+    celery_task_always_eager: bool = False
+    outbox_poll_interval_s: float = 5.0
+    render_dir: str = "./tmp/renders"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

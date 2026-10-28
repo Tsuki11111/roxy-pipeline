@@ -358,7 +358,7 @@ TTS（逐句合成）
 | 表 | 关键字段 | 说明 |
 |---|---|---|
 | `series` | id, name, voice_profile JSONB, section_labels JSONB, character_pack_id, watermark, template_version, non_commercial | 系列配置根；配置变更要版本化 |
-| `episode` | id, series_id, topic_id, title, target_duration_s, status, health, current_node, output_path, version, created_at | `version` 做乐观锁；`health` 表示 OK/WARNING/BLOCKED |
+| `episode` | id, series_id, topic_id, title, target_duration_s, status, health, current_node, output_path, version, render_spec JSONB, created_at | `version` 做乐观锁；`health` 表示 OK/WARNING/BLOCKED；`render_spec` 是 M1.2 手工渲染 spec 的临时桥，M3 后由 `shot` 表生成 |
 | `topic_candidate` | id, series_id, source, title, hook, audience, fit_score, est_sections, raw JSONB, status | 抓取原文放 `raw`，只作数据，不作指令 |
 | `script_line` | id, episode_id, seq, speaker, section, text, char_count, version | `seq` 唯一且连续；`char_count` 由服务端计算 |
 | `shot` | id, episode_id, script_line_id, seq, duration_ms, card_type, card_payload JSONB, character_image, character_position, bg, transition, cache_key, template_version | `cache_key` 唯一索引；`script_line_id` 允许 1:N（MVP 默认 1:1） |
@@ -369,7 +369,7 @@ TTS（逐句合成）
 | `model_call_log` | id, episode_id, node_run_id, provider, model, prompt_hash, prompt_tokens, completion_tokens, cost, latency_ms, status | 成本与审计；不要存完整 Prompt |
 | `tts_call_log` | id, episode_id, line_id, provider, voice_id, chars, cost, latency_ms, status | 按句统计 |
 | `prompt_version` | id, name, version, hash, content_path, created_at | Prompt 文件化，Git 管理，DB 只存版本索引 |
-| `outbox_event` | id, aggregate_type, aggregate_id, event_type, payload JSONB, status, created_at, published_at | 状态变更与任务投递的可靠桥梁 |
+| `outbox_event` | id, episode_id, event_type, payload JSONB, status, attempts, available_at, created_at, dispatched_at, error | 状态变更与任务投递的可靠桥梁；M1.2 先按 episode 聚合，跨聚合事件出现后再加 aggregate_type/aggregate_id |
 | `user` | id, email, hashed_password, role, is_active | 角色：operator / reviewer / admin / service |
 | `audit_log` | id, actor_id, action, target_type, target_id, before JSONB, after JSONB, created_at | 人工闸口、编辑、删除、重跑都要记 |
 
@@ -681,6 +681,8 @@ templates/
 
 **模板版本：** 每次修改模板必须提升 `template_version`；该版本进入 `shot.cache_key`，旧片段不会误用新模板。
 
+**角色定位：** 角色层支持 `anchor_x`（画布宽度比例，定位角色中心）、`anchor_y`（px，距画布底边）和 `scale`；未设置时沿用 `position` 预设。动态动作、场景资产和半身图用锚点精确定位，避免按脚底统一缩放导致悬空或裁切。
+
 ### 10.2 信息卡片渲染
 
 - 用 Jinja2 渲染 HTML，Playwright 打开本地 `file://` 或临时 HTTP 页面，截图保存 PNG。
@@ -827,6 +829,46 @@ ffmpeg -i video.mp4 -i audio_norm.wav \
 - 试渲染：M1 阶段先输出 720P/10fps 的粗剪，确认节奏后再跑 1080P/25fps。
 - 渲染失败：保存失败帧、DOM 快照、浏览器 console、ffmpeg 日志；重试 2 次后转人工。
 - 卡死：单镜头超过 10 分钟无进度，杀掉 Chromium/ffmpeg，标记失败并重试。
+
+### 10.10 半身反应镜头与分镜穿插
+
+**目的：** 连续全身立绘会让节奏单调；半身反应镜头作为 0.6–1.0 秒的插片，打断站立姿势的连续性，同时遮住换姿势的瞬间。
+
+**资产：**
+
+- B-01～B-10，1080×1350（4:5），腰部以上，透明/纯白底。
+- 人物、辫子、发带完整落在画布内；腰部截断线在画布内部，底部留白 ≥6%，便于水印隔离和底部渐隐。
+- 与全身 pack 同一角色、同一描边和配色；不画下半身。
+
+**分镜规则：**
+
+- 每 3–5 个全身镜头插入 1 个半身反应镜头；不要连续使用；全片占比 ≤20%。
+- 半身镜头通常不显示信息卡片，只保留短字幕；适合章节开头/结尾、吐槽后、翻车瞬间、结论前。
+- 数据标记：`shot.kind = "bust"`，`shot.character.image` 指向 bust 资产，`duration_ms` 600–1000。
+
+**渲染：**
+
+- 复用舞台背景；半身层居中/偏左，高度约 900–1000px；入场 120ms 淡入 + 轻微上移，出场 120ms 淡出。
+- 半身镜头前后仍用 180ms 角色交叉淡入，避免硬切。
+- 用半身镜头遮换姿势时：旧全身淡出 → bust 进入 → 新全身淡入，总过渡控制在 0.4–0.6 秒。
+
+### 10.11 角色位移与物件联动
+
+**目的：** 角色全程钉在画面同一位置会显得僵硬；换位、让位或展示道具时，角色应作为整体做自然的快速平移，参考片里的滑入/滑出。
+
+**规则：**
+
+- 每个镜头可给角色一个 `move`：`from_x/from_y`、`to_x/to_y`、`scale`、`opacity`、`start_ms`、`duration_ms`、`easing`（ease-out cubic）。
+- 时长 120–300ms；单次位移不超过画幅宽度的 1/3；不加弹跳/回弹。
+- 与角色一起移动的物件（白板、终端、提示牌等）放入同一 `group`，共用位移；不跟随的卡片独立动画。
+- 典型触发：换章节时从侧面滑入；需要给卡片让位时横移；和道具一起进退场；换姿势前先横移，再做 180ms 交叉淡化。
+- 默认不移动每个镜头；没有 `move` 时只保留待机呼吸（2–4px）。连续两个镜头不重复同一方向的大幅平移。
+
+**确定性：**
+
+- 位移由 `renderAt(tMs)` 根据 `start_ms/duration_ms/easing` 计算，禁止 CSS transition/animation。
+- `move` 参与 `shot.cache_key`；修改位移必须使缓存失效。
+- 入场/出场时角色和道具必须作为整体移出画面，不允许原地消失。
 
 ---
 

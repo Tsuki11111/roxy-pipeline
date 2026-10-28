@@ -23,7 +23,7 @@
 
 ## 1. 当前状态一句话
 
-**架构设计完成，代码尚未开始（2026-10-26）。**
+**M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker 骨架已跑通（2026-10-28）。**
 
 - 需求文档 v1.2、架构方案 v1.3、ADR-001～005 已写完。
 - GitHub 仓库已创建：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
@@ -45,14 +45,20 @@
 - Batch 7 已完成：R-28 被代码包围、R-29 跳跃欢呼、R-30 奔跑、R-31 后仰失衡、R-32 伸手抓取入库，共 35 张；R-29 保留 220px 脚下空档。
 - Batch 8 已完成：R-33 抱 GPU、R-34 放大镜、R-35 推白板（场景资产 1536×1799 紧裁切）、R-36 大喇叭、R-37 提示牌入库，共 40 张。
 - Batch 9 已完成：R-38 拉网线（场景资产 1124×1819，左边缘/网线底部贴画布边，用户接受）、R-39 抱 AI 机器人、R-40 举灯泡、R-41 修服务器、R-42 端托盘入库，共 45 张。
+- Batch 10 全部 10 张已入库：B-01～B-05 + B-06 灵光、B-07 怀疑、B-08 崩溃、B-09 害羞、B-10 认真，共 55 个正式资产；1080×1350。B-09 为构图模板：人物/辫子/发带完整在画布内，腰部截断线不贴底边，底部留白。
+- 新约束（2026-10-28）：角色不能全程静止；换位/让位/配合道具时，角色与物件作为整体做 120–300ms 的自然快速平移（参考 BV1BgH36DE7y）。已写入需求 F-47 与架构 10.11，待渲染阶段实现。
 - Batch 6 已完成：R-23 戴眼镜、R-24 咖啡、R-25 摊手、R-26 数据展示、R-27 庆祝，共 30 张；只剩 R-28 被代码包围。
 - M1 渲染链路原型已跑通：手写 3 镜头 JSON → 舞台 HTML → Playwright 逐帧 → ffmpeg；12 秒/300 帧/1920×1080/25fps/H.264/AAC，单进程约 160 秒。
 - 角色换姿势已改为双层交叉淡入 + 横移（180ms），字幕和卡片同步短淡入；参考片实测换姿势约 0.2 秒，不是硬切。
 - M1.1 API/DB 骨架已完成：`compose.infra.yml`、FastAPI 应用、SQLAlchemy 模型、Alembic 初始迁移；`/health` 正常，7 条测试通过。
+- M1.2 队列/状态机/渲染 worker 骨架已完成：`outbox_event` + dispatcher、`app/workflow/`（Celery 路由、状态机、render_service、render_tasks）、`render.shot` 按镜头并行、`render.concat` 回写 episode；eager 模式单镜头 0.5 秒端到端输出 MP4。
+- M1.2 API：`PUT /episodes/{id}/render-spec`、`POST /episodes/{id}/actions/render`，以及 confirm-topic/confirm-script/cancel/publish 状态闸口；`Episode.render_spec` 是 M1.2 的临时手工 spec，等 M2/M3 生成分镜后替换。
+- M1.2 渲染增强：`CharacterSpec` 增加 `anchor_x/anchor_y/scale`；新增公开 `character_packs/placeholder/` 与 `specs/demo_placeholder.json`；golden frame 回归测试；当前 15 条测试通过。
+- 本机 Docker Desktop 仍未启动，RabbitMQ/Redis/Postgres 实机联调未做；本地可用 SQLite + Celery eager 验证任务，生产队列待 VM。
 - 资产分工（2026-10-27）：角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
 - 当前阶段只生成角色立绘，按 **5 张/批**推进；背景/舞台/演示物件暂停，等系统工作流实现后由 Seedream 按需求生成。
 - AI 主题扩展：需求新增 R-17～R-28（讲解指向/白板/敲键盘/调试翻车/灵光一现/怀疑审视等），核心 6 个提示词在 `character_packs/roxy/ai_pose_prompts.md`（本地）。背景已出纸纹 + 木地板；道具在生成中。
-- 代码：还没有 `app/`、`compose.yaml`、前端；M1 从零开始。
+- 代码：已有 `app/render`、`app/api`、`app/models`、`app/workflow`；尚无 agents/media-worker、Web 前端与 SSE。
 
 ---
 
@@ -63,7 +69,7 @@
 1. **确认 initial commit 已推到 GitHub**：`git status -sb` 应显示 `main...origin/main`；没有就 `git push -u origin main`。
 2. **确认运行环境**：本机 Docker Desktop/WSL2 是否可用；VM 是否已挂 ≥200GB 数据盘；8080/8443/9100/9101 是否空闲。
 3. **确认 TTS 凭据**（不阻塞 M1）：火山语音 AppID + Access Token；如果换 MiniMax/阿里云，准备好对应凭据。
-4. **角色立绘按 5 张/批推进**：Batch 1 = R-02～R-06；提示词已发；生成后处理入库。背景/道具暂停，等 M3 工作流实现后再生成。
+4. **M1.2 骨架已完成**：本机先 `docker compose -f compose.infra.yml up -d` 起 RabbitMQ/Redis/Postgres，再按 §4.2.2 启动 worker、beat、API，最后用 `uv run python scripts/queue_demo_render.py` 验证真实队列渲染。
 
 ### 2.2 M1：渲染链路打通
 
@@ -91,11 +97,20 @@
 
 **还没做：**
 
-- Celery/RabbitMQ 任务队列、状态机 dispatcher/outbox。
-- 独立 `render-worker` 进程与并行渲染（当前是单进程 CLI）。
-- 资产 `anchor_x/anchor_y/scale`，动态/场景资产的舞台位置。
-- golden frame 回归测试（当前只验了单次渲染）。
-- `character_packs/placeholder/` 与可公开复现的 demo 素材（当前引用本地 Roxy pack + tmp 背景）。
+- RabbitMQ/Redis/Postgres 实机联调（本机 Docker Desktop 未启动）；worker/beat 进程部署与并发压测。
+- outbox reconciler/heartbeat 扫描、失败任务自动恢复、DLQ 告警。
+- 镜头级缓存与幂等复用未做；重复投递会重渲染并覆盖。
+- `render_spec` 仍是手工 JSON；等 M2/M3 由脚本/分镜生成。
+- 2 期并行与每期渲染信号量（Redis）；SSE 进度；Web UI。
+- agents/media worker、TTS/对齐/质检。
+
+**M1.2 已完成（2026-10-28）：**
+
+- Celery 队列路由 + `outbox_event` + dispatcher（beat 每 5 秒补投）。
+- 状态机与人工闸口 API：confirm-topic / confirm-script / cancel / publish。
+- `render.episode` 拆分为 `render.shot` 按镜头并行，`render.concat` 拼接并回写 episode；eager 模式单镜头端到端输出 0.5 秒 MP4。
+- `anchor_x/anchor_y/scale`；公开 placeholder pack + `specs/demo_placeholder.json`；golden frame 回归测试。
+- 当前 15 条测试通过。
 
 ### 2.3 M1 之后再动
 
@@ -134,13 +149,19 @@ roxy_pipline/
 │  ├─ decisions-architecture.md
 │  └─ assets/roxy_reference.webp   # 本地保留，gitignore
 ├─ character_packs/
-│  └─ roxy/                        # 本地洛琪希 pack，gitignore
+│  ├─ roxy/                        # 本地洛琪希 pack，gitignore
+│  │  ├─ manifest.json
+│  │  ├─ checklist.md
+│  │  ├─ ai_pose_prompts.md
+│  │  ├─ bust_prompts.md
+│  │  ├─ roxy_calm_standing_01.png # 正式（豆包版，水印已排除）
+│  │  └─ alternates/
+│  │     └─ roxy_calm_standing_01_chatgpt.png
+│  └─ placeholder/                 # 公开占位包，可提交
 │     ├─ manifest.json
-│     ├─ checklist.md
-│     ├─ ai_pose_prompts.md
-│     ├─ roxy_calm_standing_01.png # 正式（豆包版，水印已排除）
-│     └─ alternates/
-│        └─ roxy_calm_standing_01_chatgpt.png
+│     ├─ character.png
+│     ├─ background.png
+│     └─ floor.png
 ├─ app/
 │  ├─ render/                      # M1 渲染原型
 │  │  ├─ models.py
@@ -149,9 +170,17 @@ roxy_pipline/
 │  │  ├─ stage.py
 │  │  ├─ capture.py
 │  │  └─ encode.py
+│  ├─ workflow/                    # M1.2 队列/状态机
+│  │  ├─ celery_app.py
+│  │  ├─ tasks.py                  # dispatch_outbox
+│  │  ├─ outbox.py
+│  │  ├─ state_machine.py
+│  │  ├─ render_service.py
+│  │  ├─ render_tasks.py           # render.episode/shot/concat
+│  │  └─ db.py
 │  ├─ core/config.py               # pydantic-settings
 │  ├─ db/                          # Base + async session
-│  ├─ models/core.py               # series/episode/script_line/shot/node_run
+│  ├─ models/core.py               # series/episode/script_line/shot/node_run/outbox_event
 │  ├─ schemas/core.py              # API schemas
 │  └─ api/                         # FastAPI app + routes
 ├─ migrations/                     # Alembic
@@ -161,17 +190,26 @@ roxy_pipline/
 │  ├─ stage/                       # stage.html/css/renderer.js
 │  └─ cards/                       # 5 类卡片 HTML
 ├─ specs/
-│  └─ demo_episode.json            # 3 镜头 12 秒 demo
+│  ├─ demo_episode.json            # 3 镜头 12 秒 demo（本地素材）
+│  └─ demo_placeholder.json        # 3 镜头 6 秒公开 demo（placeholder 素材）
 ├─ tests/
 │  ├─ conftest.py
 │  ├─ test_timeline.py
-│  └─ test_api.py
+│  ├─ test_api.py
+│  ├─ test_state_machine.py
+│  ├─ test_render_flow.py
+│  ├─ test_outbox.py
+│  ├─ test_stage_anchor.py
+│  ├─ test_render_golden.py
+│  └─ golden/placeholder_still.png
 ├─ pyproject.toml
 ├─ uv.lock
 └─ scripts/
    ├─ check_llm.py
    ├─ prepare_character_asset.py
    ├─ generate_seedream_image.py
+   ├─ make_placeholder_pack.py
+   ├─ queue_demo_render.py         # API → outbox → Celery → 成片
    └─ render_demo.py               # 手写镜头 → MP4
 ```
 
@@ -218,6 +256,20 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
   然后把 `.env` 的 `DATABASE_URL` 改为 `postgresql+asyncpg://roxy:roxy-dev@localhost:5433/roxy`，再跑迁移。
 - 端口避开现有栈：Postgres 5433、RabbitMQ 5673/15673、Redis 6380、MinIO 9100/9101。
 - 本机 Docker Desktop 当前未启动；compose 文件已通过 `docker compose config` 语法校验，实际启动在 VM 上验证。
+
+### 4.2.2 队列与 render worker（M1.2）
+
+- 本机原生进程要在 `.env` 用 localhost：`DATABASE_URL=postgresql+asyncpg://roxy:roxy-dev@localhost:5433/roxy`、`RABBITMQ_URL=amqp://roxy:roxy-dev@localhost:5673//`、`REDIS_URL=redis://localhost:6380/0`；只做单机演示也可继续 SQLite。
+- 迁移后分别启动：
+  `uv run uvicorn app.api.main:app --reload --port 8000`
+  `uv run celery -A app.workflow.celery_app worker -Q workflow,render -l info -c 2`
+  `uv run celery -A app.workflow.celery_app beat -l info`
+- `-c` 是同时渲染的 Chromium 数量：2 vCPU/2GB 先 `-c 1`，4 核以上再 `-c 2`。
+- Windows 本机 Celery 默认 prefork 不可用：调试加 `--pool=solo`（单并发）；并行渲染在 Ubuntu VM 上用默认 prefork `-c N`。
+- 队列：`workflow`（状态推进/outbox 补投）、`render`（`render.episode` / `render.shot` / `render.concat`）。
+- 触发真实队列渲染：`uv run python scripts/queue_demo_render.py --base-url http://localhost:8000`。
+- beat 每 5 秒执行 `workflow.dispatch_outbox`，把 PENDING 事件投到 RabbitMQ；失败按指数退避，5 次后置 FAILED。
+- `CELERY_TASK_ALWAYS_EAGER=true` 只用于任务级测试；在 async dispatcher 里同步执行 task 会和事件循环冲突。
 
 ### 4.3 Git 与提交
 
@@ -314,6 +366,30 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 ---
 
 ## 6. 历史记录
+
+### 2026-10-28 · M1.2 队列与渲染 worker 骨架
+
+- 新增 `outbox_event` 表与 `episode.render_spec`，迁移 `9c1f4e7a2b30`。
+- 新增 `app/workflow/`：Celery app、outbox dispatcher（beat 5s）、状态机、render_service、render_tasks。
+- API：`PUT /episodes/{id}/render-spec`、`POST /episodes/{id}/actions/render`，以及 confirm-topic/confirm-script/cancel/publish。
+- 渲染拆成 `render.episode → render.shot（按镜头并行）→ render.concat`；eager 模式单镜头 0.5 秒端到端输出 MP4 验证通过。
+- `CharacterSpec` 增加 `anchor_x/anchor_y/scale`；新增 `character_packs/placeholder/`、`specs/demo_placeholder.json`、golden frame 回归测试。
+- 测试从 7 条增至 15 条；本机 Docker 未启动，RabbitMQ/Redis/Postgres 实机联调待 VM。
+
+### 2026-10-28 · 半身表情提示词调整
+
+- 首张 B-01 试生：人物占满画幅、身体和辫子贴边、底边截断突兀，动作/表情偏低。
+- 提示词改为：脸部 30–35%、人物居中左右留白 ≥8%、包含上臂与手势、每张写明确动作；B-02～B-05 分别加托腮、举手、抱臂、摊手。
+- 需求文档 5.2.1 规格同步；B-01～B-05 重生成后入库。
+
+### 2026-10-28 · Batch 10 前 5 张入库 + 角色位移要求
+
+- B-01～B-05 五张半身图处理为 1080×1350 RGBA；manifest 升到 v15，共 50 个正式资产。
+- 豆包水印压在右下角辫子/蝴蝶结上，连通域法无效；统一裁掉源图底部 160px（画布底边即裁切边），水印清除。
+- 给 `prepare_character_asset.py` 增加 `--crop-bottom` 与实验性的 `--remove-corner-watermark`（前者正式使用）。
+- B-09 害羞入库（manifest v16），用户指定它为构图模板：人物、辫子、发带完整在画布内，腰部截断线在画布内部，底部留白，水印落在空白区。
+- 按 B-09 收紧通用前缀（人物总高 85%、脸部宽 25–30%、四周留白、腰部不贴底），B-06/B-07/B-08/B-10 重生成后全部入库；manifest v17，共 55 个；Batch 10 完成。
+- 用户新要求：角色不能全程站立不动，必要时配合物件做自然快速平移；写入需求 F-47、架构 10.11，待 M1.2 渲染实现。
 
 ### 2026-10-26 · 架构定稿与仓库初始化
 

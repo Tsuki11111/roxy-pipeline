@@ -56,9 +56,17 @@ class EpisodeRead(BaseModel):
     health: str
     current_node: str | None
     output_path: str | None
+    render_spec: dict | None
     version: int
     created_at: datetime
     updated_at: datetime
+
+
+class EpisodeActionAccepted(BaseModel):
+    episode_id: str
+    status: EpisodeStatus
+    node_key: str
+    operation_id: str
 
 
 class ScriptLineRead(BaseModel):

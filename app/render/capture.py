@@ -57,6 +57,72 @@ def render_still(
             browser.close()
 
 
+def _render_shot_frames(
+    page,
+    item,
+    out_dir: Path,
+    ffmpeg: str,
+    width: int,
+    height: int,
+    fps: int,
+) -> tuple[Path, Path]:
+    seq = item.shot.seq
+    shots_dir = out_dir / "shots"
+    frames_dir = out_dir / "frames"
+    shots_dir.mkdir(parents=True, exist_ok=True)
+    frames_dir.mkdir(parents=True, exist_ok=True)
+
+    segment = shots_dir / f"shot_{seq:04d}.mp4"
+    first_frame = frames_dir / f"shot_{seq:04d}_first.png"
+    proc = start_segment(ffmpeg, segment, fps)
+    assert proc.stdin is not None
+    for frame in range(item.frame_start, item.frame_end):
+        t_ms = frame * 1000 / fps
+        page.evaluate("window.renderAt", t_ms)
+        png = page.screenshot(
+            type="png",
+            clip={"x": 0, "y": 0, "width": width, "height": height},
+        )
+        if frame == item.frame_start:
+            first_frame.write_bytes(png)
+        try:
+            proc.stdin.write(png)
+        except BrokenPipeError as exc:
+            stderr = proc.stderr.read().decode("utf-8", "replace") if proc.stderr else ""
+            raise RuntimeError(f"ffmpeg pipe closed for shot {seq}:\n{stderr}") from exc
+    finish_segment(proc)
+    return segment, first_frame
+
+
+def render_shot(
+    payload: dict,
+    item,
+    out_dir: Path,
+    ffmpeg: str,
+    width: int,
+    height: int,
+    fps: int,
+) -> tuple[Path, Path]:
+    """Render one shot in its own browser; used by render-worker tasks."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with local_server(Path(__file__).resolve().parents[2]) as base_url:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            page = browser.new_page(
+                viewport={"width": width, "height": height},
+                device_scale_factor=1,
+            )
+            try:
+                page.goto(f"{base_url}/templates/stage/stage.html", wait_until="load")
+                page.evaluate("window.initStage", payload)
+                page.wait_for_function("window.stageReady === true", timeout=60_000)
+                return _render_shot_frames(
+                    page, item, out_dir, ffmpeg, width, height, fps
+                )
+            finally:
+                browser.close()
+
+
 def render_episode(
     payload: dict,
     timeline: Timeline,
@@ -93,27 +159,11 @@ def render_episode(
 
             segments: list[Path] = []
             for item in timeline.shots:
-                seq = item.shot.seq
-                segment = shots_dir / f"shot_{seq:04d}.mp4"
-                proc = start_segment(ffmpeg, segment, fps)
-                assert proc.stdin is not None
-                for frame in range(item.frame_start, item.frame_end):
-                    t_ms = frame * 1000 / fps
-                    page.evaluate("window.renderAt", t_ms)
-                    png = page.screenshot(
-                        type="png",
-                        clip={"x": 0, "y": 0, "width": width, "height": height},
-                    )
-                    if frame == item.frame_start:
-                        (frames_dir / f"shot_{seq:04d}_first.png").write_bytes(png)
-                    try:
-                        proc.stdin.write(png)
-                    except BrokenPipeError as exc:
-                        stderr = proc.stderr.read().decode("utf-8", "replace") if proc.stderr else ""
-                        raise RuntimeError(f"ffmpeg pipe closed for shot {seq}:\n{stderr}") from exc
-                finish_segment(proc)
+                segment, _ = _render_shot_frames(
+                    page, item, out_dir, ffmpeg, width, height, fps
+                )
                 segments.append(segment)
-                print(f"rendered shot {seq}: {item.frame_count} frames -> {segment.name}")
+                print(f"rendered shot {item.shot.seq}: {item.frame_count} frames -> {segment.name}")
 
             browser.close()
     return segments

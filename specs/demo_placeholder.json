@@ -1,0 +1,75 @@
+{
+  "title": "Roxy Pipeline · Placeholder Demo",
+  "fps": 25,
+  "width": 1920,
+  "height": 1080,
+  "section_labels": ["问题", "解决", "结尾"],
+  "background": "character_packs/placeholder/background.png",
+  "floor": "character_packs/placeholder/floor.png",
+  "watermark": "Roxy Pipeline · PLACEHOLDER",
+  "shots": [
+    {
+      "shot_id": "p001",
+      "seq": 1,
+      "section": "问题",
+      "narration": "先用占位素材把渲染链路跑通。",
+      "duration_ms": 2000,
+      "character": {
+        "image": "character_packs/placeholder/character.png",
+        "position": "left",
+        "height_px": 1000,
+        "motion": "idle_breathe",
+        "anchor_x": 0.33,
+        "anchor_y": 52,
+        "scale": 1.0
+      },
+      "card": {
+        "type": "chat_bubble",
+        "style": "ai_reply",
+        "text": "占位角色也能走完整条渲染链路"
+      }
+    },
+    {
+      "shot_id": "p002",
+      "seq": 2,
+      "section": "解决",
+      "narration": "镜头按秒切分，交给 render worker 并行渲染。",
+      "duration_ms": 2000,
+      "character": {
+        "image": "character_packs/placeholder/character.png",
+        "position": "left",
+        "height_px": 1000,
+        "motion": "idle_breathe",
+        "anchor_x": 0.33,
+        "anchor_y": 52,
+        "scale": 1.0
+      },
+      "card": {
+        "type": "terminal",
+        "style": "info",
+        "text": "render.shot  ←  Celery / RabbitMQ\nrender.concat  ←  ffmpeg -c copy"
+      }
+    },
+    {
+      "shot_id": "p003",
+      "seq": 3,
+      "section": "结尾",
+      "narration": "替换成正式角色包，就能产出成片。",
+      "duration_ms": 2000,
+      "character": {
+        "image": "character_packs/placeholder/character.png",
+        "position": "left",
+        "height_px": 1000,
+        "motion": "idle_breathe",
+        "anchor_x": 0.33,
+        "anchor_y": 52,
+        "scale": 1.0
+      },
+      "card": {
+        "type": "pure_text",
+        "style": "conclusion",
+        "text": "公开仓库可直接复现"
+      }
+    }
+  ]
+}
