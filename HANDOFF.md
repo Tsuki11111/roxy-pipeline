@@ -47,6 +47,7 @@
 - Batch 9 已完成：R-38 拉网线（场景资产 1124×1819，左边缘/网线底部贴画布边，用户接受）、R-39 抱 AI 机器人、R-40 举灯泡、R-41 修服务器、R-42 端托盘入库，共 45 张。
 - Batch 10 全部 10 张已入库：B-01～B-05 + B-06 灵光、B-07 怀疑、B-08 崩溃、B-09 害羞、B-10 认真，共 55 个正式资产；1080×1350。B-09 为构图模板：人物/辫子/发带完整在画布内，腰部截断线不贴底边，底部留白。
 - 新约束（2026-10-28）：角色不能全程静止；换位/让位/配合道具时，角色与物件作为整体做 120–300ms 的自然快速平移（参考 BV1BgH36DE7y）。已写入需求 F-47 与架构 10.11，待渲染阶段实现。
+- 新约束（2026-10-28）：本地 Docker 与 VM 资源必须隔离；后端服务地址全部从环境变量/`Settings` 读取，不写死 `localhost`、VM IP 或容器名。已加 `ROXY_ENV`/`COMPOSE_PROJECT_NAME` 环境隔离、`.env.vm.example` 模板。
 - Batch 6 已完成：R-23 戴眼镜、R-24 咖啡、R-25 摊手、R-26 数据展示、R-27 庆祝，共 30 张；只剩 R-28 被代码包围。
 - M1 渲染链路原型已跑通：手写 3 镜头 JSON → 舞台 HTML → Playwright 逐帧 → ffmpeg；12 秒/300 帧/1920×1080/25fps/H.264/AAC，单进程约 160 秒。
 - 角色换姿势已改为双层交叉淡入 + 横移（180ms），字幕和卡片同步短淡入；参考片实测换姿势约 0.2 秒，不是硬切。
@@ -286,8 +287,11 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 ### 4.4 Docker 与端口
 
 - 部署目标：Ubuntu 24.04 VM，Docker 29 / Compose 2.40。
-- 本项目资源命名以 `roxy-` 开头；Postgres 库 `roxy`；Redis key 前缀 `roxy:`；MinIO bucket `roxy-*`。
-- 端口：Nginx 8080/8443；MinIO 9100/9101；Postgres/Redis/RabbitMQ 仅在 Docker 网络。
+- **环境隔离**：本地 `ROXY_ENV=local`、`COMPOSE_PROJECT_NAME=roxy-local`，容器 `roxy-local-*`、网络 `roxy-local-net`；VM 用 `ROXY_ENV=vm`、`COMPOSE_PROJECT_NAME=roxy-vm`，容器 `roxy-vm-*`、网络 `roxy-vm-net`。数据卷随 compose project 名自动隔离。
+- **配置来源**：本地 `.env` 用 `.env.example`；VM 用 `.env.vm.example`（服务名 `postgres/rabbitmq/redis/minio`）。两份模板不要互相复制。
+- **后端解耦**：数据库、RabbitMQ、Redis、MinIO、API 地址全部经 `app/core/config.py` 的 `Settings` 读取；业务模块不得出现 `localhost`、VM IP 或容器名。
+- Postgres 库 `roxy`；Redis key 前缀 `roxy:`；MinIO bucket `roxy-*`。
+- 端口：Nginx 8080/8443；MinIO 9100/9101；本地映射 Postgres 5433、RabbitMQ 5673/15673、Redis 6380，均可在 `.env` 覆盖。
 - 现有 VM 已占用 8088/8001/8002/8003/9000/9002，避开。
 - 根分区约 18GB 不够；数据盘挂 `/data`，`PGDATA`、`MINIO_DATA`、备份都指过去。
 - MinIO 预签名 URL 要区分 `MINIO_INTERNAL_ENDPOINT`（容器内 `http://minio:9000`）与 `MINIO_PUBLIC_ENDPOINT`（浏览器可访问的外部地址）。

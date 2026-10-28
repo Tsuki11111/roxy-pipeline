@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.vm.example
 
 # copyrighted / private assets
 docs/assets/roxy_reference.webp

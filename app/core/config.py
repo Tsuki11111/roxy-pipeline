@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     # local dev defaults to SQLite so the API can run without Docker
     database_url: str = "sqlite+aiosqlite:///./tmp/roxy.db"
 
+    # Service endpoints are environment-driven. The defaults below are
+    # local-only fallbacks; business code must always read them from Settings.
     rabbitmq_url: str = "amqp://roxy:change-me@localhost:5673//"
     redis_url: str = "redis://localhost:6380/0"
 

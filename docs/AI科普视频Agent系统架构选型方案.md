@@ -1403,6 +1403,8 @@ Ubuntu 24.04 VM（itsmygo-vm 或独立 VM）
 ### 13.4 配置与密钥
 
 - 配置分三层：`config/base.yaml`（非敏感）、环境变量（部署差异）、数据库（series/episode 配置）。
+- 环境隔离：本地与 VM 使用不同 `COMPOSE_PROJECT_NAME`（`roxy-local` / `roxy-vm`）和 `ROXY_ENV`；容器名、网络、数据卷不共用。本地用 `.env.example`，VM 用 `.env.vm.example`，禁止互相复制。
+- 服务地址全部经环境变量注入（`DATABASE_URL`、`RABBITMQ_URL`、`REDIS_URL`、`MINIO_INTERNAL_ENDPOINT` / `MINIO_PUBLIC_ENDPOINT`）；业务代码不得写死 `localhost`、VM IP 或容器名。
 - LangGraph 配置：`LANGGRAPH_CHECKPOINT_SCHEMA=agent_checkpoints`、`LANGGRAPH_CHECKPOINT_RETENTION_DAYS=30`；checkpoint 表随 Postgres 备份，但不参与业务恢复。
 - LLM 配置：`DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL=https://api.deepseek.com`、`DEEPSEEK_MODEL=deepseek-flash`；`ARK_API_KEY`、`ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3`、`ARK_MODEL_STRONG`（备选/A-B）、`ARK_MODEL_VISION`（可选）。
 - 图像生成配置：`IMAGE_PROVIDER=ark|mock|openai-compatible`、`ARK_IMAGE_MODEL`（如 `doubao-seedream-5-0-pro-260628`，需在方舟控制台开通）、`IMAGE_SIZE=1080x1920`、`IMAGE_CANDIDATES=4`。

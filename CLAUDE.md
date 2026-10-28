@@ -78,8 +78,10 @@ Playwright/Chromium + ffmpeg + LangGraph（仅 AI 子图）；前端 React + Vit
 
 ### 5. 运行环境
 
-- 开发机：Windows 11 + Git Bash；Python 可用；Docker Desktop/WSL2 待确认。
+- 开发机：Windows 11 + Git Bash；Python 可用；Docker Desktop 已可用。本地 compose 默认只起 Postgres/RabbitMQ/Redis，MinIO 用 `storage` profile。
 - 部署目标：Ubuntu 24.04 VM，Docker 29 / Compose 2.40。
+- **本地与 VM 资源隔离**：本地用 `ROXY_ENV=local` / `COMPOSE_PROJECT_NAME=roxy-local`，VM 用 `ROXY_ENV=vm` / `COMPOSE_PROJECT_NAME=roxy-vm`；容器名、网络、数据卷按环境分开，不能共用同一套资源。
+- **后端禁止写死服务地址**：数据库、RabbitMQ、Redis、MinIO、API 地址全部从环境变量 / `Settings` 读取；业务模块不出现 `localhost`、VM IP 或容器名。地址只出现在 `.env` / `.env.vm` 和 compose 的环境变量里。
 - 数据盘 ≥200GB（推荐 500GB），挂 `/data`；根分区约 18GB，不够放 MinIO 和中间产物。
 - 端口：8080/8443，MinIO 9100/9101；避开 8088/8001/8002/8003/9000/9002。
 

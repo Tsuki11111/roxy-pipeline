@@ -1,9 +1,9 @@
-name: roxy-pipeline
+name: ${COMPOSE_PROJECT_NAME:-roxy-local}
 
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: roxy-postgres
+    container_name: roxy-${ROXY_ENV:-local}-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-roxy}
@@ -22,7 +22,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:4-management
-    container_name: roxy-rabbitmq
+    container_name: roxy-${ROXY_ENV:-local}-rabbitmq
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-roxy}
@@ -42,7 +42,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: roxy-redis
+    container_name: roxy-${ROXY_ENV:-local}-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru"]
     ports:
@@ -57,7 +57,7 @@ services:
 
   minio:
     image: minio/minio:latest
-    container_name: roxy-minio
+    container_name: roxy-${ROXY_ENV:-local}-minio
     profiles: ["storage"]
     restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]
@@ -73,7 +73,7 @@ services:
 
   minio-init:
     image: minio/mc:latest
-    container_name: roxy-minio-init
+    container_name: roxy-${ROXY_ENV:-local}-minio-init
     profiles: ["storage"]
     depends_on:
       - minio
@@ -103,4 +103,4 @@ volumes:
 
 networks:
   default:
-    name: roxy-net
+    name: roxy-${ROXY_ENV:-local}-net

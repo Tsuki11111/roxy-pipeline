@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from pathlib import Path
 
@@ -15,7 +16,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url", default="http://localhost:8000")
+    parser.add_argument(
+        "--base-url",
+        default=os.environ.get("ROXY_API_URL") or "http://localhost:8000",
+    )
     parser.add_argument("--spec", default="specs/demo_placeholder.json")
     parser.add_argument("--timeout", type=float, default=600)
     args = parser.parse_args()

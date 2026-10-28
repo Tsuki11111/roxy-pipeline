@@ -78,6 +78,12 @@
 | M4 质检与全流程自动化 | ⏳ |
 | M5 局部修改、续跑、运维 | ⏳ |
 
+## 环境隔离
+
+- 本地：`ROXY_ENV=local`、`COMPOSE_PROJECT_NAME=roxy-local`，配置模板 `.env.example`（localhost + 映射端口）。
+- VM：`ROXY_ENV=vm`、`COMPOSE_PROJECT_NAME=roxy-vm`，配置模板 `.env.vm.example`（容器服务名 `postgres/rabbitmq/redis/minio`）。
+- 容器名、网络、数据卷按环境前缀隔离；后端所有服务地址只从 `Settings` / 环境变量读取，业务代码不写死地址。
+
 ## 快速开始
 
 ### M1 本地渲染（已可运行）
