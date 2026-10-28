@@ -110,13 +110,15 @@ uv run uvicorn app.api.main:app --reload --port 8000
 # http://localhost:8000/docs
 ```
 
-使用 compose 基础设施（Postgres / RabbitMQ / Redis / MinIO）：
+使用 compose 基础设施（默认 Postgres / RabbitMQ / Redis；MinIO 走 storage profile）：
 
 ```bash
 docker compose -f compose.infra.yml up -d
 # 把 .env 的 DATABASE_URL 改为 postgresql+asyncpg://roxy:roxy-dev@localhost:5433/roxy
 uv run alembic upgrade head
 ```
+
+> MinIO 用 `docker compose -f compose.infra.yml --profile storage up -d`。RabbitMQ 4.4 通过 `infra/rabbitmq.conf` 允许 Celery pidbox 的临时非独占回复队列。
 
 ### M1.2 队列渲染（需要 RabbitMQ / Redis）
 
@@ -147,6 +149,8 @@ uv run celery -A app.workflow.celery_app beat -l info
 ```bash
 uv run python scripts/queue_demo_render.py --base-url http://localhost:8000
 ```
+
+> 已在本机 Postgres + RabbitMQ + Redis 上实测：3 镜头 6.00 秒成片，outbox DISPATCHED、episode READY。
 
 公开占位素材可直接复现：
 

@@ -53,8 +53,9 @@
 - M1.1 API/DB 骨架已完成：`compose.infra.yml`、FastAPI 应用、SQLAlchemy 模型、Alembic 初始迁移；`/health` 正常，7 条测试通过。
 - M1.2 队列/状态机/渲染 worker 骨架已完成：`outbox_event` + dispatcher、`app/workflow/`（Celery 路由、状态机、render_service、render_tasks）、`render.shot` 按镜头并行、`render.concat` 回写 episode；eager 模式单镜头 0.5 秒端到端输出 MP4。
 - M1.2 API：`PUT /episodes/{id}/render-spec`、`POST /episodes/{id}/actions/render`，以及 confirm-topic/confirm-script/cancel/publish 状态闸口；`Episode.render_spec` 是 M1.2 的临时手工 spec，等 M2/M3 生成分镜后替换。
-- M1.2 渲染增强：`CharacterSpec` 增加 `anchor_x/anchor_y/scale`；新增公开 `character_packs/placeholder/` 与 `specs/demo_placeholder.json`；golden frame 回归测试；当前 15 条测试通过。
-- 本机 Docker Desktop 仍未启动，RabbitMQ/Redis/Postgres 实机联调未做；本地可用 SQLite + Celery eager 验证任务，生产队列待 VM。
+- M1.2 渲染增强：`CharacterSpec` 增加 `anchor_x/anchor_y/scale`；新增公开 `character_packs/placeholder/` 与 `specs/demo_placeholder.json`；golden frame 回归测试；当前 16 条测试通过。
+- 本机 Docker 已启动；Postgres 17 + RabbitMQ 4.4 + Redis 7 实机联调通过：API → outbox → Celery → 3 镜头 6.00 秒占位成片 READY。
+- RabbitMQ 4.4 默认禁止 Celery 的临时非独占回复队列，`infra/rabbitmq.conf` 已开启 `deprecated_features.permit.transient_nonexcl_queues`；Celery 升级后复查。
 - 资产分工（2026-10-27）：角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
 - 当前阶段只生成角色立绘，按 **5 张/批**推进；背景/舞台/演示物件暂停，等系统工作流实现后由 Seedream 按需求生成。
 - AI 主题扩展：需求新增 R-17～R-28（讲解指向/白板/敲键盘/调试翻车/灵光一现/怀疑审视等），核心 6 个提示词在 `character_packs/roxy/ai_pose_prompts.md`（本地）。背景已出纸纹 + 木地板；道具在生成中。
@@ -97,7 +98,7 @@
 
 **还没做：**
 
-- RabbitMQ/Redis/Postgres 实机联调（本机 Docker Desktop 未启动）；worker/beat 进程部署与并发压测。
+- Ubuntu VM 上的 worker/beat 部署与并行压测（本机 `--pool=solo` 已验证真实队列）。
 - outbox reconciler/heartbeat 扫描、失败任务自动恢复、DLQ 告警。
 - 镜头级缓存与幂等复用未做；重复投递会重渲染并覆盖。
 - `render_spec` 仍是手工 JSON；等 M2/M3 由脚本/分镜生成。
@@ -110,7 +111,7 @@
 - 状态机与人工闸口 API：confirm-topic / confirm-script / cancel / publish。
 - `render.episode` 拆分为 `render.shot` 按镜头并行，`render.concat` 拼接并回写 episode；eager 模式单镜头端到端输出 0.5 秒 MP4。
 - `anchor_x/anchor_y/scale`；公开 placeholder pack + `specs/demo_placeholder.json`；golden frame 回归测试。
-- 当前 15 条测试通过。
+- 当前 16 条测试通过。
 
 ### 2.3 M1 之后再动
 
@@ -255,7 +256,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
   `docker compose -f compose.infra.yml up -d`
   然后把 `.env` 的 `DATABASE_URL` 改为 `postgresql+asyncpg://roxy:roxy-dev@localhost:5433/roxy`，再跑迁移。
 - 端口避开现有栈：Postgres 5433、RabbitMQ 5673/15673、Redis 6380、MinIO 9100/9101。
-- 本机 Docker Desktop 当前未启动；compose 文件已通过 `docker compose config` 语法校验，实际启动在 VM 上验证。
+- 本机 Docker 已启动并验证三件套；compose 默认只起 Postgres/RabbitMQ/Redis，MinIO 用 `--profile storage` 另行启动。RabbitMQ 4.4 挂载 `infra/rabbitmq.conf`，允许 Celery pidbox 的临时非独占回复队列。
 
 ### 4.2.2 队列与 render worker（M1.2）
 
@@ -270,6 +271,8 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - 触发真实队列渲染：`uv run python scripts/queue_demo_render.py --base-url http://localhost:8000`。
 - beat 每 5 秒执行 `workflow.dispatch_outbox`，把 PENDING 事件投到 RabbitMQ；失败按指数退避，5 次后置 FAILED。
 - `CELERY_TASK_ALWAYS_EAGER=true` 只用于任务级测试；在 async dispatcher 里同步执行 task 会和事件循环冲突。
+- 本机实测（2026-10-28）：`queue_demo_render.py` 3 镜头 6.00 秒成片，outbox DISPATCHED、episode READY、node_run SUCCESS；worker 用 `--pool=solo`。
+- MinIO 不是 M1.2 必需；`docker compose -f compose.infra.yml --profile storage up -d` 单独启动（`minio/mc` 镜像拉取失败时先跳过）。
 
 ### 4.3 Git 与提交
 
@@ -374,7 +377,7 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 - API：`PUT /episodes/{id}/render-spec`、`POST /episodes/{id}/actions/render`，以及 confirm-topic/confirm-script/cancel/publish。
 - 渲染拆成 `render.episode → render.shot（按镜头并行）→ render.concat`；eager 模式单镜头 0.5 秒端到端输出 MP4 验证通过。
 - `CharacterSpec` 增加 `anchor_x/anchor_y/scale`；新增 `character_packs/placeholder/`、`specs/demo_placeholder.json`、golden frame 回归测试。
-- 测试从 7 条增至 15 条；本机 Docker 未启动，RabbitMQ/Redis/Postgres 实机联调待 VM。
+- 测试从 7 条增至 16 条；本机 Docker 启动后完成 Postgres/RabbitMQ/Redis 实机联调，3 镜头 6.00 秒成片 READY；RabbitMQ 4.4 兼容配置在 `infra/rabbitmq.conf`。
 
 ### 2026-10-28 · 半身表情提示词调整
 

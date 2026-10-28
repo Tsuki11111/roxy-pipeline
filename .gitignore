@@ -25,6 +25,7 @@ dist/
 # runtime data
 data/
 tmp/
+celerybeat-schedule*
 
 # logs
 *.log

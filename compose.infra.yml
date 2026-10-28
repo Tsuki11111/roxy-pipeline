@@ -21,7 +21,7 @@ services:
       retries: 20
 
   rabbitmq:
-    image: rabbitmq:4-management-alpine
+    image: rabbitmq:4-management
     container_name: roxy-rabbitmq
     restart: unless-stopped
     environment:
@@ -33,6 +33,7 @@ services:
       - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15673}:15672"
     volumes:
       - roxy-rabbitmq-data:/var/lib/rabbitmq
+      - ./infra/rabbitmq.conf:/etc/rabbitmq/conf.d/99-deprecated-features.conf:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -57,6 +58,7 @@ services:
   minio:
     image: minio/minio:latest
     container_name: roxy-minio
+    profiles: ["storage"]
     restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
@@ -72,6 +74,7 @@ services:
   minio-init:
     image: minio/mc:latest
     container_name: roxy-minio-init
+    profiles: ["storage"]
     depends_on:
       - minio
     restart: "no"
