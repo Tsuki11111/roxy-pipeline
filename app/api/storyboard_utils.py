@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.assets.registry import resolve_background, resolve_floor
 from app.models.core import Episode, ScriptLine, Series, Shot
 from app.render.models import EpisodeSpec
 from app.render.stage import build_stage_payload
@@ -85,6 +86,15 @@ async def build_render_spec(
     shots = await load_shots(session, episode.id)
     if not shots:
         raise ValueError("episode has no shots")
-    spec = build_episode_spec(episode, series, lines, shots)
+    background = await resolve_background(session, "paper")
+    floor = await resolve_floor(session)
+    spec = build_episode_spec(
+        episode,
+        series,
+        lines,
+        shots,
+        background=background,
+        floor=floor,
+    )
     build_stage_payload(spec, build_timeline(spec))
     return spec

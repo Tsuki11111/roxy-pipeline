@@ -62,6 +62,17 @@ def test_build_episode_spec_from_shots():
     assert timeline.total_ms == 12000
     assert timeline.shots[0].section_index == 0
 
+    custom = build_episode_spec(
+        episode,
+        series,
+        lines,
+        shots,
+        background="data/assets/background/custom.png",
+        floor="data/assets/background/floor.png",
+    )
+    assert custom.background == "data/assets/background/custom.png"
+    assert custom.floor == "data/assets/background/floor.png"
+
 
 def test_shot_cache_key_is_stable_and_sensitive():
     kwargs = dict(

@@ -59,6 +59,20 @@ class OutboxStatus(str, enum.Enum):
     FAILED = "FAILED"
 
 
+class AssetType(str, enum.Enum):
+    CHARACTER = "character"
+    BACKGROUND = "background"
+    PROP = "prop"
+    ICON = "icon"
+    COVER = "cover"
+
+
+class AssetStatus(str, enum.Enum):
+    CANDIDATE = "CANDIDATE"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
 class Series(Base):
     __tablename__ = "series"
 
@@ -225,3 +239,40 @@ class OutboxEvent(Base):
         DateTime(timezone=True), nullable=True
     )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class Asset(Base):
+    __tablename__ = "asset"
+    __table_args__ = (
+        Index("ix_asset_type_status", "type", "status"),
+        Index("ix_asset_checksum", "checksum"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    type: Mapped[AssetType] = mapped_column(
+        SAEnum(AssetType, native_enum=False, length=20), index=True
+    )
+    name: Mapped[str] = mapped_column(String(200))
+    # Stable semantic key used to decide whether an asset can be reused.
+    reuse_key: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    path: Mapped[str] = mapped_column(String(500))
+    checksum: Mapped[str] = mapped_column(String(64))
+    width: Mapped[int] = mapped_column(Integer, default=0)
+    height: Mapped[int] = mapped_column(Integer, default=0)
+    mime: Mapped[str] = mapped_column(String(100), default="image/png")
+    source: Mapped[str] = mapped_column(String(50), default="manual")
+    provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    seed: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    tags: Mapped[list] = mapped_column(JSON, default=list)
+    meta: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[AssetStatus] = mapped_column(
+        SAEnum(AssetStatus, native_enum=False, length=20),
+        default=AssetStatus.CANDIDATE,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )

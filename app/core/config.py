@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     celery_task_always_eager: bool = False
     outbox_poll_interval_s: float = 5.0
     render_dir: str = "./tmp/renders"
+    asset_storage: str = "local"
+    asset_root: str = "./data/assets"
 
 
 @lru_cache(maxsize=1)

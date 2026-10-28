@@ -48,7 +48,12 @@ def build_episode_spec(
     series: Series,
     lines: list[ScriptLine],
     shots: list[Shot],
+    *,
+    background: str | None = None,
+    floor: str | None = None,
 ) -> EpisodeSpec:
+    background = background or BACKGROUNDS["paper"]
+    floor = floor or DEFAULT_FLOOR
     if not series.section_labels:
         raise ValueError("series has no section labels")
     if len(shots) != len(lines):
@@ -92,8 +97,8 @@ def build_episode_spec(
                 duration_ms=shot.duration_ms,
                 character=character,
                 card=CardSpec(type=card_type, style=style, text=line.text),
-                bg=BACKGROUNDS.get(shot.bg, BACKGROUNDS["paper"]),
-                floor=DEFAULT_FLOOR,
+                bg=background,
+                floor=floor,
             )
         )
 
@@ -103,8 +108,8 @@ def build_episode_spec(
         width=1920,
         height=1080,
         section_labels=list(series.section_labels),
-        background=BACKGROUNDS["paper"],
-        floor=DEFAULT_FLOOR,
+        background=background,
+        floor=floor,
         watermark=series.watermark or "",
         shots=spec_shots,
     )

@@ -362,7 +362,7 @@ TTS（逐句合成）
 | `topic_candidate` | id, series_id, source, title, hook, audience, fit_score, est_sections, raw JSONB, status | 抓取原文放 `raw`，只作数据，不作指令 |
 | `script_line` | id, episode_id, seq, speaker, section, text, char_count, version | `seq` 唯一且连续；`char_count` 由服务端计算 |
 | `shot` | id, episode_id, script_line_id, seq, duration_ms, card_type, card_payload JSONB, character_image, character_position, bg, transition, cache_key, template_version | `cache_key` 唯一索引；`script_line_id` 允许 1:N（MVP 默认 1:1） |
-| `asset` | id, type, path, mime, width, height, checksum, tags, license, source, provider, model, prompt, seed, reference_assets, review_status | 角色/背景/字体/BGM/模板；AI 生成资产记录来源与 prompt/seed；`checksum` 去重 |
+| `asset` | id, type, name, reuse_key, path, mime, width, height, checksum, tags, license, source, provider, model, prompt, seed, reference, status | 角色/背景/物件/字体/BGM/模板；`reuse_key` 唯一，用于生成前查重；`checksum` 去重；`path` 内容寻址（本机 `data/assets`，VM `/data/assets`）；AI 生成资产记录来源与 prompt/seed；`status` = CANDIDATE/APPROVED/REJECTED |
 | `node_run` | id, episode_id, node_key, parent_id, status, input_hash, cache_key, attempt, error, started_at, finished_at, heartbeat_at, output_ref | 幂等与续跑的核心表 |
 | `render_job` | id, episode_id, node_run_id, kind, status, progress, worker, error, started_at, finished_at | 渲染进度与 worker 归属 |
 | `review` | id, episode_id, check_item, level, detail JSONB, evidence_path, resolved_by, resolved_at | `level` = 通过/自动修复/人工介入 |
@@ -1085,6 +1085,7 @@ class TTSProvider(Protocol):
 - 生成角色立绘（表情/姿势候选）、背景（纸纹、木纹台面）、装饰元素。
 - 含文字的信息卡片仍用 HTML 模板渲染；图像生成只产出美术层，不产出带文字的画面。
 - 生成结果先进入候选区，人工筛选/修图后入库；入库后作为固定资产，不每期重新生成。
+- **复用优先**：生成前先按 `reuse_key` 查 `asset` 表；命中 APPROVED 资产直接复用，不调用图像 API。背景/物件复制到 `data/assets`（VM 为 `/data/assets`），角色包在原目录索引。
 
 **Provider：**
 
@@ -1096,13 +1097,16 @@ class TTSProvider(Protocol):
 **流程：**
 
 ```text
-prompt 模板 + 参考图 + seed
-  → 生成 N 个候选
-  → 人工挑选/修图
-  → 背景移除/裁边/缩放/描边
-  → 规格校验（1080x1920, RGBA, 脚底对齐）
-  → 入库 asset（source=ai, provider, model, prompt, seed, reference）
-  → 加入 character pack / background pack
+reuse_key → 查 asset 表
+  ├─ 命中 APPROVED → 直接复用路径（不调用 API）
+  └─ 未命中 → prompt 模板 + 参考图 + seed
+       → 生成 N 个候选
+       → 人工挑选/修图
+       → 背景移除/裁边/缩放/描边
+       → 规格校验（1080x1920, RGBA, 脚底对齐）
+       → 入库 asset（source=ai, provider, model, prompt, seed, reference, reuse_key, checksum）
+       → 复制到 data/assets（内容寻址）/ 加入 character pack
+       → 人工 approve 后才可复用
 ```
 
 **一致性：**

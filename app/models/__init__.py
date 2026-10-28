@@ -1,4 +1,7 @@
 from app.models.core import (
+    Asset,
+    AssetStatus,
+    AssetType,
     Episode,
     EpisodeStatus,
     NodeRun,
@@ -11,6 +14,9 @@ from app.models.core import (
 )
 
 __all__ = [
+    "Asset",
+    "AssetStatus",
+    "AssetType",
     "Episode",
     "EpisodeStatus",
     "NodeRun",

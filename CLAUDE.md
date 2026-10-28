@@ -19,7 +19,7 @@
 AI 科普视频自动生成 Agent 系统：选题 → 脚本 → 分镜 → 逐句 TTS/对齐 → HTML 卡片/逐帧渲染 → ffmpeg 拼接 → 质检。
 
 - **个人自用项目**；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守需求文档第 11 章。
-- **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent 已跑通（FastAPI/SQLAlchemy/Alembic/Celery/LangGraph/DeepSeek）；配音/质检待接。
+- **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用已跑通（FastAPI/SQLAlchemy/Alembic/Celery/LangGraph/DeepSeek）；配音/质检待接。
 - **GitHub**：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
 - **仓库不包含**：`.env`、洛琪希参考图/立绘、`tmp/`、私有 character pack。
 
@@ -73,6 +73,7 @@ Playwright/Chromium + ffmpeg + LangGraph（仅 AI 子图）；前端 React + Vit
 - **当前阶段（2026-10-27 起）只生成人物立绘**；背景/舞台/演示物件暂停，等系统工作流实现后由 Seedream 按需求生成。
 - `docs/assets/roxy_reference.webp` 已 gitignore，不随公开仓库分发。
 - `character_packs/*` 默认忽略，只允许 `character_packs/placeholder/`。
+- **图片资产必须可复用、持久化**：所有图像先查 `asset` 表的 `reuse_key`；已入库且 `APPROVED` 的资产直接复用，不重复生成。新生成的背景/物件必须复制到 `data/assets`（VM 为 `/data/assets`）并记录 checksum、prompt、model、seed；角色包在原目录索引。禁止每期重新生成。
 - AI 生成图带可见水印（如“豆包 AI 生成”）时不得直接入成片；先确认服务条款，允许再用脚本排除/遮罩。
 - `tmp/`、`data/` 忽略；生成的样片/帧不要提交。
 

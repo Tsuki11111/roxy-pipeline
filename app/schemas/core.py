@@ -5,7 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.agents.script_validation import ValidationResult
-from app.models.core import EpisodeStatus, NodeStatus
+from app.models.core import AssetStatus, AssetType, EpisodeStatus, NodeStatus
 from app.storyboard.models import RhythmReport
 
 
@@ -161,3 +161,27 @@ class ShotUpdate(BaseModel):
 class ShotUpdateResult(BaseModel):
     shot: ShotRead
     rhythm: RhythmReport
+
+
+class AssetRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    type: AssetType
+    name: str
+    reuse_key: str
+    path: str
+    checksum: str
+    width: int
+    height: int
+    mime: str
+    source: str
+    provider: str | None
+    model: str | None
+    prompt: str | None
+    seed: str | None
+    reference: str | None
+    tags: list
+    meta: dict
+    status: AssetStatus
+    created_at: datetime
