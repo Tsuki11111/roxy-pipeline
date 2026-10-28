@@ -14,7 +14,7 @@
 **AI 科普视频自动生成 Agent 系统**：从选题、脚本、分镜，到逐句 TTS、卡片/逐帧渲染、ffmpeg 拼接和质检的全自动流水线。
 
 **定位**：个人自用项目；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守[需求文档第 11 章](docs/AI科普视频Agent系统需求分析文档.md)。
-**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker 骨架已跑通（FastAPI + SQLAlchemy + Alembic + Celery + compose infra）；RabbitMQ 实机联调待 VM。
+**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent 已跑通（FastAPI + SQLAlchemy + Alembic + Celery + LangGraph + DeepSeek）；分镜/配音待接。
 
 ---
 
@@ -72,8 +72,8 @@
 | 架构选型 v1.3 + ADR-001～005 | ✅ 2026-10-26 |
 | 仓库初始化 + 文档规范化 | ✅ 2026-10-26 |
 | M1 渲染链路 + M1.1 API/DB | 🚧 渲染原型与 API/DB 骨架已跑通 |
-| M1.2 队列/状态机/render worker | ✅ 骨架：outbox + Celery `render.shot` 并行 + `render.concat`；eager 验证 |
-| M2 脚本 Agent（LangGraph） | ⏳ |
+| M1.2 队列/状态机/render worker | ✅ outbox + Celery `render.shot` 并行 + `render.concat`；真实 RabbitMQ 验证 |
+| M2 脚本 Agent（LangGraph） | ✅ `script_graph` + DeepSeek `deepseek-flash` + 脚本校验/编辑/确认 |
 | M3 分镜 Agent + 节奏规则 + AI 素材 | ⏳ |
 | M4 质检与全流程自动化 | ⏳ |
 | M5 局部修改、续跑、运维 | ⏳ |
@@ -141,7 +141,7 @@ uv run uvicorn app.api.main:app --reload --port 8000
 另开两个终端启动 worker 和 beat：
 
 ```bash
-uv run celery -A app.workflow.celery_app worker -Q workflow,render -l info -c 2
+uv run celery -A app.workflow.celery_app worker -Q workflow,agent,render -l info -c 2
 ```
 
 > Windows 本机调试要加 `--pool=solo`（Celery prefork 在 Windows 不可用）；并行渲染在 Linux VM 上用默认 prefork `-c 2`。
@@ -163,6 +163,28 @@ uv run python scripts/queue_demo_render.py --base-url http://localhost:8000
 ```bash
 uv run python scripts/render_demo.py --spec specs/demo_placeholder.json --out tmp/render_demo/placeholder.mp4
 ```
+
+### M2 脚本生成
+
+确认选题会转 `SCRIPTING` 并投递 `script.generate` 到 `agent` 队列：
+
+```bash
+curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/confirm-topic
+```
+
+查看/校验脚本：
+
+```bash
+curl http://localhost:8000/api/v1/episodes/<episode_id>/script
+```
+
+校验通过后确认脚本进入分镜阶段：
+
+```bash
+curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/confirm-script
+```
+
+脚本生成使用 `prompts/script/` 下的 Prompt 和 DeepSeek `deepseek-flash`；校验规则是单句 ≤25 字、洛琪希 ≤15 字、全文字数 ±10%、章节顺序与覆盖。
 
 ### 模型校验
 

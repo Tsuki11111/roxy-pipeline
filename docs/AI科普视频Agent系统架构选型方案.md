@@ -358,7 +358,7 @@ TTS（逐句合成）
 | 表 | 关键字段 | 说明 |
 |---|---|---|
 | `series` | id, name, voice_profile JSONB, section_labels JSONB, character_pack_id, watermark, template_version, non_commercial | 系列配置根；配置变更要版本化 |
-| `episode` | id, series_id, topic_id, title, target_duration_s, status, health, current_node, output_path, version, render_spec JSONB, created_at | `version` 做乐观锁；`health` 表示 OK/WARNING/BLOCKED；`render_spec` 是 M1.2 手工渲染 spec 的临时桥，M3 后由 `shot` 表生成 |
+| `episode` | id, series_id, topic_id, title, target_duration_s, status, health, current_node, output_path, version, render_spec JSONB, script_meta JSONB, created_at | `version` 做乐观锁；`health` 表示 OK/WARNING/BLOCKED；`render_spec` 是 M1.2 手工渲染 spec 的临时桥，M3 后由 `shot` 表生成；`script_meta` 存大纲/分段/校验快照 |
 | `topic_candidate` | id, series_id, source, title, hook, audience, fit_score, est_sections, raw JSONB, status | 抓取原文放 `raw`，只作数据，不作指令 |
 | `script_line` | id, episode_id, seq, speaker, section, text, char_count, version | `seq` 唯一且连续；`char_count` 由服务端计算 |
 | `shot` | id, episode_id, script_line_id, seq, duration_ms, card_type, card_payload JSONB, character_image, character_position, bg, transition, cache_key, template_version | `cache_key` 唯一索引；`script_line_id` 允许 1:N（MVP 默认 1:1） |
@@ -1058,6 +1058,7 @@ class TTSProvider(Protocol):
 
 - `agent-worker` 的 Celery 任务调用 `graph.invoke()` 或 `graph.astream_events()`。
 - Checkpointer 用 Postgres，schema `agent_checkpoints`；`thread_id = episode_id:stage:run_id`。
+- M2 先用 `MemorySaver` 保证图可运行并支持同进程重试；Postgres checkpointer 在 M2.1 接入，届时用 `run_id` 恢复同一 thread。
 - 节点内部失败按 provider 重试策略处理；图级 repair 循环最多 2 次，超过则写 `review` 转人工。
 - 进度回调：节点开始/结束事件写 Redis pub/sub，API 的 SSE 转发给前端。
 
@@ -1192,6 +1193,8 @@ prompt 模板 + 参考图 + seed
 | GET | `/episodes/{id}` | 期详情、当前节点、进度 | 登录用户 |
 | GET | `/episodes/{id}/events` | SSE 进度事件 | 登录用户 |
 | POST | `/episodes/{id}/actions/confirm-script` | 确认脚本（人工闸口 2） | operator/admin |
+| POST | `/episodes/{id}/actions/retry-script` | 重跑失败的脚本生成 | operator/admin |
+| POST | `/episodes/{id}/actions/regenerate-script` | 重新生成整份脚本 | operator/admin |
 | POST | `/episodes/{id}/actions/retry` | 重跑指定节点/阶段 | operator/admin |
 | POST | `/episodes/{id}/actions/resume-agent` | 恢复被 interrupt 的 LangGraph 子图 | operator/admin |
 | POST | `/episodes/{id}/actions/cancel` | 取消 | operator/admin |

@@ -4,6 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.agents.script_validation import ValidationResult
 from app.models.core import EpisodeStatus, NodeStatus
 
 
@@ -57,6 +58,7 @@ class EpisodeRead(BaseModel):
     current_node: str | None
     output_path: str | None
     render_spec: dict | None
+    script_meta: dict | None
     version: int
     created_at: datetime
     updated_at: datetime
@@ -116,3 +118,20 @@ class NodeRunRead(BaseModel):
     finished_at: datetime | None
     heartbeat_at: datetime | None
     output_ref: str | None
+
+
+class ScriptRead(BaseModel):
+    episode_id: str
+    status: EpisodeStatus
+    meta: dict | None
+    lines: list[ScriptLineRead]
+    validation: ValidationResult
+
+
+class ScriptLineUpdate(BaseModel):
+    text: str = Field(min_length=1, max_length=200)
+
+
+class ScriptLineUpdateResult(BaseModel):
+    line: ScriptLineRead
+    validation: ValidationResult

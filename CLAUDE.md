@@ -19,7 +19,7 @@
 AI 科普视频自动生成 Agent 系统：选题 → 脚本 → 分镜 → 逐句 TTS/对齐 → HTML 卡片/逐帧渲染 → ffmpeg 拼接 → 质检。
 
 - **个人自用项目**；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守需求文档第 11 章。
-- **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker 骨架已跑通（FastAPI/SQLAlchemy/Alembic/Celery/compose infra）；RabbitMQ 实机联调待 VM。
+- **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent 已跑通（FastAPI/SQLAlchemy/Alembic/Celery/LangGraph/DeepSeek）；分镜/配音待接。
 - **GitHub**：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
 - **仓库不包含**：`.env`、洛琪希参考图/立绘、`tmp/`、私有 character pack。
 

@@ -5,12 +5,26 @@ from jinja2 import TemplateNotFound
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.script_service import ScriptConflict, ScriptRequestError, start_script
+from app.agents.script_validation import ValidationResult
+from app.api.script_utils import (
+    load_lines,
+    load_series,
+    store_validation,
+    validate_episode,
+)
 from app.db.session import get_session
 from app.models.core import Episode, EpisodeStatus, Series
 from app.render.models import EpisodeSpec
 from app.render.stage import build_stage_payload
 from app.render.timeline import build_timeline
-from app.schemas.core import EpisodeActionAccepted, EpisodeCreate, EpisodeRead
+from app.schemas.core import (
+    EpisodeActionAccepted,
+    EpisodeCreate,
+    EpisodeRead,
+    ScriptLineRead,
+    ScriptRead,
+)
 from app.workflow.render_service import (
     RenderConflict,
     RenderRequestError,
@@ -129,12 +143,78 @@ async def _transition(
     return episode
 
 
-@router.post("/{episode_id}/actions/confirm-topic", response_model=EpisodeRead)
+async def _script_action(
+    session: AsyncSession,
+    episode_id: str,
+    *,
+    regenerate: bool = False,
+    retry: bool = False,
+) -> EpisodeActionAccepted:
+    try:
+        episode, node = await start_script(
+            session, episode_id, regenerate=regenerate, retry=retry
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ScriptConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ScriptRequestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await session.commit()
+    await session.refresh(episode)
+    return EpisodeActionAccepted(
+        episode_id=episode.id,
+        status=episode.status,
+        node_key=node.node_key,
+        operation_id=node.id,
+    )
+
+
+@router.post(
+    "/{episode_id}/actions/confirm-topic",
+    response_model=EpisodeActionAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def confirm_topic(
     episode_id: str,
     session: AsyncSession = Depends(get_session),
-) -> Episode:
-    return await _transition(session, episode_id, EpisodeStatus.TOPIC_CONFIRMED)
+) -> EpisodeActionAccepted:
+    episode = await session.get(Episode, episode_id, with_for_update=True)
+    if episode is None:
+        raise HTTPException(status_code=404, detail="episode not found")
+    if episode.status == EpisodeStatus.DRAFT:
+        episode.status = EpisodeStatus.TOPIC_CONFIRMED
+    elif episode.status != EpisodeStatus.TOPIC_CONFIRMED:
+        raise HTTPException(
+            status_code=409,
+            detail=f"episode status {episode.status.value} cannot confirm topic",
+        )
+    await session.flush()
+    return await _script_action(session, episode_id)
+
+
+@router.post(
+    "/{episode_id}/actions/retry-script",
+    response_model=EpisodeActionAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def retry_script(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> EpisodeActionAccepted:
+    return await _script_action(session, episode_id, retry=True)
+
+
+@router.post(
+    "/{episode_id}/actions/regenerate-script",
+    response_model=EpisodeActionAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def regenerate_script(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> EpisodeActionAccepted:
+    return await _script_action(session, episode_id, regenerate=True)
 
 
 @router.post("/{episode_id}/actions/confirm-script", response_model=EpisodeRead)
@@ -142,7 +222,71 @@ async def confirm_script(
     episode_id: str,
     session: AsyncSession = Depends(get_session),
 ) -> Episode:
-    return await _transition(session, episode_id, EpisodeStatus.STORYBOARDING)
+    episode = await session.get(Episode, episode_id, with_for_update=True)
+    if episode is None:
+        raise HTTPException(status_code=404, detail="episode not found")
+    if episode.status != EpisodeStatus.SCRIPT_REVIEW:
+        raise HTTPException(
+            status_code=409,
+            detail=f"episode status {episode.status.value} is not SCRIPT_REVIEW",
+        )
+    series = await load_series(session, episode)
+    lines = await load_lines(session, episode_id)
+    validation = validate_episode(episode, series, lines)
+    if not validation.valid:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "script validation failed",
+                "errors": validation.errors,
+            },
+        )
+    try:
+        episode = await transition_episode(
+            session, episode_id, EpisodeStatus.STORYBOARDING
+        )
+    except InvalidTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    store_validation(episode, validation)
+    await session.commit()
+    await session.refresh(episode)
+    return episode
+
+
+@router.get("/{episode_id}/script", response_model=ScriptRead)
+async def get_script(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> ScriptRead:
+    episode = await session.get(Episode, episode_id)
+    if episode is None:
+        raise HTTPException(status_code=404, detail="episode not found")
+    series = await load_series(session, episode)
+    lines = await load_lines(session, episode_id)
+    validation = validate_episode(episode, series, lines)
+    return ScriptRead(
+        episode_id=episode.id,
+        status=episode.status,
+        meta=episode.script_meta,
+        lines=[ScriptLineRead.model_validate(line) for line in lines],
+        validation=validation,
+    )
+
+
+@router.post("/{episode_id}/script/validate", response_model=ValidationResult)
+async def validate_script_action(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> ValidationResult:
+    episode = await session.get(Episode, episode_id)
+    if episode is None:
+        raise HTTPException(status_code=404, detail="episode not found")
+    series = await load_series(session, episode)
+    lines = await load_lines(session, episode_id)
+    validation = validate_episode(episode, series, lines)
+    store_validation(episode, validation)
+    await session.commit()
+    return validation
 
 
 @router.post("/{episode_id}/actions/cancel", response_model=EpisodeRead)

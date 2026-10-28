@@ -95,6 +95,8 @@ class Episode(Base):
     output_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # M1.2 bridge: a hand-written render spec until storyboard/TTS generate shots.
     render_spec: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # M2: outline/sections/validation snapshot for the script review gate.
+    script_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(

@@ -35,6 +35,19 @@ class Settings(BaseSettings):
     app_secret_key: str = "dev-only-change-me"
     jwt_secret: str = "dev-only-change-me"
 
+    # LLM (M2 script agent). The key itself only lives in the local .env.
+    llm_provider: str = "deepseek"
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-flash"
+    llm_timeout_s: float = 120.0
+
+    script_target_chars_per_minute: int = 327
+    script_max_repairs: int = 2
+    script_roxy_ratio_min: float = 0.10
+    script_roxy_ratio_max: float = 0.30
+    script_min_lines_for_ratio: int = 20
+
     celery_task_always_eager: bool = False
     outbox_poll_interval_s: float = 5.0
     render_dir: str = "./tmp/renders"
