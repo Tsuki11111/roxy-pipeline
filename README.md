@@ -77,6 +77,7 @@
 | M2 脚本 Agent（LangGraph） | ✅ `script_graph` + DeepSeek `deepseek-flash` + 脚本校验/编辑/确认 |
 | M3 分镜 Agent + 节奏规则 | ✅ `storyboard_graph` + 确定性节奏修复；Seedream 素材/半身镜头待补 |
 | M3.1 资产持久化/复用 | ✅ `asset` 表 + `data/assets` + `reuse_key`；生成前查重，生成后入库 |
+| Asset Agent | ✅ 文本→无文字演示素材；优先 `reuse_key` 复用，缺失才调 Seedream |
 | M4 源 TTS（IndexTTS2） | ✅ 本地 zero-shot 克隆 + 常驻服务；长文本 RTF 1.75 |
 | M4.1 逐句配音 + 音轨 | ✅ `line_audio` + media 任务 + 句级对齐 + 真实音轨成片 |
 | M4.2 字级对齐 | ✅ 中文 wav2vec2 强制对齐；字幕块按字级时间锚点显隐 |
@@ -244,6 +245,20 @@ uv run python scripts/tools/generate_seedream_image.py --prompt "..." --out tmp/
 
 新图默认以 `CANDIDATE` 入库，人工筛选后调用 `POST /api/v1/assets/{id}/approve` 才会被复用。
 
+### 文本生成演示素材 Agent
+
+把一段科普文本交给 Asset Agent，它会规划无文字的 background/prop/icon/cover，先按 `reuse_key` 查已有资产，命中就复用，缺失才调用 Seedream 生成候选：
+
+```bash
+curl -X POST http://localhost:8000/api/v1/assets/generate \
+  -H "Content-Type: application/json" \
+  -d '{"text":"解释太阳光穿过三棱镜后为什么会出现七色光带","count":1}'
+```
+
+- 不生成角色立绘、动漫人物或带文字的信息卡片。
+- 新图默认 `CANDIDATE`；`auto_approve=true` 且 DeepSeek 视觉检查通过时才直接 `APPROVED`。
+- `IMAGE_PROVIDER=mock` 可本地跑通流程，不调用 Seedream。
+
 ### 模型校验
 
 ```bash
@@ -252,7 +267,7 @@ cp .env.example .env
 uv run python scripts/tools/check_llm.py --live
 ```
 
-Celery/RabbitMQ worker 与 Web 前端还在 M1.2 之后，尚未接入。
+Celery/RabbitMQ worker 已在快速开始中给出启动命令；Web 前端尚未接入。
 
 ## 模型配置
 

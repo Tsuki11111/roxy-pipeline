@@ -2,13 +2,13 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | v1.7 |
+| 文档版本 | v1.8 |
 | 文档状态 | 初稿，核心方案已确认 |
 | 日期 | 2026-10-29 |
 | 关联文档 | [需求分析文档](AI科普视频Agent系统需求分析文档.md)；[架构决策记录](decisions-architecture.md) |
 | 已确认约束 | 现有 Ubuntu VM 先跑；LLM 国内为主；TTS 用本地 IndexTTS2，不做付费云 TTS；视觉质检统一用 `deepseek-flash` 多模态；`deepseek-flash` 文本主模型 + 火山方舟备选/图像 |
 | 推荐方案 | 方案 A：Python 模块化单体 + 进程级拆分 + Celery；AI 子图用 LangGraph |
-| 变更说明 | v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
+| 变更说明 | v1.8：新增 Asset Agent（文本→无文字演示素材，reuse_key 复用，暂不引入 RAG）；v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
 
 > 本文档回答“用什么做、怎么拆、怎么部署、接口长什么样”。需求编号（F-xx / N-xx / A-xx）沿用需求分析文档，不重复展开。
 
@@ -1158,6 +1158,14 @@ reuse_key → 查 asset 表
 - 角色立绘不经过 Seedream；pack 在 `character_packs/roxy/`，不提交公开仓库。
 - 资产记录 prompt/model/size/来源；同一套背景固定版本，不每期重生成。
 
+**Asset Agent（2026-10-29）：**
+
+- `POST /assets/generate` 接收一段科普文本，`deepseek-flash` 规划 1–3 个无文字 background/prop/icon/cover 请求。
+- 规划时把已有 APPROVED/CANDIDATE 资产的 `name/type/reuse_key/prompt` 作为上下文，优先复用已有 `reuse_key`；命中时不调用 Seedream。
+- 缺失时调用 Seedream，新图默认 CANDIDATE；可选 DeepSeek 图片检查，`auto_approve=true` 且检查通过才 APPROVED。
+- 明确禁止生成角色立绘、动漫人物、文字/水印卡片；`IMAGE_PROVIDER=mock` 可离线验证。
+- 暂不引入 RAG：当前资产量下“资产上下文 + reuse_key 精确命中”足够；资产规模或复用命中率需要时再加词法/FTS 或向量检索。
+
 ---
 
 ## 12. 接口总览
@@ -1236,7 +1244,7 @@ reuse_key → 查 asset 表
 | GET | `/episodes/{id}/output` | 成片/封面/元数据/字幕的预签名 URL | 登录用户 |
 | GET | `/episodes/{id}/package` | 发布包清单 | 登录用户 |
 | POST | `/assets` | 上传角色/背景/字体 | admin |
-| POST | `/assets/generate` | 生成原创角色/背景候选 | admin |
+| POST | `/assets/generate` | 文本生成无文字演示素材；先查 `reuse_key` 复用，缺失才生成候选 | admin |
 | GET | `/assets/candidates` | 候选列表 | 登录用户 |
 | POST | `/assets/{id}/approve` | 候选入库 | admin |
 | POST | `/assets/{id}/check` | 用 DeepSeek 多模态检查图片资产 | admin |
@@ -1718,9 +1726,10 @@ roxy_pipeline/
 ├─ compose.prod.yml
 ├─ app/
 │  ├─ api/                 # FastAPI 路由、认证、SSE
-│  ├─ agents/              # 所有 LangGraph 智能体
+│  ├─ agents/              # 所有智能体
 │  │  ├─ script/           # 脚本 Agent：graph/validation/service/tasks
-│  │  └─ storyboard/       # 分镜 Agent：graph/rhythm/service/spec
+│  │  ├─ storyboard/       # 分镜 Agent：graph/rhythm/service/spec
+│  │  └─ asset/            # 文本→无文字演示素材，reuse_key 复用
 │  ├─ voice/               # 逐句 TTS、字级对齐、音轨装配
 │  ├─ qc/                  # 规则 + DeepSeek 多模态质检
 │  ├─ publish/             # 本地发布包

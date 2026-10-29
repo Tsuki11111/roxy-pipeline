@@ -42,6 +42,18 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-flash"
     llm_timeout_s: float = 120.0
 
+    # Image generation (Seedream). IMAGE_PROVIDER=mock can be used when the
+    # Ark image model is not enabled.
+    image_provider: str = "ark"
+    ark_api_key: str = ""
+    ark_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
+    ark_image_model: str = "doubao-seedream-5-0-pro-260628"
+    image_size: str = "1080x1920"
+    image_candidates: int = 4
+    asset_agent_tmp_dir: str = "./tmp/asset_agent"
+    asset_agent_auto_check: bool = True
+    asset_agent_max_count: int = 3
+
     script_target_chars_per_minute: int = 327
     script_max_repairs: int = 2
     script_roxy_ratio_min: float = 0.10

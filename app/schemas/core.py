@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -257,3 +258,23 @@ class AssetQcRead(BaseModel):
     passed: bool
     issues: list
     meta: dict
+
+
+class AssetGenerateRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    asset_type: Literal["background", "prop", "icon", "cover"] | None = None
+    count: int = Field(default=1, ge=1, le=3)
+    auto_approve: bool = False
+    check: bool | None = None
+    force: bool = False
+
+
+class AssetAgentItem(BaseModel):
+    status: Literal["reused", "existing_candidate", "generated"]
+    asset: AssetRead
+
+
+class AssetGenerateResponse(BaseModel):
+    text: str
+    items: list[AssetAgentItem]
+    plans: list[dict]

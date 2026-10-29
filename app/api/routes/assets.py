@@ -7,12 +7,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.asset.service import AssetAgentError, generate_assets_from_text
 from app.core.config import get_settings
 from app.db.session import get_session
 from app.models.core import Asset, AssetStatus, AssetType
+from app.providers.imagegen import ImageGenError
 from app.providers.llm import LLMError, build_llm
 from app.qc.vision import check_image_asset
-from app.schemas.core import AssetQcRead, AssetRead
+from app.schemas.core import (
+    AssetAgentItem,
+    AssetGenerateRequest,
+    AssetGenerateResponse,
+    AssetQcRead,
+    AssetRead,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
@@ -40,6 +48,39 @@ async def list_assets(
     if tag:
         assets = [asset for asset in assets if tag in (asset.tags or [])]
     return assets
+
+
+@router.post("/generate", response_model=AssetGenerateResponse)
+async def generate_assets(
+    payload: AssetGenerateRequest,
+    session: AsyncSession = Depends(get_session),
+) -> AssetGenerateResponse:
+    try:
+        result = await generate_assets_from_text(
+            session,
+            payload.text,
+            asset_type=payload.asset_type,
+            count=payload.count,
+            auto_approve=payload.auto_approve,
+            check=payload.check,
+            force=payload.force,
+        )
+    except AssetAgentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (ImageGenError, LLMError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    await session.commit()
+    return AssetGenerateResponse(
+        text=result["text"],
+        plans=result["plans"],
+        items=[
+            AssetAgentItem(
+                status=item["status"],
+                asset=AssetRead.model_validate(item["asset"]),
+            )
+            for item in result["items"]
+        ],
+    )
 
 
 @router.get("/{asset_id}", response_model=AssetRead)

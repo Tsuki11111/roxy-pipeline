@@ -25,7 +25,7 @@
 
 **M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产复用/持久化 + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 质检 + M5.1 局部修改/续跑/发布包 + 真实音轨成片已跑通（2026-10-29）。**
 
-- 需求文档 v1.2、架构方案 v1.7、ADR-001～009 已写完。
+- 需求文档 v1.2、架构方案 v1.8、ADR-001～010 已写完。
 - GitHub 仓库已创建：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
 - 本地 initial commit 与文档规范化 commit 已推送到 `origin/main`（2026-10-26）。
 - `.env`、洛琪希参考图、`tmp/` 已由 `.gitignore` 排除；仓库只提交 `.env.example`。
@@ -67,7 +67,7 @@
 - M3 API：generate/retry/regenerate-storyboard、`GET /episodes/{id}/storyboard`、storyboard/validate、confirm-storyboard（进 VOICING）、`PATCH /shots/{id}`、build-render-spec。
 - M3 实测：29 句脚本生成 29 镜头、4 种卡片、角色占比 75.9%、节奏校验 valid；confirm 进 VOICING，build-render-spec 生成 29 镜头 spec，静帧已出图。
 - LLM JSON 增加 `json-repair` 兜底；分镜单次输出上限提高到 `max(2000, 行数×220)`，避免截断。
-- M3 待补：Seedream 背景/物件候选（用户暂停）、半身反应镜头/角色位移未接入分镜、P1 多模态分镜评审。
+- M3 待补：Seedream 背景/物件候选（生成 Agent 已实现，批量生成仍按需触发）、半身反应镜头/角色位移未接入分镜、P1 多模态分镜评审。
 - 资产复用已落地：`asset` 表 + `data/assets` 持久化仓库；已有 3 张背景 + 7 个物件复制入库、56 个角色在原目录索引；`build-render-spec` 自动解析入库的纸纹/木地板。
 - `generate_seedream_image.py` 生成前查 `reuse_key`，命中 APPROVED 直接复用；生成后默认以 CANDIDATE 入库，`/assets/{id}/approve` 后才可复用。`scripts/tools/ingest_assets.py` 可批量索引已有图片。
 - M4 音色已定：本地 **IndexTTS2** zero-shot 克隆，用户试听长文本后确认“效果非常好”。模型 `IndexTeam/IndexTTS-2` 在 `data/assets/voice/indextts2/`，参考音固定为 `data/assets/voice/indextts2/reference.wav`；RVC v3 / MeloTTS / Piper 已停用并清理，旧模型与工具链约 5GB 已删除。
@@ -76,7 +76,7 @@
 - M4.3 质检已跑通：`render.concat` 完成后默认进入 QC；规则检查流参数/时长/响度/对齐/字幕/资产，再按镜头抽首帧+中间帧送 `deepseek-flash` 多模态；结果写 `review` 表与 `episode.qc_meta`。视觉问题默认 warning，`QC_VISION_BLOCKING=true` 才作为 error；图片资产可单独 `POST /assets/{id}/check`。
 - M5.1 已跑通：`POST /episodes/{id}/actions/revise-line` 改单句后重置到 VOICING，只重合成变化句、重对齐并重渲染；镜头片段带 hash 缓存，未变化镜头直接复用；`POST /actions/resume` 按当前状态续跑；`workflow.reconcile_nodes` 清理 stale RUNNING 节点；`POST /actions/package` / `POST /actions/publish` 生成本地发布包（视频、封面、SRT、脚本、metadata、音频）。
 - 资产分工（2026-10-27）：角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
-- 当前阶段只生成角色立绘，按 **5 张/批**推进；背景/舞台/演示物件暂停，等系统工作流实现后由 Seedream 按需求生成。
+- 当前阶段仍以角色立绘为主；背景/舞台/演示物件可按需通过 Asset Agent 生成，不再固定暂停。
 - AI 主题扩展：需求新增 R-17～R-28（讲解指向/白板/敲键盘/调试翻车/灵光一现/怀疑审视等），核心 6 个提示词在 `character_packs/roxy/ai_pose_prompts.md`（本地）。背景已出纸纹 + 木地板；道具在生成中。
 - 代码：已有 `app/render`、`app/api`、`app/models`、`app/workflow`；尚无 agents/media-worker、Web 前端与 SSE。
 
@@ -185,7 +185,7 @@ roxy_pipline/
 │     └─ floor.png
 ├─ app/
 │  ├─ api/                         # FastAPI app + routes
-│  ├─ agents/                      # 所有 LangGraph 智能体
+│  ├─ agents/                      # 所有智能体
 │  │  ├─ script/                   # M2 脚本 Agent
 │  │  │  ├─ graph.py               # outline → sections → lines → validate → repair
 │  │  │  ├─ validation.py
@@ -193,18 +193,22 @@ roxy_pipline/
 │  │  │  ├─ utils.py               # 脚本读取/校验/保存
 │  │  │  ├─ prompts.py
 │  │  │  └─ tasks.py               # script.generate
-│  │  └─ storyboard/               # M3 分镜 Agent
-│  │     ├─ graph.py
-│  │     ├─ grammar.py
-│  │     ├─ rhythm.py
+│  │  ├─ storyboard/               # M3 分镜 Agent
+│  │  │  ├─ graph.py
+│  │  │  ├─ grammar.py
+│  │  │  ├─ rhythm.py
+│  │  │  ├─ models.py
+│  │  │  ├─ service.py
+│  │  │  ├─ tasks.py               # storyboard.generate
+│  │  │  ├─ prompts.py
+│  │  │  ├─ loaders.py
+│  │  │  ├─ utils.py               # 分镜校验/保存
+│  │  │  ├─ spec_builder.py        # shot → EpisodeSpec
+│  │  │  └─ render_spec.py         # 从 DB/资产构建渲染 spec
+│  │  └─ asset/                    # 文本→无文字演示素材，reuse_key 复用
 │  │     ├─ models.py
-│  │     ├─ service.py
-│  │     ├─ tasks.py               # storyboard.generate
 │  │     ├─ prompts.py
-│  │     ├─ loaders.py
-│  │     ├─ utils.py               # 分镜校验/保存
-│  │     ├─ spec_builder.py        # shot → EpisodeSpec
-│  │     └─ render_spec.py         # 从 DB/资产构建渲染 spec
+│  │     └─ service.py
 │  ├─ voice/                       # M4 配音与对齐
 │  │  ├─ service.py                # voice.episode 启动
 │  │  ├─ tasks.py
@@ -466,9 +470,19 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 
 ## 6. 历史记录
 
+### 2026-10-29 · Asset Agent（文本生成演示素材）
+
+- 新增 `app/agents/asset/`：DeepSeek 把文本规划成 background/prop/icon/cover 无文字素材请求；禁止角色立绘、动漫人物、文字/水印卡片。
+- 复用策略：把已有 APPROVED/CANDIDATE 资产的 name/type/reuse_key/prompt 作为上下文，模型优先返回已有 reuse_key；命中后不调用 Seedream，直接复用。
+- 生成：`app/providers/imagegen.py` 封装 Seedream；新图默认 CANDIDATE，写入 `data/assets`；可选 DeepSeek 图片检查，`auto_approve=true` 且检查通过才直接 APPROVED。
+- API：`POST /api/v1/assets/generate`，支持 `text/asset_type/count/auto_approve/check/force`；`IMAGE_PROVIDER=mock` 可离线跑通流程。
+- 实测：真实 DeepSeek 规划出 `prop:prism-white-light-dispersion`，mock 图片入库；第二次同文本命中现有候选，不重复生成。
+- 暂不引入 RAG：当前资产量小，先用“现有资产上下文 + reuse_key 精确命中”；资产规模或复用命中率需要时再加轻量检索。
+- 测试：新增 3 条资产 Agent 测试，全套 60 条通过。
+
 ### 2026-10-29 · 目录规范化
 
-- 所有 LangGraph 智能体统一收进 `app/agents/`：`agents/script/`（脚本）与 `agents/storyboard/`（分镜）；包内文件改为 `graph.py` / `validation.py` / `service.py` / `utils.py`。
+- 所有智能体统一收进 `app/agents/`：`agents/script/`、`agents/storyboard/`（LangGraph）与 `agents/asset/`（工具型）；包内文件改为 `graph.py` / `validation.py` / `service.py` / `utils.py`。
 - `app/media` → `app/voice`，统一放 TTS、字级对齐和音轨装配。
 - 渲染服务和任务从 `app/workflow` 移到 `app/render/service.py` / `tasks.py`；workflow 只保留 Celery、outbox、状态机、resume/revision。
 - `api/script_utils.py` / `api/storyboard_utils.py` 下沉为 `script/utils.py` / `storyboard/utils.py`；`storyboard/spec_service.py` 改名 `render_spec.py`。
@@ -518,7 +532,7 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 - `render.concat` 支持 `audio_path`：`start_render` 自动带上 `episode.audio_path`，封装真实 AAC 音轨；无音频时仍走原来的静音轨，兼容 M1.2。
 - `voice_auto_render=true` 时任务自动完成 `VOICING → ALIGNING → RENDERING` 并投递渲染；设 false 则停在 ALIGNING，手动调 `/actions/render`。
 - 测试 45 条通过；真实 3 句实测：IndexTTS2 生成 3.59s/3.20s/2.91s，音轨 10.25s，成片 1920×1080/25fps + 48kHz 立体声 AAC，时长 10.24s。
-- 已知限制：字/词级时间戳尚未做，字幕仍按句内字数比例分配；TTS 后镜头时长可能超过 M3 的 1.5–6s 节奏区间，M4.1 不再重跑节奏校验；所有 speaker 目前共用同一参考音，旁白/洛琪希双音色待 `voice_profile` 接入。
+- 已知限制（M4.1 当时）：字幕按句内字数比例分配，后续已由 M4.2 字级对齐补齐；TTS 后镜头时长可能超过 M3 的 1.5–6s 节奏区间，M4.1 不再重跑节奏校验；全片单音色洛琪希，不做旁白双音色。
 
 ### 2026-10-29 · M4 源 TTS 改用 IndexTTS2
 

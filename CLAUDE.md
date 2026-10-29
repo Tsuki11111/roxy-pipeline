@@ -19,7 +19,7 @@
 AI 科普视频自动生成 Agent 系统：选题 → 脚本 → 分镜 → 逐句 TTS/对齐 → HTML 卡片/逐帧渲染 → ffmpeg 拼接 → 质检。
 
 - **个人自用项目**；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守需求文档第 11 章。
-- **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用 + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包已跑通；下一步成本报表与监控。
+- **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用 + Asset Agent + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包已跑通；下一步成本报表与监控。
 - **GitHub**：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
 - **仓库不包含**：`.env`、洛琪希参考图/立绘、`tmp/`、私有 character pack。
 
@@ -62,7 +62,7 @@ Playwright/Chromium + ffmpeg + LangGraph（仅 AI 子图）；前端 React + Vit
 
 - 文本/代码主模型：DeepSeek `deepseek-flash`（当前 Key 只开放这个模型）。
 - 豆包 Pro：仅备选/A-B，不阻塞主流程。
-- 图像素材：火山方舟 Seedream 5.0 Pro，生成候选后**人工筛选、固定资产化**；仅限原创角色/背景/装饰，洛琪希会被版权过滤，不能 AI 复刻。
+- 图像素材：火山方舟 Seedream 5.0 Pro，生成候选后**人工筛选、固定资产化**；仅限原创角色/背景/装饰，洛琪希会被版权过滤，不能 AI 复刻。文本→素材规划由 `app/agents/asset/` 的 Asset Agent 用 DeepSeek + `reuse_key` 复用，缺失才生成。
 - 视觉质检：统一用 **DeepSeek `deepseek-flash` 多模态**；图片资产直接传图检查，完整视频按镜头/时间点抽帧 + ffmpeg 流指标一起送模型。不接入豆包 Vision 等第二视觉模型；确定性 DOM/几何规则仍作为前置检查。
 - **TTS：本地 IndexTTS2 zero-shot 声音克隆**（Python 3.11 独立环境 + 常驻 HTTP 服务），不使用付费云 TTS；参考音固定为 `data/assets/voice/indextts2/reference.wav`。
 - **含文字的信息卡片必须用 HTML 渲染**，不得用图像生成模型。
