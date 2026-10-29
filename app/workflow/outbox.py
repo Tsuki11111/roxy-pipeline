@@ -20,6 +20,8 @@ def queue_for(event_type: str) -> str:
         return "media"
     if event_type.startswith("align."):
         return "media"
+    if event_type.startswith("qc."):
+        return "agent"
     return "workflow"
 
 

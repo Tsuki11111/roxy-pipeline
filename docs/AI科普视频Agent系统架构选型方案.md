@@ -2,13 +2,13 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | v1.5 |
+| 文档版本 | v1.6 |
 | 文档状态 | 初稿，核心方案已确认 |
 | 日期 | 2026-10-29 |
 | 关联文档 | [需求分析文档](AI科普视频Agent系统需求分析文档.md)；[架构决策记录](decisions-architecture.md) |
-| 已确认约束 | 现有 Ubuntu VM 先跑；LLM 国内为主；TTS 用本地 IndexTTS2，不做付费云 TTS；`deepseek-flash` 文本主模型 + 火山方舟备选/图像 |
+| 已确认约束 | 现有 Ubuntu VM 先跑；LLM 国内为主；TTS 用本地 IndexTTS2，不做付费云 TTS；视觉质检统一用 `deepseek-flash` 多模态；`deepseek-flash` 文本主模型 + 火山方舟备选/图像 |
 | 推荐方案 | 方案 A：Python 模块化单体 + 进程级拆分 + Celery；AI 子图用 LangGraph |
-| 变更说明 | v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
+| 变更说明 | v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
 
 > 本文档回答“用什么做、怎么拆、怎么部署、接口长什么样”。需求编号（F-xx / N-xx / A-xx）沿用需求分析文档，不重复展开。
 
@@ -138,7 +138,7 @@
 | 结构化输出 | Pydantic + instructor | 最新稳定版 | Schema 校验、失败重试、模型无关 | 手写 JSON 解析 + 重试 |
 | TTS | 本地 IndexTTS2 zero-shot 克隆 | `IndexTeam/IndexTTS-2`（Python 3.11 + torch 2.8 cu128） | 中文吐字清晰、音量大、无按量费用；常驻服务加载一次 | 云 TTS（备选）/ CosyVoice 2 |
 | 强制对齐 | TTS 原生时间戳优先，WhisperX 兜底 | WhisperX 最新稳定版 | 字级时间戳决定字幕节奏 | ctc-forced-aligner |
-| 视觉质检 | DOM/几何规则优先 + 可配置视觉模型 | 豆包 Vision / Qwen-VL / GLM-4V | 文字溢出、裁切先用 DOM 规则；视觉模型只做语义抽查，不阻塞 | 纯规则 |
+| 视觉质检 | DOM/几何规则前置 + `deepseek-flash` 多模态 | 图片资产直接读图；视频按镜头/时间点抽帧送模型 | 文字溢出、裁切先用 DOM 规则；语义与画面问题用 DeepSeek 判定 | 纯规则 |
 | 图像生成 | 火山方舟 Seedream（或 OpenAI-compatible 图像 API） | Seedream 5.x | 原创角色/背景/装饰候选；固定参考图/seed；人工筛选后入库 | 其他图像 API |
 | 渲染 | Playwright + Chromium + Jinja2 + ffmpeg | 版本全部钉死 | 文字准确、逐帧可控、可按镜头缓存 | Remotion（评估项） |
 | 前端 | React + Vite + TypeScript + Ant Design 5 | 最新稳定版 | 后台表格/表单密集，AntD 组件全 | Next.js（不需要 SSR） |
@@ -358,7 +358,7 @@ TTS（逐句合成，IndexTTS2 常驻服务）
 | 表 | 关键字段 | 说明 |
 |---|---|---|
 | `series` | id, name, voice_profile JSONB, section_labels JSONB, character_pack_id, watermark, template_version, non_commercial | 系列配置根；配置变更要版本化 |
-| `episode` | id, series_id, topic_id, title, target_duration_s, status, health, current_node, output_path, version, render_spec JSONB, script_meta JSONB, storyboard_meta JSONB, audio_path, audio_meta JSONB, created_at | `version` 做乐观锁；`health` 表示 OK/WARNING/BLOCKED；`render_spec` 是 M1.2 手工渲染 spec 的临时桥，M3 后由 shot 表生成；`script_meta`/`storyboard_meta` 存生成与校验快照；`audio_meta` 存句级对齐 |
+| `episode` | id, series_id, topic_id, title, target_duration_s, status, health, current_node, output_path, version, render_spec JSONB, script_meta JSONB, storyboard_meta JSONB, audio_path, audio_meta JSONB, qc_meta JSONB, created_at | `version` 做乐观锁；`health` 表示 OK/WARNING/BLOCKED；`render_spec` 是 M1.2 手工渲染 spec 的临时桥，M3 后由 shot 表生成；`script_meta`/`storyboard_meta` 存生成与校验快照；`audio_meta` 存句级/字级对齐；`qc_meta` 存 QC 汇总 |
 | `topic_candidate` | id, series_id, source, title, hook, audience, fit_score, est_sections, raw JSONB, status | 抓取原文放 `raw`，只作数据，不作指令 |
 | `script_line` | id, episode_id, seq, speaker, section, text, char_count, version | `seq` 唯一且连续；`char_count` 由服务端计算 |
 | `line_audio` | id, episode_id, script_line_id, line_version, speaker, text_hash, voice_key, provider, model, ref_audio, path, duration_ms, sample_rate, checksum | `(script_line_id, text_hash, voice_key)` 唯一；文本或音色变化时重合成，否则复用 |
@@ -885,13 +885,14 @@ ffmpeg -i video.mp4 -i audio_norm.wav \
 | 逐句 | `deepseek-flash` | 0.7 | `ScriptLines` |
 | 分镜 | `deepseek-flash` | 0.2 | `ShotPlan` |
 | 分镜节奏评审 | `deepseek-flash` + 规则 | 0.0 | `RhythmReview` |
-| 视觉质检 | DOM/几何规则优先；可选豆包 Vision / Qwen-VL / GLM-4V | 0.0 | `FrameVerdict` |
+| 视觉质检 | `deepseek-flash` 多模态（图片 + 视频抽帧） | 固定主模型 | `FrameVerdict` / `VideoVerdict` |
 | 文案自检 | `deepseek-flash` | 0.0 | `ScriptSelfCheck` |
 | A/B 对照（可选） | 火山方舟豆包 Pro | 0.7 | 同对应 Schema |
 
 - 已确认账号：DeepSeek 官方 API Key（仅 `deepseek-flash`）与火山引擎 API Key。
 - `deepseek-flash` 作为文本/代码主模型，承担脚本、分镜和自检；豆包 Pro 只做备选和 A/B 对照，不阻塞主流程。
-- 视觉质检先走 DOM/几何规则；视觉模型可配置，豆包 Vision 只是候选，不作为关键路径，避免因视觉模型能力不足拖住整条流水线。
+- 视觉质检统一走 `deepseek-flash` 多模态：生成图片资产直接传图；完整视频按镜头/时间点抽帧，连同 ffmpeg 流指标、对齐和字幕信息送模型；不接入第二视觉模型。
+- DOM/几何与像素统计作为确定性前置检查，模型负责语义与观感判定；两者都写入同一份 QC 报告。
 - 图像素材生成走火山方舟 Seedream（见 11.9），不交给文本 LLM。
 - 所有输出用 Pydantic 模型校验；校验失败把错误信息回喂模型重试，最多 2 次。
 - 模型名、价格、超时、并发全部配置化，不写死在代码里。
@@ -1005,7 +1006,7 @@ class TTSProvider(Protocol):
 
 ### 11.5 视觉质检
 
-**先规则、后模型：**
+**规则前置 + DeepSeek 多模态：**
 
 | 检查项 | 方式 |
 |---|---|
@@ -1014,17 +1015,17 @@ class TTSProvider(Protocol):
 | 空白镜头 | 像素统计：非背景像素占比过低 |
 | 字幕与口播一致 | 字幕由脚本和 alignment 生成，直接比对；抽帧 OCR 只做抽查 |
 | 字幕对齐 | 字幕时间由 alignment 生成；检查时间戳单调、无越界、置信度与静音段；偏差目标 ≤150ms |
-| 语义匹配 | 可配置视觉模型（豆包 Vision / Qwen-VL / GLM-4V）看首帧/中间帧；未配置时跳过 |
+| 画面语义 | `deepseek-flash` 读首帧/中间帧，判断内容是否匹配脚本、角色是否明显变形 |
+| 完整视频 | ffmpeg 抽帧（每镜头首帧 + 中间帧，必要时章节边界）+ 流参数/响度/字幕时间一并送 `deepseek-flash` |
+| 图片资产 | `deepseek-flash` 直接读生成图，检查角色完整、裁切、水印、文字伪影、风格一致性 |
 | 角色形象漂移 | 资产 checksum + 角色包版本；渲染时只允许引用已入库资产 |
 
-- 视觉模型不是关键路径：未配置或置信度低时，以 DOM/几何规则和人工抽检为准；豆包 Vision 只是候选，不阻塞流水线。
-
+- 所有视觉模型调用固定为 `deepseek-flash` 多模态，不接入豆包 Vision / Qwen-VL / GLM-4V 等第二视觉模型。
+- 视频接口不能直接吃整段视频：按镜头抽首帧 + 中间帧，必要时补章节边界帧；同时把 `duration/fps/resolution/loudness/alignment` 作为文本上下文送入，避免模型只凭画面猜时长。
+- 图片资产检查与视频抽帧检查共用同一个多模态 provider；输出统一结构化 `FrameVerdict` / `VideoVerdict`：`pass` / `issue_type` / `severity` / `suggestion` / `confidence`。
+- 低置信度不自动打回，转人工抽检；视觉评审只做建议，自动修复由 workflow 决定，最多重排 2 次。
+- 每次视觉调用记录 `model_call_log`：图片数量、分辨率、prompt/completion tokens、耗时、成本；抽帧数量是成本主变量。
 - 每个 `review.detail` 必须带 `suggestion` 和 `fix_method`（重跑节点 / 改模板 / 改脚本 / 人工处理），满足 F-37。
-
-- 每镜头至少检查首帧；信息密集镜头检查首帧 + 中间帧。
-- 视觉模型输出结构化 `FrameVerdict`：`pass` / `issue_type` / `severity` / `suggestion` / `confidence`。
-- 低置信度不自动打回，转人工抽检；避免 R-06 的误判成本。
-- 视觉评审只做“建议”，自动修复由 workflow 决定；最多重排 2 次。
 
 ### 11.6 限流、熔断与成本
 
@@ -1221,6 +1222,9 @@ reuse_key → 查 asset 表
 | POST | `/episodes/{id}/actions/align` | 开始字级强制对齐，投递 media 队列 | operator/admin |
 | POST | `/episodes/{id}/actions/retry-align` | 重跑失败的对齐 | operator/admin |
 | GET | `/episodes/{id}/audio` | 逐句音频、句级与字级对齐 | 登录用户 |
+| POST | `/episodes/{id}/actions/qc` | 开始规则 + DeepSeek 多模态质检 | operator/admin |
+| POST | `/episodes/{id}/actions/retry-qc` | 重跑失败的质检 | operator/admin |
+| GET | `/episodes/{id}/qc` | QC 汇总与 review 明细 | 登录用户 |
 | POST | `/episodes/{id}/actions/build-render-spec` | 由 shot 表生成渲染 spec | operator/admin |
 | PATCH | `/shots/{shot_id}` | 编辑单个镜头 | operator/admin |
 | GET | `/episodes/{id}/rhythm-report` | 节奏规则检查结果 | 登录用户 |
@@ -1232,6 +1236,7 @@ reuse_key → 查 asset 表
 | POST | `/assets/generate` | 生成原创角色/背景候选 | admin |
 | GET | `/assets/candidates` | 候选列表 | 登录用户 |
 | POST | `/assets/{id}/approve` | 候选入库 | admin |
+| POST | `/assets/{id}/check` | 用 DeepSeek 多模态检查图片资产 | admin |
 | POST | `/assets/{id}/reject` | 拒绝候选 | admin |
 | GET | `/assets` | 资产列表 | 登录用户 |
 | DELETE | `/assets/{id}` | 删除资产（检查引用） | admin |

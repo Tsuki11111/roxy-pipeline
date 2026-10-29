@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.db.session import get_session
 from app.models.core import Asset, AssetStatus, AssetType
-from app.schemas.core import AssetRead
+from app.providers.llm import LLMError, build_llm
+from app.qc.vision import check_image_asset
+from app.schemas.core import AssetQcRead, AssetRead
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 router = APIRouter(prefix="/api/v1/assets", tags=["assets"])
 
@@ -71,3 +79,49 @@ async def reject_asset(
     await session.commit()
     await session.refresh(asset)
     return asset
+
+
+@router.post("/{asset_id}/check", response_model=AssetQcRead)
+async def check_asset(
+    asset_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> AssetQcRead:
+    asset = await session.get(Asset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    image = Path(asset.path)
+    if not image.is_absolute():
+        image = PROJECT_ROOT / image
+    if not image.is_file():
+        raise HTTPException(status_code=404, detail="asset image not found")
+
+    context = (
+        f"类型={asset.type.value}，名称={asset.name}，"
+        f"reuse_key={asset.reuse_key}，prompt={asset.prompt or ''}"
+    )
+    try:
+        verdict = await check_image_asset(
+            image,
+            build_llm(),
+            context=context,
+            timeout_s=get_settings().qc_vision_timeout_s,
+        )
+    except LLMError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    meta = dict(asset.meta or {})
+    meta["qc"] = {
+        "passed": verdict["pass"],
+        "issues": verdict["issues"],
+        "model": get_settings().deepseek_model,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
+    asset.meta = meta
+    await session.commit()
+    await session.refresh(asset)
+    return AssetQcRead(
+        asset_id=asset.id,
+        passed=verdict["pass"],
+        issues=verdict["issues"],
+        meta=meta,
+    )

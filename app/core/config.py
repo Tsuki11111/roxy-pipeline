@@ -82,6 +82,17 @@ class Settings(BaseSettings):
     align_use_normalizer: bool = True
     align_timeout_s: float = 1800.0
 
+    # M4.3 QC: deterministic rules first, then DeepSeek multimodal on frames.
+    qc_auto_run: bool = True
+    qc_frame_scale: int = 1280
+    qc_frames_per_shot: int = 2
+    qc_max_frames: int = 60
+    qc_vision_batch: int = 4
+    qc_vision_timeout_s: float = 180.0
+    qc_vision_max_tokens: int = 2000
+    # Vision findings are advisory by default; deterministic rule errors block.
+    qc_vision_blocking: bool = False
+
     celery_task_always_eager: bool = False
     outbox_poll_interval_s: float = 5.0
     render_dir: str = "./tmp/renders"

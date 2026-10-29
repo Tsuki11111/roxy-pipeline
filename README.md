@@ -14,7 +14,7 @@
 **AI 科普视频自动生成 Agent 系统**：从选题、脚本、分镜，到逐句 TTS、卡片/逐帧渲染、ffmpeg 拼接和质检的全自动流水线。
 
 **定位**：个人自用项目；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守[需求文档第 11 章](docs/AI科普视频Agent系统需求分析文档.md)。
-**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用 + M4.1 逐句配音 + M4.2 字级对齐 + 真实音轨成片已跑通（FastAPI + SQLAlchemy + Alembic + Celery + LangGraph + IndexTTS2 + wav2vec2 + DeepSeek）；质检待接。
+**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用 + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 规则/DeepSeek 多模态质检 + 真实音轨成片已跑通；下一步 M5 局部修改与运维。
 
 ---
 
@@ -80,7 +80,8 @@
 | M4 源 TTS（IndexTTS2） | ✅ 本地 zero-shot 克隆 + 常驻服务；长文本 RTF 1.75 |
 | M4.1 逐句配音 + 音轨 | ✅ `line_audio` + media 任务 + 句级对齐 + 真实音轨成片 |
 | M4.2 字级对齐 | ✅ 中文 wav2vec2 强制对齐；字幕块按字级时间锚点显隐 |
-| M4.3 质检与修复 | ⏳ 音频/字幕/成片规则检查与自动修复 |
+| M4.3 质检与报告 | ✅ 规则前置 + DeepSeek 抽帧质检；review 表与 QC API |
+| M5 局部修改与运维 | ⏳ 局部重跑、续跑、发布包与运维 |
 | M5 局部修改、续跑、运维 | ⏳ |
 
 ## 环境隔离
@@ -260,7 +261,7 @@ Celery/RabbitMQ worker 与 Web 前端还在 M1.2 之后，尚未接入。
 | 文本/代码主模型 | `DEEPSEEK_MODEL=deepseek-flash` | ✅ 可用 |
 | 文本备选/A-B | `ARK_MODEL_STRONG=doubao-seed-2-1-pro-260915` | ✅ 可用 |
 | 图像素材 | `ARK_IMAGE_MODEL=doubao-seedream-5-0-pro-260628` | ✅ 可用（背景/舞台/演示物件） |
-| 视觉质检 | `ARK_MODEL_VISION` | ❌ 暂无；先 DOM 规则 |
+| 视觉质检 | `DEEPSEEK_MODEL=deepseek-flash`（多模态：图片/视频抽帧） | ✅ 可用 |
 | TTS | `TTS_PROVIDER=indextts2` + `data/assets/voice/indextts2/` | ✅ 本地 IndexTTS2 zero-shot |
 | 字级对齐 | `ALIGN_MODEL_DIR` 中文 wav2vec2 | ✅ 本地强制对齐 |
 

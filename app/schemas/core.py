@@ -5,7 +5,13 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.agents.script_validation import ValidationResult
-from app.models.core import AssetStatus, AssetType, EpisodeStatus, NodeStatus
+from app.models.core import (
+    AssetStatus,
+    AssetType,
+    EpisodeStatus,
+    NodeStatus,
+    ReviewLevel,
+)
 from app.storyboard.models import RhythmReport
 
 
@@ -63,6 +69,7 @@ class EpisodeRead(BaseModel):
     storyboard_meta: dict | None
     audio_path: str | None
     audio_meta: dict | None
+    qc_meta: dict | None
     version: int
     created_at: datetime
     updated_at: datetime
@@ -174,6 +181,28 @@ class EpisodeAudioRead(BaseModel):
     lines: list[LineAudioRead]
 
 
+class ReviewRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    episode_id: str
+    check_item: str
+    level: ReviewLevel
+    detail: dict
+    evidence_path: str | None
+    resolved_by: str | None
+    resolved_at: datetime | None
+    created_at: datetime
+
+
+class QcReport(BaseModel):
+    episode_id: str
+    status: EpisodeStatus
+    health: str
+    meta: dict | None
+    reviews: list[ReviewRead]
+
+
 class ShotUpdate(BaseModel):
     card_type: str | None = None
     card_style: str | None = None
@@ -212,3 +241,10 @@ class AssetRead(BaseModel):
     meta: dict
     status: AssetStatus
     created_at: datetime
+
+
+class AssetQcRead(BaseModel):
+    asset_id: str
+    passed: bool
+    issues: list
+    meta: dict

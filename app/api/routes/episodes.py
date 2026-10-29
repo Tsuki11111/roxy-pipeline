@@ -31,7 +31,15 @@ from app.media.service import (
     VoiceRequestError,
     start_voice,
 )
-from app.models.core import Episode, EpisodeStatus, LineAudio, ScriptLine, Series
+from app.models.core import (
+    Episode,
+    EpisodeStatus,
+    LineAudio,
+    Review,
+    ScriptLine,
+    Series,
+)
+from app.qc.service import QcConflict, QcRequestError, start_qc
 from app.render.models import EpisodeSpec
 from app.render.stage import build_stage_payload
 from app.render.timeline import build_timeline
@@ -41,6 +49,8 @@ from app.schemas.core import (
     EpisodeCreate,
     EpisodeRead,
     LineAudioRead,
+    QcReport,
+    ReviewRead,
     ScriptLineRead,
     ScriptRead,
     ShotRead,
@@ -453,6 +463,78 @@ async def retry_align(
     session: AsyncSession = Depends(get_session),
 ) -> EpisodeActionAccepted:
     return await _align_action(session, episode_id, retry=True)
+
+
+async def _qc_action(
+    session: AsyncSession,
+    episode_id: str,
+    *,
+    retry: bool = False,
+) -> EpisodeActionAccepted:
+    try:
+        episode, node = await start_qc(session, episode_id, retry=retry)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except QcConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except QcRequestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await session.commit()
+    await session.refresh(episode)
+    return EpisodeActionAccepted(
+        episode_id=episode.id,
+        status=episode.status,
+        node_key=node.node_key,
+        operation_id=node.id,
+    )
+
+
+@router.post(
+    "/{episode_id}/actions/qc",
+    response_model=EpisodeActionAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def qc_episode_action(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> EpisodeActionAccepted:
+    return await _qc_action(session, episode_id)
+
+
+@router.post(
+    "/{episode_id}/actions/retry-qc",
+    response_model=EpisodeActionAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def retry_qc(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> EpisodeActionAccepted:
+    return await _qc_action(session, episode_id, retry=True)
+
+
+@router.get("/{episode_id}/qc", response_model=QcReport)
+async def get_qc_report(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> QcReport:
+    episode = await session.get(Episode, episode_id)
+    if episode is None:
+        raise HTTPException(status_code=404, detail="episode not found")
+    reviews = list(
+        await session.scalars(
+            select(Review)
+            .where(Review.episode_id == episode_id)
+            .order_by(Review.created_at)
+        )
+    )
+    return QcReport(
+        episode_id=episode.id,
+        status=episode.status,
+        health=episode.health,
+        meta=episode.qc_meta,
+        reviews=[ReviewRead.model_validate(review) for review in reviews],
+    )
 
 
 @router.get("/{episode_id}/audio", response_model=EpisodeAudioRead)

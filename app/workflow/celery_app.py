@@ -20,6 +20,7 @@ celery_app.conf.update(
         "app.storyboard.tasks",
         "app.media.tasks",
         "app.media.align_tasks",
+        "app.qc.tasks",
     ),
     task_default_queue="workflow",
     task_routes={
@@ -28,6 +29,7 @@ celery_app.conf.update(
         "storyboard.generate": {"queue": "agent"},
         "voice.episode": {"queue": "media"},
         "align.episode": {"queue": "media"},
+        "qc.episode": {"queue": "agent"},
         "render.episode": {"queue": "render"},
         "render.shot": {"queue": "render"},
         "render.concat": {"queue": "render"},
@@ -49,6 +51,7 @@ celery_app.conf.update(
         "storyboard.generate": {"soft_time_limit": 300, "time_limit": 330},
         "voice.episode": {"soft_time_limit": 3600, "time_limit": 3900},
         "align.episode": {"soft_time_limit": 1800, "time_limit": 2100},
+        "qc.episode": {"soft_time_limit": 1200, "time_limit": 1500},
         "render.episode": {"soft_time_limit": 3300, "time_limit": 3600},
         "render.shot": {"soft_time_limit": 600, "time_limit": 660},
         "render.concat": {"soft_time_limit": 600, "time_limit": 660},
@@ -65,6 +68,7 @@ celery_app.conf.update(
 from app.agents import tasks as _agent_tasks  # noqa: E402,F401
 from app.media import align_tasks as _align_tasks  # noqa: E402,F401
 from app.media import tasks as _media_tasks  # noqa: E402,F401
+from app.qc import tasks as _qc_tasks  # noqa: E402,F401
 from app.storyboard import tasks as _storyboard_tasks  # noqa: E402,F401
 from app.workflow import render_tasks as _render_tasks  # noqa: E402,F401
 from app.workflow import tasks as _tasks  # noqa: E402,F401

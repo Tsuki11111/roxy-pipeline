@@ -48,12 +48,29 @@ async def _mark_success(
             node.output_ref = output_path
             node.error = None
         episode = await session.get(Episode, episode_id)
+        qc_enabled = get_settings().qc_auto_run
         if episode is not None:
-            episode.status = EpisodeStatus.READY
-            episode.current_node = None
+            episode.status = (
+                EpisodeStatus.QC if qc_enabled else EpisodeStatus.READY
+            )
+            episode.current_node = "qc.episode" if qc_enabled else None
             episode.output_path = output_path
             episode.health = "OK"
         await session.commit()
+
+        if qc_enabled and episode is not None:
+            try:
+                from app.qc.service import start_qc
+
+                await start_qc(session, episode_id)
+                await session.commit()
+            except Exception:
+                logger.exception("failed to queue QC for episode=%s", episode_id)
+                episode = await session.get(Episode, episode_id)
+                if episode is not None:
+                    episode.health = "FAILED"
+                    episode.current_node = None
+                await session.commit()
 
 
 async def _mark_failed(episode_id: str, node_run_id: str, error: str) -> None:

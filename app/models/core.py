@@ -53,6 +53,13 @@ class NodeStatus(str, enum.Enum):
     STALE = "STALE"
 
 
+class ReviewLevel(str, enum.Enum):
+    PASS = "PASS"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    MANUAL = "MANUAL"
+
+
 class OutboxStatus(str, enum.Enum):
     PENDING = "PENDING"
     DISPATCHED = "DISPATCHED"
@@ -116,6 +123,8 @@ class Episode(Base):
     # M4: assembled voice track and sentence-level alignment.
     audio_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     audio_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # M4.3: QC summary and review findings.
+    qc_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -309,6 +318,33 @@ class Asset(Base):
         SAEnum(AssetStatus, native_enum=False, length=20),
         default=AssetStatus.CANDIDATE,
         index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class Review(Base):
+    __tablename__ = "review"
+    __table_args__ = (
+        Index("ix_review_episode_level", "episode_id", "level"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    episode_id: Mapped[str] = mapped_column(
+        ForeignKey("episode.id", ondelete="CASCADE"), index=True
+    )
+    check_item: Mapped[str] = mapped_column(String(100))
+    level: Mapped[ReviewLevel] = mapped_column(
+        SAEnum(ReviewLevel, native_enum=False, length=20),
+        default=ReviewLevel.WARNING,
+        index=True,
+    )
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+    evidence_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
