@@ -34,7 +34,7 @@
   - 火山方舟 `doubao-seed-2-1-pro-260915` / `lite`：**PASS**；`turbo` 仍 `ModelNotOpen`。
   - 火山方舟 Seedream 5.0 Pro：**PASS**（关闭安全体验模式后，1024×1024 测试成功）。
   - 豆包视觉模型：当前账号无可用模型；视觉质检先走 DOM/几何规则。
-  - 火山 TTS：**尚未配置**，M4 前需要 AppID + Access Token。
+  - 火山 TTS：不使用（改为本地 IndexTTS2），云 TTS 凭据不再是 M4 前置条件。
 - 角色包：正式资产选用豆包版 `character_packs/roxy/roxy_calm_standing_01.png`（1080×1920 RGBA，水印已排除，本地，gitignored）；ChatGPT 版留在 `alternates/`。Seedream 不能生成洛琪希。
 - Batch 1 已完成：R-02 疑惑、R-03 惊讶、R-04 无奈、R-05 得意、R-06 思考，共 6 张入库；首版最低 18 张，还差 12 张。
 - Batch 2 已完成：R-07 专注、R-09 认真、R-11 指向、R-16 开口、R-17 讲解指向，共 11 张入库；首版最低 18 张，还差 7 张。
@@ -48,6 +48,7 @@
 - Batch 10 全部 10 张已入库：B-01～B-05 + B-06 灵光、B-07 怀疑、B-08 崩溃、B-09 害羞、B-10 认真，共 55 个正式资产；1080×1350。B-09 为构图模板：人物/辫子/发带完整在画布内，腰部截断线不贴底边，底部留白。
 - 新约束（2026-10-28）：角色不能全程静止；换位/让位/配合道具时，角色与物件作为整体做 120–300ms 的自然快速平移（参考 BV1BgH36DE7y）。已写入需求 F-47 与架构 10.11，待渲染阶段实现。
 - 新约束（2026-10-28）：本地 Docker 与 VM 资源必须隔离；后端服务地址全部从环境变量/`Settings` 读取，不写死 `localhost`、VM IP 或容器名。已加 `ROXY_ENV`/`COMPOSE_PROJECT_NAME` 环境隔离、`.env.vm.example` 模板。
+- 新约束（2026-10-29）：音色克隆只能用用户本人或明确授权的声音；禁止动画原声/声优本人音频克隆。当前方案为本地 IndexTTS2 zero-shot，参考音与模型放 `data/assets/voice/`，不提交公开仓库。
 - Batch 6 已完成：R-23 戴眼镜、R-24 咖啡、R-25 摊手、R-26 数据展示、R-27 庆祝，共 30 张；只剩 R-28 被代码包围。
 - M1 渲染链路原型已跑通：手写 3 镜头 JSON → 舞台 HTML → Playwright 逐帧 → ffmpeg；12 秒/300 帧/1920×1080/25fps/H.264/AAC，单进程约 160 秒。
 - 角色换姿势已改为双层交叉淡入 + 横移（180ms），字幕和卡片同步短淡入；参考片实测换姿势约 0.2 秒，不是硬切。
@@ -68,6 +69,7 @@
 - M3 待补：Seedream 背景/物件候选（用户暂停）、半身反应镜头/角色位移未接入分镜、P1 多模态分镜评审。
 - 资产复用已落地：`asset` 表 + `data/assets` 持久化仓库；已有 3 张背景 + 7 个物件复制入库、56 个角色在原目录索引；`build-render-spec` 自动解析入库的纸纹/木地板。
 - `generate_seedream_image.py` 生成前查 `reuse_key`，命中 APPROVED 直接复用；生成后默认以 CANDIDATE 入库，`/assets/{id}/approve` 后才可复用。`scripts/ingest_assets.py` 可批量索引已有图片。
+- M4 音色已定：本地 **IndexTTS2** zero-shot 克隆，用户试听长文本后确认“效果非常好”。模型 `IndexTeam/IndexTTS-2` 在 `data/assets/voice/indextts2/`，参考音固定为 `data/assets/voice/indextts2/reference.wav`；RVC v3 / MeloTTS / Piper 已停用并清理，旧模型与工具链约 5GB 已删除。
 - 资产分工（2026-10-27）：角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
 - 当前阶段只生成角色立绘，按 **5 张/批**推进；背景/舞台/演示物件暂停，等系统工作流实现后由 Seedream 按需求生成。
 - AI 主题扩展：需求新增 R-17～R-28（讲解指向/白板/敲键盘/调试翻车/灵光一现/怀疑审视等），核心 6 个提示词在 `character_packs/roxy/ai_pose_prompts.md`（本地）。背景已出纸纹 + 木地板；道具在生成中。
@@ -81,7 +83,7 @@
 
 1. **确认 initial commit 已推到 GitHub**：`git status -sb` 应显示 `main...origin/main`；没有就 `git push -u origin main`。
 2. **确认运行环境**：本机 Docker Desktop/WSL2 是否可用；VM 是否已挂 ≥200GB 数据盘；8080/8443/9100/9101 是否空闲。
-3. **确认 TTS 凭据**（不阻塞 M1）：火山语音 AppID + Access Token；如果换 MiniMax/阿里云，准备好对应凭据。
+3. **开始 M4 逐句配音**：IndexTTS2 provider 已接入（常驻服务、单句合成），下一步做 `line` 音频表、逐句合成任务、时长写回与音轨装配；IndexTTS2 只给句级时长，字/词级时间用 WhisperX 强制对齐补齐。
 4. **M3 分镜 Agent + 资产复用已完成**：真实脚本生成 29 镜头、节奏校验通过、render_spec 已生成；下一步 M4 TTS/对齐，或补半身反应镜头/角色位移。
 5. **M1.2 实机已验证**：`docker compose -f compose.infra.yml up -d` 起 Postgres/RabbitMQ/Redis，按 §4.2.2 启动 worker（加 `agent` 队列）、beat、API，再用 `scripts/queue_demo_render.py` 验证渲染链路。
 
@@ -274,10 +276,11 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 | 文本备选/A-B | `ARK_MODEL_STRONG=doubao-seed-2-1-pro-260915` | ✅ 可用 |
 | 图像素材 | `ARK_IMAGE_MODEL=doubao-seedream-5-0-pro-260628` | ✅ 可用（原创角色/背景；洛琪希会被版权过滤） |
 | 视觉质检 | `ARK_MODEL_VISION` | ❌ 无可用模型；先 DOM 规则 |
-| TTS | `VOLC_TTS_APP_ID` / `VOLC_TTS_ACCESS_TOKEN` | ⏳ 待提供 |
+| TTS | `TTS_PROVIDER=indextts2` + `data/assets/voice/indextts2/` | ✅ 本地可用（IndexTTS2 zero-shot） |
 
 - DeepSeek Base URL：`https://api.deepseek.com`
 - 火山方舟 Base URL：`https://ark.cn-beijing.volces.com/api/v3`
+- IndexTTS2：独立 Python 3.11 环境 `data/tools/indextts-venv`（torch 2.8 cu128）；`app/providers/tts.py` 自动拉起 `scripts/indextts_server.py`（`127.0.0.1:8765`，模型常驻）；8GB 显存用 fp16 + Wav2Vec2-BERT 放 CPU；长文本实测 RTF 1.75。
 - 校验脚本：`python scripts/check_llm.py --live`（DeepSeek 必检，Ark 可选）；`--require-ark` 把 Ark 当必检。
 - 图像生成测试产物在 `tmp/seedream_probe.png`（gitignore）。
 
@@ -448,6 +451,43 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 ---
 
 ## 6. 历史记录
+
+### 2026-10-29 · M4 源 TTS 改用 IndexTTS2
+
+- 用户确认长文本吐字差来自 MeloTTS 源 TTS，决定改用本地 **IndexTTS2** zero-shot 克隆，不做付费云 TTS。
+- 模型 `IndexTeam/IndexTTS-2`（gpt 3.25GB + s2mel 1.12GB + qwen emo 1.2GB）与辅助模型（w2v-BERT、BigVGAN、CAMPPlus、semantic codec）已下到 `data/assets/voice/indextts2/`，约 8.3GB。
+- 参考音固定为 20 句干净录音中的「人们端午节吃粽子…」，4.94 秒，复制到 `data/assets/voice/indextts2/reference.wav`；原始 20 句保留。
+- 8GB 显存策略：fp16 + `use_qwen_emo=False` + Wav2Vec2-BERT 放 CPU 做一次性音色编码；实测可跑。
+- 实测 224 字长文本生成 44.74 秒，RTF 1.75；用户试听确认“效果非常好，就以这样为准”。
+- 新增 `scripts/indextts_server.py` 常驻 HTTP 服务（`127.0.0.1:8765`，模型加载一次、单句合成）；`app/providers/tts.py` 改为 `IndexTTS2Provider`，首次合成自动拉起服务，进程退出时关闭；配置项迁到 `tts_indextts_*`。
+- 清理：删除 RVC v3 模型/index、MeloTTS 源码与 venv、Piper venv 与模型、MeloTTS 模型/BERT、IndexTTS2 重复 `conformer_shaw.pt` 与重复 semantic codec，共约 5.1GB；未动外部 RVC 仓库（4GB）。
+- 测试：42 条全部通过；provider 端到端合成 3.45 秒测试音频成功。
+- 待办：`line` 音频表 + 逐句合成任务 + 时长写回 + 音轨装配；再决定强制对齐方案。
+
+### 2026-10-29 · 新干净音频重训 v3
+
+- 用户确认昨天音频杂音过大，提供 20 句干净录音（44.1k mono，总 76.7 秒，21 个切片）。
+- 已删除旧 v1 模型、index、v2 日志、旧音频副本和测试 wav；保留 MeloTTS/Piper 基础设施。
+- v3 训练：RVC v2 40k、batch 4、200 epochs、pretrained G/D；index IVF76；模型/index 在 `data/assets/voice/rvc/roxy_v3/`。
+- MeloTTS 已裁剪语言模块并改为本地 BERT，可离线合成；跨音色测试句已发用户试听，等待吐字清晰度反馈。
+- 数据集仅 76.7 秒，远低于 RVC 建议的 10 分钟；若清晰度仍不足，优先补录音到 5–10 分钟，而不是继续调参。
+
+### 2026-10-28 · M4 音色调试暂停
+
+- v1 RVC 模型已训练（40k / 100 epochs / 139 clips），用户试听确认音色相似；但跨音色输出有金属音、吐字不清。
+- 已用 pymss speech 模型分离训练音频：vocals RMS -27.9dB，other -35.0dB，确认混有非人声成分。
+- v2 已基于分离后的 vocals 完成预处理（95 段）、F0 pm、HuBERT 特征、filelist/config；正式训练在启动前暂停，尚未产出 v2 模型。
+- MeloTTS 已本地跑通（独立 venv、ModelScope 模型、本地 BERT），但首次加载慢，尚未接进 M4。
+- 下次继续：训练 v2 → index → 用同一句 MeloTTS 对比 v1/v2；再调 pitch/protect/index rate，必要时换 RMVPE 或 GPT-SoVITS。
+- 关键路径：`data/assets/voice/raw/roxy_local_v1/`（原音频/分离 stems）、`data/assets/voice/raw/roxy_local_v1_vocals/`、`data/assets/voice/rvc/roxy_local_v1/`（v1 模型）、`data/tools/MeloTTS/`、`data/tools/melo-venv/`。
+
+### 2026-10-28 · M4.1 本地 RVC 音色模型
+
+- 用户提供 13:49 竖屏视频（静态配图 + 音轨），提取为 44.1k mono 人声；峰值 -0.83dB、整体 -25.9 LUFS，立体声相关性 0.995（无明显立体声 BGM）。
+- RVC 独立 venv（复用系统 torch 2.6 cu118 / 4060 8GB）；HuBERT 从 ModelScope 下载，v2 40k 底模从 HF CDN 下载；F0 用 pm（RMVPE 镜像太慢，暂未用）。
+- 预处理 141 段、有效训练 139 段；batch 4、100 epochs，约 16 秒/epoch；index IVF663。
+- 模型与 index 复制到 `data/assets/voice/rvc/roxy_local_v1/`，`voice_profile.json` 记录 checksum/训练参数；3.7 秒测试音频推理成功（40k，时长 3.70→3.68s）。
+- 待办：用户试听确认音色；接入 MeloTTS/Piper 基础 TTS；把 RVC 推理封装成后端 provider；必要时补 RMVPE 下载。
 
 ### 2026-10-28 · M3.1 资产持久化与复用
 

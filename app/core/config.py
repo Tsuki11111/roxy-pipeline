@@ -50,6 +50,22 @@ class Settings(BaseSettings):
 
     storyboard_max_repairs: int = 2
 
+    # M4 local TTS: IndexTTS2 zero-shot voice cloning. The model runs in an
+    # isolated Python 3.11 environment and is kept resident behind a local
+    # HTTP service; paths stay local defaults and can be overridden in .env.
+    tts_provider: str = "indextts2"
+    tts_indextts_python: str = "./data/tools/indextts-venv/Scripts/python.exe"
+    tts_indextts_repo: str = "./data/tools/IndexTTS2"
+    tts_indextts_model_dir: str = "./data/assets/voice/indextts2/IndexTTS-2"
+    tts_indextts_server: str = "./scripts/indextts_server.py"
+    tts_indextts_ref_audio: str = "./data/assets/voice/indextts2/reference.wav"
+    tts_indextts_url: str = "http://127.0.0.1:8765"
+    tts_indextts_use_fp16: bool = True
+    tts_indextts_semantic_on_cpu: bool = True
+    tts_indextts_load_timeout_s: float = 600.0
+    tts_indextts_timeout_s: float = 600.0
+    tts_indextts_log: str = "./data/logs/indextts_server.log"
+
     celery_task_always_eager: bool = False
     outbox_poll_interval_s: float = 5.0
     render_dir: str = "./tmp/renders"

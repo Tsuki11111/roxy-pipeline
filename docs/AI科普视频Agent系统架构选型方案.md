@@ -2,13 +2,13 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | v1.3 |
+| 文档版本 | v1.4 |
 | 文档状态 | 初稿，核心方案已确认 |
-| 日期 | 2026-10-26 |
+| 日期 | 2026-10-29 |
 | 关联文档 | [需求分析文档](AI科普视频Agent系统需求分析文档.md)；[架构决策记录](decisions-architecture.md) |
-| 已确认约束 | 现有 Ubuntu VM 先跑；LLM/TTS 国内为主；云 TTS 优先；`deepseek-flash` 文本主模型 + 火山方舟备选/图像 |
+| 已确认约束 | 现有 Ubuntu VM 先跑；LLM 国内为主；TTS 用本地 IndexTTS2，不做付费云 TTS；`deepseek-flash` 文本主模型 + 火山方舟备选/图像 |
 | 推荐方案 | 方案 A：Python 模块化单体 + 进程级拆分 + Celery；AI 子图用 LangGraph |
-| 变更说明 | v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
+| 变更说明 | v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
 
 > 本文档回答“用什么做、怎么拆、怎么部署、接口长什么样”。需求编号（F-xx / N-xx / A-xx）沿用需求分析文档，不重复展开。
 
@@ -136,7 +136,7 @@
 | Agent 可观测 | OpenTelemetry + 结构化日志（Langfuse 可选） | 最新稳定版 | 不新增重型依赖；需要图级 trace 时再评估自建 Langfuse | LangSmith（跨境，需评估） |
 | LLM | 国内 OpenAI-compatible API + 薄适配层 | DeepSeek `deepseek-flash`（文本/代码主模型）+ 火山方舟豆包 Pro（备选/A-B） | 按实际体验 flash 文本能力强；豆包 Pro 不阻塞主流程 | 其他国内厂商（备选） |
 | 结构化输出 | Pydantic + instructor | 最新稳定版 | Schema 校验、失败重试、模型无关 | 手写 JSON 解析 + 重试 |
-| TTS | 云 TTS 适配层 | 火山 / MiniMax / 阿里云 | 云优先、按量付费、免 GPU 运维 | CosyVoice 2 自建 |
+| TTS | 本地 IndexTTS2 zero-shot 克隆 | `IndexTeam/IndexTTS-2`（Python 3.11 + torch 2.8 cu128） | 中文吐字清晰、音量大、无按量费用；常驻服务加载一次 | 云 TTS（备选）/ CosyVoice 2 |
 | 强制对齐 | TTS 原生时间戳优先，WhisperX 兜底 | WhisperX 最新稳定版 | 字级时间戳决定字幕节奏 | ctc-forced-aligner |
 | 视觉质检 | DOM/几何规则优先 + 可配置视觉模型 | 豆包 Vision / Qwen-VL / GLM-4V | 文字溢出、裁切先用 DOM 规则；视觉模型只做语义抽查，不阻塞 | 纯规则 |
 | 图像生成 | 火山方舟 Seedream（或 OpenAI-compatible 图像 API） | Seedream 5.x | 原创角色/背景/装饰候选；固定参考图/seed；人工筛选后入库 | 其他图像 API |
@@ -207,10 +207,10 @@
 分镜（视觉语法 + 节奏规则）
   │  shot[]（card/character/position/duration/cache_key）
   ▼
-TTS（逐句合成）
-  │  line_<id>.wav + word_timestamps.json
+TTS（逐句合成，IndexTTS2 常驻服务）
+  │  line_<id>.wav + duration_ms
   ▼
-强制对齐（原生时间戳优先）
+强制对齐（WhisperX / ctc-forced-aligner 兜底）
   │  alignment.json（字/词级时间）
   ▼
 卡片渲染（HTML → PNG）
@@ -281,7 +281,7 @@ TTS（逐句合成）
 | api | `uvicorn app.api:app` | 无 | 1–2 | 0.5–1GB | REST、SSE、认证、人工闸口 |
 | workflow-worker | `celery -A app.workflow worker -Q workflow` | workflow | 1 | 0.5GB | 状态推进、节点调度、补偿 |
 | agent-worker | `celery -A app.agents worker -Q agent` | agent | 1–4 | 0.5–1GB | 运行 LangGraph 子图、LLM 调用，网络等待为主 |
-| media-worker | `celery -A app.media worker -Q media` | media | 1–4 | 1GB | TTS、对齐、音频装配 |
+| media-worker | `celery -A app.media worker -Q media` | media | TTS 1 副本；对齐 1–4 | 4–8GB VRAM（IndexTTS2 常驻） | 逐句 TTS、对齐、音频装配；TTS 并发固定为 1 |
 | asset-worker | `celery -A app.assets worker -Q asset` | asset | 1–2 | 1GB | 图像生成、背景移除、缩放、候选入库 |
 | render-worker | `celery -A app.render worker -Q render` | render | 1–N | 2 vCPU / 2GB | Chromium + ffmpeg，CPU 密集 |
 | scheduler | `celery beat` 或 APScheduler | 无 | 1 | 256MB | 候选抓取、清理、reconciler、成本汇总 |
@@ -973,33 +973,34 @@ F-17 的多模态分镜评审可在 M3 后用“分镜缩略图拼图 + 多模�
 
 ```python
 class TTSProvider(Protocol):
-    def synthesize(self, text: str, voice_id: str, speed: float,
-                   emotion: str | None) -> TTSResult: ...
-    # TTSResult: audio_path, duration_ms, word_timestamps?, sample_rate
+    def synthesize(self, text: str, out_path: Path, *, speed: float = 1.0,
+                   emotion: str | None = None) -> TTSResult: ...
+    # TTSResult: audio_path, duration_ms, sample_rate
 ```
 
-**选型与评测清单（云 TTS 优先）：**
+**选型（已定）：**
 
-| 候选 | 需要实测的项 | 官方入口 |
+| 候选 | 结论 | 说明 |
 |---|---|---|
-| 火山引擎豆包语音合成 | 字级时间戳、声音复刻、并发配额、按字符/按次计费、情绪参数 | https://www.volcengine.com/product/tts |
-| MiniMax Speech | 字级时间戳、声音复刻、并发、长文本限制、计费 | https://platform.minimaxi.com/docs/guides/pricing |
-| 阿里云智能语音交互 / 百炼语音 | 字级时间戳、音色数量、并发、计费 | https://www.aliyun.com/product/nls |
+| 本地 IndexTTS2 | ✅ 采用 | 中文吐字清晰、音量大、zero-shot；`IndexTeam/IndexTTS-2`；独立 Python 3.11 + torch 2.8 cu128；常驻 HTTP 服务 |
+| 云 TTS（火山 / MiniMax / 阿里） | 备选 | 默认不用；仅在无 GPU 或 IndexTTS2 不可用时再评估 |
+| MeloTTS + RVC | ❌ 废弃 | 长文本吐字差；RVC 金属音明显，训练与调参成本高 |
 
-> 价格、免费额度、并发配额以官方页面和商务报价为准；选型阶段用同一段 500 字中文做 A/B 试听，记录自然度、停顿、数字读法、专有名词读法、字级时间戳质量。
+> IndexTTS2 实测：224 字长文本生成 44.7 秒，RTF 1.75（4060 Laptop 8GB，fp16，Wav2Vec2-BERT 放 CPU）。TTS 并发固定为 1。
 
 **对齐策略：**
 
-1. 优先使用 TTS 返回的字级/词级时间戳。
-2. 不提供时间戳或置信度低时，用 WhisperX 对已合成音频做强制对齐；中文模型需单独配置。
+1. IndexTTS2 只返回句级音频与时长，不提供字级时间戳。
+2. 以句子为时间锚点，字/词级时间用 WhisperX 对已合成音频做强制对齐；中文模型需单独配置。
 3. 仍不可用则用 `ctc-forced-aligner`；M4 前必须完成一次实测。
 4. 对齐结果做单调性、边界、静音段校验；异常进入 QC。
 
 **音色一致性：**
 
-- `series.voice_profile` 固定 provider、voice_id、speed、emotion、sample_rate。
-- 换厂商意味着音色变化，必须提升 `voice_profile_version` 并重跑全片；不能静默切换。
-- 旁白与洛琪希必须是两个明显可区分的音色（F-21、A-10）。
+- `series.voice_profile` 固定 provider=indextts2、model、ref_audio checksum、sample_rate；speed/emotion 暂未启用。
+- 换参考音或模型版本意味着音色变化，必须提升 `voice_profile_version` 并重跑全片；不能静默切换。
+- 旁白与洛琪希必须是两个明显可区分的音色（F-21、A-10）；同一 provider 用不同参考音实现。
+- 参考音只能来自用户本人或明确授权的声音，禁止动画原声/声优本人音频。模型与参考音放 `data/assets/voice/`，不提交公开仓库。
 
 ### 11.5 视觉质检
 
@@ -1421,7 +1422,7 @@ Ubuntu 24.04 VM（itsmygo-vm 或独立 VM）
 - LangGraph 配置：`LANGGRAPH_CHECKPOINT_SCHEMA=agent_checkpoints`、`LANGGRAPH_CHECKPOINT_RETENTION_DAYS=30`；checkpoint 表随 Postgres 备份，但不参与业务恢复。
 - LLM 配置：`DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL=https://api.deepseek.com`、`DEEPSEEK_MODEL=deepseek-flash`；`ARK_API_KEY`、`ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3`、`ARK_MODEL_STRONG`（备选/A-B）、`ARK_MODEL_VISION`（可选）。
 - 图像生成配置：`IMAGE_PROVIDER=ark|mock|openai-compatible`、`ARK_IMAGE_MODEL`（如 `doubao-seedream-5-0-pro-260628`，需在方舟控制台开通）、`IMAGE_SIZE=1080x1920`、`IMAGE_CANDIDATES=4`。
-- TTS 配置：火山语音与方舟不是同一套凭据；需要 `VOLC_TTS_APP_ID`、`VOLC_TTS_ACCESS_TOKEN`、`TTS_VOICE_NARRATOR`、`TTS_VOICE_ROXY`。最终选 MiniMax/阿里云时替换为对应变量。
+- TTS 配置：`TTS_PROVIDER=indextts2`；模型、参考音与隔离环境由 `TTS_INDEXTTS_*` 注入（python/repo/model_dir/ref_audio/url）；IndexTTS2 常驻 `127.0.0.1:8765`。云端 TTS 凭据只在切换到备选方案时需要。
 - 基础设施密钥：`POSTGRES_PASSWORD`、`MINIO_ROOT_USER/PASSWORD`、`APP_SECRET_KEY`、`JWT_SECRET`。
 - `.env` 加入 `.gitignore`；仓库只提交 `.env.example`。
 - 所有密钥支持轮换；日志和 Sentry 上报前脱敏（API Key、Cookie、Prompt 全文）。
@@ -1853,7 +1854,8 @@ qc.align
 |---|---|---|
 | 2026-10-26 | 部署：现有 Ubuntu VM 先跑 | 已确认 |
 | 2026-10-26 | 模型：国内 LLM/TTS 为主 | 已确认 |
-| 2026-10-26 | TTS：云 TTS 优先 | 已确认 |
+| 2026-10-26 | TTS：云 TTS 优先 | 已被 2026-10-29 决策取代 |
+| 2026-10-29 | TTS：本地 IndexTTS2 zero-shot，放弃云 TTS 与 RVC 变声链 | 已确认 |
 | 2026-10-26 | 推荐方案 A：Python 模块化单体 + 进程级拆分 + Celery | 已确认（按推荐执行） |
 | 2026-10-26 | LangGraph 只用于 AI 决策子图；媒体流水线仍用 DB 状态机 + Celery | 已确认 |
 | 2026-10-26 | LLM：`deepseek-flash` 作为文本/代码主模型；豆包 Pro 仅备选/A-B | 已确认 |

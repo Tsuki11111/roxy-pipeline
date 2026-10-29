@@ -19,7 +19,7 @@
 AI 科普视频自动生成 Agent 系统：选题 → 脚本 → 分镜 → 逐句 TTS/对齐 → HTML 卡片/逐帧渲染 → ffmpeg 拼接 → 质检。
 
 - **个人自用项目**；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守需求文档第 11 章。
-- **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用已跑通（FastAPI/SQLAlchemy/Alembic/Celery/LangGraph/DeepSeek）；配音/质检待接。
+- **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用已跑通（FastAPI/SQLAlchemy/Alembic/Celery/LangGraph/DeepSeek）；M4 源 TTS 已定为本地 IndexTTS2 并接入 provider，逐句配音/对齐/质检待接。
 - **GitHub**：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
 - **仓库不包含**：`.env`、洛琪希参考图/立绘、`tmp/`、私有 character pack。
 
@@ -64,6 +64,7 @@ Playwright/Chromium + ffmpeg + LangGraph（仅 AI 子图）；前端 React + Vit
 - 豆包 Pro：仅备选/A-B，不阻塞主流程。
 - 图像素材：火山方舟 Seedream 5.0 Pro，生成候选后**人工筛选、固定资产化**；仅限原创角色/背景/装饰，洛琪希会被版权过滤，不能 AI 复刻。
 - 视觉质检：DOM/几何规则优先；视觉模型可选，不作为关键路径。
+- **TTS：本地 IndexTTS2 zero-shot 声音克隆**（Python 3.11 独立环境 + 常驻 HTTP 服务），不使用付费云 TTS；参考音固定为 `data/assets/voice/indextts2/reference.wav`。
 - **含文字的信息卡片必须用 HTML 渲染**，不得用图像生成模型。
 
 ### 4. 密钥与素材
@@ -74,12 +75,14 @@ Playwright/Chromium + ffmpeg + LangGraph（仅 AI 子图）；前端 React + Vit
 - `docs/assets/roxy_reference.webp` 已 gitignore，不随公开仓库分发。
 - `character_packs/*` 默认忽略，只允许 `character_packs/placeholder/`。
 - **图片资产必须可复用、持久化**：所有图像先查 `asset` 表的 `reuse_key`；已入库且 `APPROVED` 的资产直接复用，不重复生成。新生成的背景/物件必须复制到 `data/assets`（VM 为 `/data/assets`）并记录 checksum、prompt、model、seed；角色包在原目录索引。禁止每期重新生成。
+- **音色克隆数据合规**：IndexTTS2 / 声音克隆只能用用户本人声音或用户持有明确书面授权的声音；禁止用动画原声、声优本人音频克隆或生成新台词。参考音与音色模型放 `data/assets/voice/`（gitignore），不提交公开仓库；`series.voice_profile` 固定 provider、模型、参考音等参数。
 - AI 生成图带可见水印（如“豆包 AI 生成”）时不得直接入成片；先确认服务条款，允许再用脚本排除/遮罩。
 - `tmp/`、`data/` 忽略；生成的样片/帧不要提交。
 
 ### 5. 运行环境
 
 - 开发机：Windows 11 + Git Bash；Python 可用；Docker Desktop 已可用。本地 compose 默认只起 Postgres/RabbitMQ/Redis，MinIO 用 `storage` profile。
+- **IndexTTS2 独立环境**：主项目 Python 3.12；IndexTTS2 固定在 `data/tools/indextts-venv`（Python 3.11 + torch 2.8 cu128），由 `scripts/indextts_server.py` 常驻 `127.0.0.1:8765`；模型在 `data/assets/voice/indextts2/`（gitignore）。8GB 显存下用 fp16，并把 Wav2Vec2-BERT 放 CPU 做一次性音色编码。
 - 部署目标：Ubuntu 24.04 VM，Docker 29 / Compose 2.40。
 - **本地与 VM 资源隔离**：本地用 `ROXY_ENV=local` / `COMPOSE_PROJECT_NAME=roxy-local`，VM 用 `ROXY_ENV=vm` / `COMPOSE_PROJECT_NAME=roxy-vm`；容器名、网络、数据卷按环境分开，不能共用同一套资源。
 - **后端禁止写死服务地址**：数据库、RabbitMQ、Redis、MinIO、API 地址全部从环境变量 / `Settings` 读取；业务模块不出现 `localhost`、VM IP 或容器名。地址只出现在 `.env` / `.env.vm` 和 compose 的环境变量里。

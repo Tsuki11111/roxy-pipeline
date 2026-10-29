@@ -214,5 +214,39 @@ Seedream 因版权过滤不能生成洛琪希；用户愿意用 ChatGPT / 豆包
 - Seedream 的物件质量或一致性不足：改用 CSS/SVG 或人工素材。
 - 角色 pack 供应不足：先用占位 pack 和单张立绘完成 M1，不阻塞渲染链路。
 
+---
+
+## ADR-007：源 TTS 用本地 IndexTTS2，放弃 RVC 变声链
+
+### 背景
+
+M4 需要中文吐字清晰、音量充足的配音。实测 MeloTTS + RVC v3 的方案在短句上音色相似，但长文本吐字明显变差；定位后确认瓶颈在 MeloTTS 源语音，而不是 RVC 变声。用户不使用付费云 TTS，要求本地方案。
+
+### 决策
+
+- 源 TTS 用 **IndexTTS2 zero-shot 声音克隆**，模型 `IndexTeam/IndexTTS-2`，参考音为用户提供的 20 句干净录音中的 4.94 秒片段。
+- IndexTTS2 跑在独立 Python 3.11 + torch 2.8 cu128 环境，由 `scripts/indextts_server.py` 常驻 `127.0.0.1:8765`，模型只加载一次，逐句合成走 HTTP。
+- 8GB 显存：fp16、关闭 QwenEmotion、Wav2Vec2-BERT 放 CPU 做一次性音色编码。
+- 删除 RVC 变声层、MeloTTS/Piper 基础设施和训练模型；不再维护第二套音色转换链。
+
+### 理由
+
+1. 长文本实测 224 字 / 44.7 秒，RTF 1.75，用户试听确认清晰度和音量达标。
+2. zero-shot 直接用参考音，省去 RVC 训练、F0、index 调参和金属音问题。
+3. 本地常驻服务没有按量费用，也避免跨境网络依赖。
+
+### 代价与风险
+
+- 需要 NVIDIA GPU；无 GPU 的 VM 不能跑 TTS，媒体 worker 要与 GPU 机器绑定。
+- 模型与辅助权重约 8.3GB，显存占用高，单卡并行度有限，media worker 的 TTS 并发需限制为 1。
+- IndexTTS2 暂未暴露语速和情绪参数；需要变速时用 ffmpeg 后处理，情绪控制后续再接。
+- 参考音决定音色与部分韵律，换参考音会影响全片一致性。
+
+### 重新评估触发条件
+
+- IndexTTS-2.5 或后续版本在同等显存下明显更好：升级模型版本。
+- 参考音克隆稳定性不足：增加参考音或改用微调，而不是回到 RVC。
+- 需要多 worker 并发生成：再评估 vLLM 服务化或第二张 GPU。
+
 
 

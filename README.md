@@ -14,7 +14,7 @@
 **AI 科普视频自动生成 Agent 系统**：从选题、脚本、分镜，到逐句 TTS、卡片/逐帧渲染、ffmpeg 拼接和质检的全自动流水线。
 
 **定位**：个人自用项目；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守[需求文档第 11 章](docs/AI科普视频Agent系统需求分析文档.md)。
-**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用已跑通（FastAPI + SQLAlchemy + Alembic + Celery + LangGraph + DeepSeek）；配音/质检待接。
+**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用已跑通（FastAPI + SQLAlchemy + Alembic + Celery + LangGraph + DeepSeek）；M4 源 TTS 已定为本地 IndexTTS2 并接入 provider，逐句配音/对齐/质检待接。
 
 ---
 
@@ -31,6 +31,7 @@
 | AI 子图 | LangGraph + PostgreSQL checkpointer —— 只做脚本/分镜/QC |
 | 渲染 | Playwright + Chromium + Jinja2 + ffmpeg |
 | 文本模型 | DeepSeek `deepseek-flash`（主）；火山方舟豆包 Pro（备选/A-B） |
+| TTS | 本地 IndexTTS2 zero-shot（Python 3.11 + torch 2.8 cu128，常驻服务） |
 | 图像生成 | 火山方舟 Seedream 5.0 Pro（背景/舞台/演示物件；角色立绘由用户提供） |
 | 前端 | React + Vite + TypeScript + Ant Design |
 | 部署 | Docker Compose + Nginx |
@@ -76,7 +77,8 @@
 | M2 脚本 Agent（LangGraph） | ✅ `script_graph` + DeepSeek `deepseek-flash` + 脚本校验/编辑/确认 |
 | M3 分镜 Agent + 节奏规则 | ✅ `storyboard_graph` + 确定性节奏修复；Seedream 素材/半身镜头待补 |
 | M3.1 资产持久化/复用 | ✅ `asset` 表 + `data/assets` + `reuse_key`；生成前查重，生成后入库 |
-| M4 质检与全流程自动化 | ⏳ |
+| M4 源 TTS（IndexTTS2） | ✅ 本地 zero-shot 克隆 + 常驻服务；长文本 RTF 1.75 |
+| M4 配音/对齐与质检 | ⏳ 逐句合成、时长写回、音轨装配、质检 |
 | M5 局部修改、续跑、运维 | ⏳ |
 
 ## 环境隔离
@@ -239,7 +241,7 @@ uv run python scripts/generate_seedream_image.py --prompt "..." --out tmp/new_bg
 
 ```bash
 cp .env.example .env
-# 在 .env 填入 DeepSeek / 火山方舟 / TTS 凭据
+# 在 .env 填入 DeepSeek / 火山方舟凭据
 uv run python scripts/check_llm.py --live
 ```
 
@@ -253,7 +255,7 @@ Celery/RabbitMQ worker 与 Web 前端还在 M1.2 之后，尚未接入。
 | 文本备选/A-B | `ARK_MODEL_STRONG=doubao-seed-2-1-pro-260915` | ✅ 可用 |
 | 图像素材 | `ARK_IMAGE_MODEL=doubao-seedream-5-0-pro-260628` | ✅ 可用（背景/舞台/演示物件） |
 | 视觉质检 | `ARK_MODEL_VISION` | ❌ 暂无；先 DOM 规则 |
-| TTS | `VOLC_TTS_APP_ID` / `VOLC_TTS_ACCESS_TOKEN` | ⏳ 待配置 |
+| TTS | `TTS_PROVIDER=indextts2` + `data/assets/voice/indextts2/` | ✅ 本地 IndexTTS2 zero-shot |
 
 - DeepSeek Base URL：`https://api.deepseek.com`
 - 火山方舟 Base URL：`https://ark.cn-beijing.volces.com/api/v3`
