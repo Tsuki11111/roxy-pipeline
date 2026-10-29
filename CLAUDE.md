@@ -16,10 +16,10 @@
 
 ## 项目定位
 
-AI 科普视频自动生成 Agent 系统：选题 → 脚本 → 分镜 → 逐句 TTS/对齐 → HTML 卡片/逐帧渲染 → ffmpeg 拼接 → 质检。
+AI 科普视频自动生成 Agent 系统：文章导入 → AI 结构化脚本/润色 → 分镜 → 逐句 TTS/对齐 → HTML 卡片/逐帧渲染 → ffmpeg 拼接 → 质检。
 
 - **个人自用项目**；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守需求文档第 11 章。
-- **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用 + Asset Agent + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包 + 视觉补全与最终输出/MinIO 已跑通；下一步成本报表与监控。
+- **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产持久化/复用 + Asset Agent + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包 + Web 控制台已跑通；按主题自动生成脚本的功能已移除，下一步成本报表与监控。
 - **GitHub**：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
 - **仓库不包含**：`.env`、洛琪希参考图/立绘、`tmp/`、私有 character pack。
 
@@ -53,7 +53,7 @@ Playwright/Chromium + ffmpeg + LangGraph（仅 AI 子图）；前端 React + Vit
 
 ### 2. LangGraph 边界
 
-- LangGraph 只做 `script_graph` / `storyboard_graph` / `qc_repair_graph`。
+- LangGraph 只做 `storyboard_graph` / `qc_repair_graph`；脚本来自文章导入与文稿优化，不再有按主题生成脚本的图。
 - 媒体流水线（TTS、渲染、拼接）仍由 PostgreSQL 状态机 + Celery 负责。
 - `episode.status` 是业务事实来源；LangGraph checkpoint 不是。
 - 图节点不直接跑 Chromium/ffmpeg/TTS。
@@ -71,7 +71,7 @@ Playwright/Chromium + ffmpeg + LangGraph（仅 AI 子图）；前端 React + Vit
 
 - `.env` 已在 `.gitignore`；仓库只提交 `.env.example`。
 - **资产分工**：洛琪希等版权角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字信息卡片仍用 HTML。
-- **当前阶段（2026-10-27 起）只生成人物立绘**；背景/舞台/演示物件暂停，等系统工作流实现后由 Seedream 按需求生成。
+- **素材生成**：角色立绘由用户提供；背景/舞台/演示物件可通过 `scripts/tools/generate_seedream_image.py` 或 Asset Agent 按文稿生成候选，人工 approve 后复用。
 - `docs/assets/roxy_reference.webp` 已 gitignore，不随公开仓库分发。
 - `character_packs/*` 默认忽略，只允许 `character_packs/placeholder/`。
 - **图片资产必须可复用、持久化**：所有图像先查 `asset` 表的 `reuse_key`；已入库且 `APPROVED` 的资产直接复用，不重复生成。新生成的背景/物件必须复制到 `data/assets`（VM 为 `/data/assets`）并记录 checksum、prompt、model、seed；同时镜像到 MinIO `minio_bucket_assets`，对象路径 `assets/<type>/<checksum>.<ext>`，写入 `asset.meta["minio"]`。角色包在原目录索引。禁止每期重新生成。

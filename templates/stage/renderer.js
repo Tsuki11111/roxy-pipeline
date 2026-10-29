@@ -193,6 +193,7 @@ window.renderAt = function (tMs) {
 
   if (index !== currentShot) {
     currentShot = index;
+    card.classList.toggle("card-left", shot.card_side === "left");
     if (shot.card_html) {
       card.innerHTML = shot.card_html;
       card.style.display = "block";

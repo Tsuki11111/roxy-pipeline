@@ -23,9 +23,9 @@
 
 ## 1. 当前状态一句话
 
-**M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产复用/持久化 + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 质检 + M5.1 局部修改/续跑/发布包 + 真实音轨成片已跑通（2026-10-29）。**
+**M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产复用/持久化 + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 质检 + M5.1 局部修改/续跑/发布包 + Web 控制台 + 真实音轨成片已跑通（2026-10-29）；按主题自动生成脚本已移除。**
 
-- 需求文档 v1.2、架构方案 v1.9、ADR-001～010 已写完。
+- 需求文档 v1.2、架构方案 v1.10、ADR-001～010 已写完。
 - GitHub 仓库已创建：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
 - 本地 initial commit 与文档规范化 commit 已推送到 `origin/main`（2026-10-26）。
 - `.env`、洛琪希参考图、`tmp/` 已由 `.gitignore` 排除；仓库只提交 `.env.example`。
@@ -55,14 +55,14 @@
 - 角色换姿势已改为双层交叉淡入 + 横移（180ms），字幕和卡片同步短淡入；参考片实测换姿势约 0.2 秒，不是硬切。
 - M1.1 API/DB 骨架已完成：`compose.infra.yml`、FastAPI 应用、SQLAlchemy 模型、Alembic 初始迁移；`/health` 正常，7 条测试通过。
 - M1.2 队列/状态机/渲染 worker 骨架已完成：`outbox_event` + dispatcher、`app/workflow/`（Celery 路由、状态机、render_service、render_tasks）、`render.shot` 按镜头并行、`render.concat` 回写 episode；eager 模式单镜头 0.5 秒端到端输出 MP4。
-- M1.2 API：`PUT /episodes/{id}/render-spec`、`POST /episodes/{id}/actions/render`，以及 confirm-topic/confirm-script/cancel/publish 状态闸口；`Episode.render_spec` 是 M1.2 的临时手工 spec，等 M2/M3 生成分镜后替换。
+- M1.2 API：`PUT /episodes/{id}/render-spec`、`POST /episodes/{id}/actions/render`，以及 confirm-script/cancel/publish 状态闸口；`Episode.render_spec` 是 M1.2 的临时手工 spec，等 M3 生成分镜后替换。
 - M1.2 渲染增强：`CharacterSpec` 增加 `anchor_x/anchor_y/scale`；新增公开 `character_packs/placeholder/` 与 `specs/demo_placeholder.json`；golden frame 回归测试；当前 42 条测试通过（含 M2/M3/资产层）。
 - 本机 Docker 已启动；Postgres 17 + RabbitMQ 4.4 + Redis 7 实机联调通过：API → outbox → Celery → 3 镜头 6.00 秒占位成片 READY。
 - RabbitMQ 4.4 默认禁止 Celery 的临时非独占回复队列，`infra/rabbitmq.conf` 已开启 `deprecated_features.permit.transient_nonexcl_queues`；Celery 升级后复查。
-- M2 脚本 Agent 已跑通：LangGraph `script_graph`（outline → sections → lines → validate → repair ≤2 次），DeepSeek `deepseek-flash`，产物写入 `script_line` + `episode.script_meta`。
-- M2 API：confirm-topic 转 SCRIPTING 并投 `script.generate`；`GET /episodes/{id}/script`、`PATCH /script-lines/{id}`、`POST /episodes/{id}/script/validate`、confirm-script（校验通过才进 STORYBOARDING）、retry/regenerate-script。
-- M2 实测：真实 DeepSeek 生成 30 句 / 347 字 / 校验通过；假 LLM 任务入库 24 句、状态 SCRIPT_REVIEW、node SUCCESS。
-- M2 暂用 `MemorySaver`；Postgres checkpointer、模型自检（F-10 的语气/事实检查）和 `model_call_log` 成本表还没接。
+- 脚本来源已改为文章导入 Agent：DeepSeek 理解长文，按 series 章节标签生成问题式小标题、章节目标和逐句口播，产物写入 `script_line` + `episode.script_meta`；`POST /episodes/{id}/actions/import-script` 支持最多 30000 字，导入后进入 SCRIPT_REVIEW。
+- 文稿润色 Agent：`POST /episodes/{id}/actions/optimize-script` 在 SCRIPT_REVIEW 阶段做口语化润色，保持章节/句数/说话人不变，校验通过才写回。
+- 脚本 API：`GET /episodes/{id}/script`、`PATCH /script-lines/{id}`、`POST /episodes/{id}/script/validate`、confirm-script（校验通过才进 STORYBOARDING）。
+- 按主题自动生成脚本（`script_graph`、`script.generate`、confirm-topic、retry/regenerate-script）已于 2026-10-29 移除；历史实现见 §6。
 - M3 分镜 Agent 已跑通：`storyboard_graph` 按章节让 DeepSeek 选镜头，代码做 schema 归一化 + 确定性节奏修复（连续 3 同卡片、角色连续 5、章节末 icon/pure_text、时长 1.5–6s）。
 - M3 API：generate/retry/regenerate-storyboard、`GET /episodes/{id}/storyboard`、storyboard/validate、confirm-storyboard（进 VOICING）、`PATCH /shots/{id}`、build-render-spec。
 - M3 实测：29 句脚本生成 29 镜头、4 种卡片、角色占比 75.9%、节奏校验 valid；confirm 进 VOICING，build-render-spec 生成 29 镜头 spec，静帧已出图。
@@ -79,7 +79,7 @@
 - 资产分工（2026-10-27）：角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
 - 当前阶段仍以角色立绘为主；背景/舞台/演示物件可按需通过 Asset Agent 生成，不再固定暂停。
 - AI 主题扩展：需求新增 R-17～R-28（讲解指向/白板/敲键盘/调试翻车/灵光一现/怀疑审视等），核心 6 个提示词在 `character_packs/roxy/ai_pose_prompts.md`（本地）。背景已出纸纹 + 木地板；道具在生成中。
-- 代码：已有 `app/render`、`app/api`、`app/models`、`app/workflow`；尚无 agents/media-worker、Web 前端与 SSE。
+- 代码：`app/agents`、`app/voice`、`app/qc`、`app/render`、`app/workflow`、`web/` 均已落地；SSE 与登录权限未接。
 
 ---
 
@@ -87,11 +87,11 @@
 
 ### 2.1 立即
 
-1. **确认 initial commit 已推到 GitHub**：`git status -sb` 应显示 `main...origin/main`；没有就 `git push -u origin main`。
-2. **确认运行环境**：本机 Docker Desktop/WSL2 是否可用；VM 是否已挂 ≥200GB 数据盘；8080/8443/9100/9101 是否空闲。
-3. **进入 M5.2 成本与监控**：M5.1 已闭环绕过局部修改/续跑/发布包；下一步补 token/TTS 成本报表、告警和运维面板。也可以先跑一期完整 29 句做规模验收。
-4. **M3 分镜 Agent + 资产复用已完成**：真实脚本生成 29 镜头、节奏校验通过；半身反应镜头与章首滑入已接入；下一步补 P1 多模态分镜评审或批量生成背景/道具。
-5. **M1.2 实机已验证**：`docker compose -f compose.infra.yml up -d` 起 Postgres/RabbitMQ/Redis，按 §4.2.2 启动 worker（加 `agent` 队列）、beat、API，再用 `scripts/demo/queue_demo_render.py` 验证渲染链路。
+1. **验证取消/删除**：在运行中的期点「取消」，确认状态转 CANCELLED、后续 media/render 任务不再重试；再删除一期，确认关联行清理且 `output/` 成片保留。
+2. **重启本机服务**：API / Celery worker / beat 需要加载新代码（已移除 `script.generate`，新增 cancel/delete 路由）。
+3. **进入 M5.2 成本与监控**：M5.1 已闭环局部修改/续跑/发布包；下一步补 token/TTS 成本报表、告警和运维面板。
+4. **M3 P1 待补**：多模态分镜评审、物件/卡片同组位移。
+5. **VM 部署**：数据盘 ≥200GB，按 §4.4 起 `roxy-vm` 栈。
 
 ### 2.2 M1：渲染链路打通
 
@@ -129,14 +129,14 @@
 **M1.2 已完成（2026-10-28）：**
 
 - Celery 队列路由 + `outbox_event` + dispatcher（beat 每 5 秒补投）。
-- 状态机与人工闸口 API：confirm-topic / confirm-script / cancel / publish。
+- 状态机与人工闸口 API：confirm-script / cancel / publish（confirm-topic 已于 2026-10-29 移除）。
 - `render.episode` 拆分为 `render.shot` 按镜头并行，`render.concat` 拼接并回写 episode；eager 模式单镜头端到端输出 0.5 秒 MP4。
 - `anchor_x/anchor_y/scale`；公开 placeholder pack + `specs/demo_placeholder.json`；golden frame 回归测试。
 - 当前 42 条测试通过（含 M2/M3/资产层）。
 
 ### 2.3 M1 之后再动
 
-- **M2**：`script_graph`（LangGraph），DeepSeek `deepseek-flash` 生成大纲/分段/逐句。**已完成**；待补 Postgres checkpointer、模型自检、成本日志、章级重生成。
+- **脚本**：文章导入 + 文稿润色 Agent 已完成；按主题 `script_graph` 已移除。模型自检、成本日志归入 M5.2。
 - **M3**：`storyboard_graph` + 节奏规则；Seedream 素材 Agent + 人工入库。**分镜与节奏、半身反应/章首滑入已完成**；Seedream 批量生成、物件/卡片同组位移待补。
 - **M4**：TTS/对齐/质检；视觉质检先用 DOM 规则。
 - **M5**：局部重渲染、断点续跑、成本报表。
@@ -146,7 +146,7 @@
 | 编号 | 问题 | 现状/建议 |
 |---|---|---|
 | Q-05 | 2 期并行是否 M1 硬指标 | 先按单期串行；资源足够再开 2 期 |
-| Q-06 | `TOPIC_CONFIRMED` 语义 | 按“选题已确认”实现，评审时确认 |
+| Q-06 | `TOPIC_CONFIRMED` 语义 | 按主题生成已移除；该状态仅为历史枚举，新期从 DRAFT 直接导入文稿 |
 | Q-07 | 字幕与镜头是否严格 1:1 | 数据模型支持 1:N；MVP 先 1:1 |
 | Q-08 | 是否自动上传平台 | 非目标；先做本地发布包 |
 | Q-11 | Seedream 1080×1920 / 参考图 | 已确认 1024×1024 可用；立绘尺寸与参考图输入待测 |
@@ -156,7 +156,7 @@
 
 ## 3. 项目结构
 
-当前仓库（M1 渲染 + M1.1 API/DB）：
+当前仓库（全部模块）：
 
 ```text
 roxy_pipline/
@@ -187,13 +187,12 @@ roxy_pipline/
 ├─ app/
 │  ├─ api/                         # FastAPI app + routes
 │  ├─ agents/                      # 所有智能体
-│  │  ├─ script/                   # M2 脚本 Agent
-│  │  │  ├─ graph.py               # outline → sections → lines → validate → repair
+│  │  ├─ script/                   # 文章导入 + 文稿润色 Agent
+│  │  │  ├─ importer.py            # 长文导入：章节/问题/台词结构化
+│  │  │  ├─ optimizer.py           # 文稿口语化润色
 │  │  │  ├─ validation.py
-│  │  │  ├─ service.py
 │  │  │  ├─ utils.py               # 脚本读取/校验/保存
-│  │  │  ├─ prompts.py
-│  │  │  └─ tasks.py               # script.generate
+│  │  │  └─ prompts.py
 │  │  ├─ storyboard/               # M3 分镜 Agent
 │  │  │  ├─ graph.py
 │  │  │  ├─ grammar.py
@@ -230,7 +229,7 @@ roxy_pipline/
 │  │  └─ tasks.py                  # render.episode/shot/concat
 │  ├─ assets/                      # 资产持久化/复用
 │  ├─ providers/                   # llm / tts 适配层
-│  ├─ workflow/                    # Celery、outbox、状态机、resume/revision
+│  ├─ workflow/                    # Celery、outbox、状态机、cancel、resume/revision
 │  ├─ core/config.py
 │  ├─ db/                          # Base + async session
 │  ├─ models/core.py
@@ -239,7 +238,7 @@ roxy_pipline/
 ├─ alembic.ini
 ├─ compose.infra.yml               # Postgres/RabbitMQ/Redis/MinIO
 ├─ prompts/
-│  ├─ script/                      # system/outline/sections/lines/repair
+│  ├─ script/                      # system/article/optimize
 │  └─ storyboard/                  # system/generate
 ├─ templates/
 │  ├─ stage/                       # stage.html/css/renderer.js
@@ -247,6 +246,10 @@ roxy_pipline/
 ├─ specs/
 │  ├─ demo_episode.json            # 3 镜头 12 秒 demo（本地素材）
 │  └─ demo_placeholder.json        # 3 镜头 6 秒公开 demo（placeholder 素材）
+├─ web/                            # React + Vite + Ant Design 控制台
+│  ├─ src/pages/                   # 总览 / 视频期 / 详情 / 资产库
+│  ├─ src/api.ts                   # API client
+│  └─ vite.config.ts               # /api、/health 代理到 8000
 ├─ tests/
 │  ├─ conftest.py
 │  ├─ test_timeline.py
@@ -257,7 +260,8 @@ roxy_pipline/
 │  ├─ test_stage_anchor.py
 │  ├─ test_render_golden.py
 │  ├─ test_script_validation.py
-│  ├─ test_script_graph.py
+│  ├─ test_script_importer.py
+│  ├─ test_script_optimizer.py
 │  ├─ test_script_api.py
 │  ├─ test_storyboard_rhythm.py
 │  ├─ test_storyboard_graph.py
@@ -289,10 +293,10 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 | 用途 | 配置 | 状态 |
 |---|---|---|
 | 文本/代码主模型 | `DEEPSEEK_MODEL=deepseek-flash` | ✅ 可用 |
-| M2 脚本生成 | `DEEPSEEK_MODEL=deepseek-flash` + `prompts/script/` | ✅ 真实调用已验证 |
+| 文章导入/润色 | `DEEPSEEK_MODEL=deepseek-flash` + `prompts/script/` | ✅ 真实调用已验证 |
 | 文本备选/A-B | `ARK_MODEL_STRONG=doubao-seed-2-1-pro-260915` | ✅ 可用 |
 | 图像素材 | `ARK_IMAGE_MODEL=doubao-seedream-5-0-pro-260628` | ✅ 可用（原创角色/背景；洛琪希会被版权过滤） |
-| 视觉质检 | `ARK_MODEL_VISION` | ❌ 无可用模型；先 DOM 规则 |
+| 视觉质检 | `DEEPSEEK_MODEL=deepseek-flash` 多模态 | ✅ 图片直传/视频抽帧 |
 | TTS | `TTS_PROVIDER=indextts2` + `data/assets/voice/indextts2/` | ✅ 本地可用（IndexTTS2 zero-shot） |
 
 - DeepSeek Base URL：`https://api.deepseek.com`
@@ -336,22 +340,24 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - `-c` 是同时渲染的 Chromium 数量：2 vCPU/2GB 先 `-c 1`，4 核以上再 `-c 2`。
 - media worker 常驻 IndexTTS2（GPU），并发必须为 1；Windows 调试同样加 `--pool=solo`。
 - Windows 本机 Celery 默认 prefork 不可用：调试加 `--pool=solo`（单并发）；并行渲染在 Ubuntu VM 上用默认 prefork `-c N`。
-- 队列：`workflow`（状态推进/outbox 补投）、`agent`（`script.generate` / `storyboard.generate` / `qc.episode`）、`media`（`voice.episode` / `align.episode`）、`render`（`render.episode` / `render.shot` / `render.concat`）。
+- 队列：`workflow`（状态推进/outbox 补投）、`agent`（`storyboard.generate` / `qc.episode`）、`media`（`voice.episode` / `align.episode`）、`render`（`render.episode` / `render.shot` / `render.concat`）。
 - 触发真实队列渲染：`uv run python scripts/demo/queue_demo_render.py --base-url http://localhost:8000`。
 - beat 每 5 秒执行 `workflow.dispatch_outbox`，把 PENDING 事件投到 RabbitMQ；失败按指数退避，5 次后置 FAILED。
 - `CELERY_TASK_ALWAYS_EAGER=true` 只用于任务级测试；在 async dispatcher 里同步执行 task 会和事件循环冲突。
 - 本机实测（2026-10-28）：`queue_demo_render.py` 3 镜头 6.00 秒成片，outbox DISPATCHED、episode READY、node_run SUCCESS；worker 用 `--pool=solo`。
 - MinIO 不是 M1.2 必需；`docker compose -f compose.infra.yml --profile storage up -d` 单独启动（`minio/mc` 镜像拉取失败时先跳过）。
 
-### 4.2.3 脚本 Agent（M2）
+### 4.2.3 文章导入与文稿润色（取代 M2 主题生成）
 
-- `POST /api/v1/episodes/{id}/actions/confirm-topic` 是人工闸口 1：DRAFT → TOPIC_CONFIRMED → SCRIPTING，投 `script.generate` 到 `agent` 队列。
-- worker 必须消费 `agent` 队列；只跑 `-Q workflow,render` 会让脚本任务一直 PENDING。
+- 唯一的脚本来源是文章导入：`POST /api/v1/episodes/{id}/actions/import-script`，body 为 `{article, optimize, instructions}`；最多 30000 字（`SCRIPT_ARTICLE_MAX_CHARS`）。
+- 导入同步调用 DeepSeek（不投队列），按 series 章节标签生成问题式小标题、章节目标和逐句台词；写 `script_line`，`episode.script_meta` 记录 summary/outline/article_chars/validation。
+- 导入后进入 SCRIPT_REVIEW；校验不通过会保留稿件并标 WARNING，`confirm-script` 仍返回 409。
+- 润色：`POST /api/v1/episodes/{id}/actions/optimize-script`（`{apply, instructions}`），保持章节/句数/说话人不变，校验通过才写回，`script_meta.optimization` 记录修改句数。
 - 查看脚本：`GET /api/v1/episodes/{id}/script`；编辑单句：`PATCH /api/v1/script-lines/{line_id}`；重新校验：`POST /api/v1/episodes/{id}/script/validate`。
-- `POST /api/v1/episodes/{id}/actions/confirm-script` 会先跑确定性校验，不通过返回 409；通过才进 STORYBOARDING。
-- 失败重跑：`POST /api/v1/episodes/{id}/actions/retry-script`；整份重生成：`POST /api/v1/episodes/{id}/actions/regenerate-script`。
-- Prompt 在 `prompts/script/`；prompt 文件 hash 与 `script-graph-1` 会进入 `NodeRun.input_hash`。
-- 当前 checkpointer 是 `MemorySaver`；worker 重启后同一 thread 的图状态不保留，但 `script_line` / `script_meta` 已落库。
+- `POST /api/v1/episodes/{id}/actions/confirm-script` 通过后进 STORYBOARDING。
+- Prompt 在 `prompts/script/article.md` 与 `prompts/script/optimize.md`。
+- 取消：`POST /api/v1/episodes/{id}/actions/cancel` 把状态转 CANCELLED；media/render/QC 任务在检查点抛 `TaskCancelled` 停止重试。
+- 删除：`DELETE /api/v1/episodes/{id}`，运行中状态返回 409，只清 DB 关联行，不动 `output/` 与 MinIO 成片。
 
 ### 4.2.4 分镜 Agent（M3）
 
@@ -472,6 +478,42 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 
 ## 6. 历史记录
 
+### 2026-10-29 · 取消/删除 + 移除按主题生成
+
+- 取消：`POST /episodes/{id}/actions/cancel` 转 CANCELLED；`app/workflow/cancel.py` 提供 `TaskCancelled` 与 `ensure_not_cancelled()`，voice/align/qc/render 任务在关键步骤检查；取消后任务不重试。
+- 删除：新增 `DELETE /api/v1/episodes/{id}`；运行中状态（SCRIPTING/STORYBOARDING/VOICING/ALIGNING/RENDERING/QC）返回 409，其他状态清理 Review/LineAudio/OutboxEvent/NodeRun/Shot/ScriptLine 后删除期；不动 `output/` 与 MinIO 成片。
+- 前端视频期列表与详情页增加取消/删除；运行中显示节点进度、阶段百分比和耗时，3 秒轮询并自动刷新。
+- 移除按主题生成脚本：删除 `app/agents/script/graph.py`、`service.py`、`tasks.py`、`tests/test_script_graph.py` 与 outline/sections/lines/repair prompts；移除 confirm-topic、retry-script、regenerate-script 路由和 `script.generate` Celery 路由。
+- 脚本唯一来源改为文章导入 + 可选润色；CLAUDE/README/架构文档同步。
+- 后端 67 条测试通过；前端 `npm run build` 通过。
+
+### 2026-10-29 · 文章导入与文稿润色 Agent
+
+- 新增 `POST /episodes/{id}/actions/import-script`：导入最多 30000 字长文，DeepSeek 先理解文章，再按 series 章节标签生成问题式小标题、章节目标和逐句口播；可自动调用润色 Agent。
+- 导入后进入 `SCRIPT_REVIEW`；校验不通过会标记 WARNING，`confirm-script` 仍会拦截，避免直接进入分镜。
+- `script_meta` 记录 summary、outline、article_chars、validation 和可选润色结果；对话/长文超时或解析失败会回退原状态。
+- 新增 `app/agents/script/importer.py` 与 `prompts/script/article.md`；前端视频期页增加「导入文稿」弹窗，支持粘贴和 `.txt`/`.md` 上传。
+- 新增 `app/agents/script/optimizer.py`：在 SCRIPT_REVIEW 阶段读取现有台词，调用 DeepSeek 做口语化润色；保持章节、句数、说话人不变，鼓励生活例子、具体动作和洛琪希语气变化。
+- 新增 `POST /episodes/{id}/actions/optimize-script`，支持 `apply` 和补充 `instructions`；润色结果必须通过原有脚本校验才会写回，`script_meta.optimization` 记录修改句数和模型。
+- 前端脚本页增加“润色文稿”按钮；真实全流程稿副本实测修改 13 句、校验通过。
+- 当时 `optimize.md` 不参与 `script.generate` 的 prompt_hash；`script.generate` 已于同日移除，缓存键逻辑不再适用。
+
+### 2026-10-29 · Web 控制台
+
+- 新增 `web/`：React 18 + Vite + TypeScript + Ant Design，Vite 代理 `/api` 与 `/health` 到本地 8000。
+- 页面：总览统计、视频期列表/创建、期详情（概览、脚本、分镜、配音对齐、QC、发布包）、资产库（按文稿/文本生成、审批、检查）。
+- 期详情可直接触发确认选题、脚本/分镜确认、配音、对齐、QC、渲染、发布包和发布；脚本/镜头支持编辑。
+- 用本地 API + 全流程演示库实际打开并截图验证；`npm run build` 通过。
+- 当前未接 SSE/登录权限；API 地址通过 Vite 代理或 `VITE_API_BASE` 配置。
+
+### 2026-10-29 · 全流程真实验收
+
+- 用独立 SQLite 库跑通完整链路：DeepSeek 脚本 Agent → 分镜 Agent → IndexTTS2 逐句配音 → 中文 wav2vec2 字级对齐 → 18 镜头渲染 → QC → 发布包。
+- 真实结果：18 句 / 18 镜头，成片 50.68 秒、1920×1080/25fps、48kHz AAC；QC PASS，发布状态 PUBLISHED。
+- 输出：`output/20261029-192127_916fd598/episode.mp4`，MinIO `s3://roxy-output/episodes/20261029-192127_916fd598/episode.mp4`；发布包在 `tmp/full_run_packages/916fd598-b985-4b9e-983a-2d054b127abf/`。
+- 首轮 QC 发现卡片固定右上、角色站右侧时压住脸部/文字；已改为卡片自动放到角色对侧并翻转聊天气泡尾巴，重渲染后 QC 0 error / 0 warning。
+- 渲染缓存新增 `renderer_version` 参与 shot hash，模板/布局变化不会误复用旧片段。
+
 ### 2026-10-29 · 视觉补全与最终输出/MinIO
 
 - 半身反应镜头：`load_character_assets` 不再排除 `pose=bust`；分镜提示词允许在强调/吐槽句选 bust；`spec_builder` 通过 `_bust_` 识别，设 `anchor_y=0`、高度 1000px。
@@ -489,6 +531,7 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 - 生成：`app/providers/imagegen.py` 封装 Seedream；新图默认 CANDIDATE，写入 `data/assets`；可选 DeepSeek 图片检查，`auto_approve=true` 且检查通过才直接 APPROVED。
 - API：`POST /api/v1/assets/generate`，支持 `text/asset_type/count/auto_approve/check/force`；`IMAGE_PROVIDER=mock` 可离线跑通流程。
 - 实测：真实 DeepSeek 规划出 `prop:prism-white-light-dispersion`，mock 图片入库；第二次同文本命中现有候选，不重复生成。
+- 按文稿入口：`POST /episodes/{id}/actions/generate-assets` 读取该期 `script_line` 的标题/主题/章节/台词作为 Agent 输入，生成资产 meta 记录 `episode_id`；不再脱离文稿自由生成。
 - 暂不引入 RAG：当前资产量小，先用“现有资产上下文 + reuse_key 精确命中”；资产规模或复用命中率需要时再加轻量检索。
 - 测试：新增 3 条资产 Agent 测试，全套 60 条通过。
 

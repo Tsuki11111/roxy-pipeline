@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
-from app.models.core import Episode, EpisodeStatus, NodeRun, OutboxEvent, ScriptLine
-from app.workflow.outbox import queue_for
+from app.models.core import Episode, EpisodeStatus, ScriptLine
 
 LABELS = ["问题", "解决", "结尾"]
 
@@ -36,25 +35,6 @@ async def seed_lines(session, episode_id: str) -> list[ScriptLine]:
     session.add_all(lines)
     await session.commit()
     return lines
-
-
-async def test_confirm_topic_queues_script(client, episode, session):
-    _, ep = episode
-    response = await client.post(f"/api/v1/episodes/{ep['id']}/actions/confirm-topic")
-    assert response.status_code == 202, response.text
-    accepted = response.json()
-    assert accepted["node_key"] == "script.generate"
-    assert accepted["status"] == "SCRIPTING"
-
-    event = await session.scalar(select(OutboxEvent))
-    assert event is not None
-    assert event.event_type == "script.generate"
-    assert queue_for("script.generate") == "agent"
-
-    node = await session.get(NodeRun, accepted["operation_id"])
-    assert node is not None
-    assert node.node_key == "script.generate"
-    assert node.status == "PENDING"
 
 
 async def test_get_script_and_confirm_script(client, episode, session):

@@ -29,6 +29,7 @@ from app.models.core import (
 from app.providers.tts import build_tts_provider
 from app.agents.storyboard.render_spec import build_episode_render_spec
 from app.workflow.celery_app import celery_app
+from app.workflow.cancel import TaskCancelled, ensure_not_cancelled
 from app.workflow.db import run_async, task_session
 from app.render.service import start_render
 from app.workflow.state_machine import transition_episode
@@ -115,6 +116,7 @@ async def _voice_episode(episode_id: str, node_run_id: str) -> None:
         cursor_ms = 0
 
         for line in lines:
+            await ensure_not_cancelled(session, episode_id)
             shot = shot_by_line.get(line.id)
             if shot is None:
                 raise RuntimeError(f"script line {line.seq} has no shot")
@@ -288,6 +290,9 @@ async def _voice_episode(episode_id: str, node_run_id: str) -> None:
 def voice_episode_task(self, episode_id: str, node_run_id: str):
     try:
         run_async(_voice_episode(episode_id, node_run_id))
+    except TaskCancelled:
+        run_async(_mark_failed(episode_id, node_run_id, "cancelled"))
+        raise
     except Exception as exc:
         logger.exception("voice generation failed episode=%s", episode_id)
         if self.request.retries < self.max_retries:

@@ -16,7 +16,6 @@ celery_app.conf.update(
     imports=(
         "app.workflow.tasks",
         "app.render.tasks",
-        "app.agents.script.tasks",
         "app.agents.storyboard.tasks",
         "app.voice.tasks",
         "app.voice.align_tasks",
@@ -26,7 +25,6 @@ celery_app.conf.update(
     task_routes={
         "workflow.dispatch_outbox": {"queue": "workflow"},
         "workflow.reconcile_nodes": {"queue": "workflow"},
-        "script.generate": {"queue": "agent"},
         "storyboard.generate": {"queue": "agent"},
         "voice.episode": {"queue": "media"},
         "align.episode": {"queue": "media"},
@@ -49,7 +47,6 @@ celery_app.conf.update(
     task_annotations={
         "workflow.dispatch_outbox": {"soft_time_limit": 60, "time_limit": 120},
         "workflow.reconcile_nodes": {"soft_time_limit": 60, "time_limit": 120},
-        "script.generate": {"soft_time_limit": 300, "time_limit": 330},
         "storyboard.generate": {"soft_time_limit": 300, "time_limit": 330},
         "voice.episode": {"soft_time_limit": 3600, "time_limit": 3900},
         "align.episode": {"soft_time_limit": 1800, "time_limit": 2100},
@@ -73,7 +70,6 @@ celery_app.conf.update(
 # Register tasks for eager mode and for processes that only import the app.
 from app.qc import tasks as _qc_tasks  # noqa: E402,F401
 from app.render import tasks as _render_tasks  # noqa: E402,F401
-from app.agents.script import tasks as _script_tasks  # noqa: E402,F401
 from app.agents.storyboard import tasks as _storyboard_tasks  # noqa: E402,F401
 from app.voice import align_tasks as _align_tasks  # noqa: E402,F401
 from app.voice import tasks as _voice_tasks  # noqa: E402,F401

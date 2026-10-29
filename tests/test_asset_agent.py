@@ -4,16 +4,21 @@ from pathlib import Path
 
 from PIL import Image
 
-from app.agents.asset.service import generate_assets_from_text
+from app.agents.asset.service import (
+    generate_assets_for_episode,
+    generate_assets_from_text,
+)
 from app.core.config import get_settings
-from app.models.core import Asset, AssetStatus, AssetType
+from app.models.core import Asset, AssetStatus, AssetType, ScriptLine
 
 
 class FakeLLM:
     def __init__(self, reuse_key: str = "prop:prism") -> None:
         self.reuse_key = reuse_key
+        self.user_prompt = ""
 
     async def chat_json(self, system, user, *, temperature=0.7, max_tokens=2000):
+        self.user_prompt = user
         return {
             "assets": [
                 {
@@ -96,6 +101,47 @@ async def test_asset_agent_generates_candidate(
     assert item["asset"].status == AssetStatus.CANDIDATE
     assert item["asset"].source == "asset_agent"
     assert Path(item["asset"].path).is_file() or (tmp_path / item["asset"].path).is_file()
+
+
+async def test_asset_agent_uses_episode_script(
+    episode, session, tmp_path, monkeypatch
+):
+    _, ep = episode
+    _settings(tmp_path, monkeypatch)
+    session.add_all(
+        [
+            ScriptLine(
+                episode_id=ep["id"],
+                seq=1,
+                speaker="narrator",
+                section="问题",
+                text="为什么天空是蓝色的？",
+                char_count=9,
+            ),
+            ScriptLine(
+                episode_id=ep["id"],
+                seq=2,
+                speaker="narrator",
+                section="解决",
+                text="蓝光更容易被空气分子散射。",
+                char_count=13,
+            ),
+        ]
+    )
+    await session.commit()
+
+    llm = FakeLLM("prop:episode-prism")
+    result = await generate_assets_for_episode(
+        session,
+        ep["id"],
+        check=False,
+        llm=llm,
+        image_provider=FakeImageProvider(),
+    )
+    assert "为什么天空是蓝色的？" in llm.user_prompt
+    assert "蓝光更容易被空气分子散射。" in llm.user_prompt
+    assert result["episode_id"] == ep["id"]
+    assert result["items"][0]["asset"].meta["episode_id"] == ep["id"]
 
 
 async def test_asset_agent_api(client, session, tmp_path, monkeypatch):

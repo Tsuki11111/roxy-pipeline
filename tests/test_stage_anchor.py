@@ -22,6 +22,14 @@ def test_stage_payload_carries_anchor():
     assert character["scale"] == 1.0
 
 
+def test_stage_card_moves_opposite_character():
+    raw = json.loads(SPEC_PATH.read_text(encoding="utf-8"))
+    raw["shots"][0]["character"]["position"] = "right"
+    spec = EpisodeSpec.model_validate(raw)
+    payload = build_stage_payload(spec, build_timeline(spec))
+    assert payload["shots"][0]["card_side"] == "left"
+
+
 def test_character_anchor_validation():
     with pytest.raises(ValidationError):
         CharacterSpec(image="x.png", anchor_x=1.5)

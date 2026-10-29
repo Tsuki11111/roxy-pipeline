@@ -1,0 +1,227 @@
+:root {
+  color-scheme: light;
+  background: #f4f3ef;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 80% 0%, rgba(109, 93, 252, 0.08), transparent 30%),
+    #f4f3ef;
+  color: #26252b;
+}
+
+a {
+  color: #5b4ee8;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-sider {
+  background: #1e1d2a !important;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 72px;
+  padding: 0 20px;
+  color: #fff;
+  text-decoration: none;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #8b7bff, #4338ca);
+  color: #fff;
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: 0.02em;
+}
+
+.brand-text small {
+  margin-top: 3px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.app-menu {
+  background: transparent !important;
+  border-inline-end: none !important;
+}
+
+.app-menu .ant-menu-item {
+  margin: 6px 12px;
+  width: calc(100% - 24px);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.app-menu .ant-menu-item-selected {
+  background: rgba(139, 123, 255, 0.2) !important;
+  color: #fff !important;
+}
+
+.app-header {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 86px;
+  padding: 0 34px;
+  background: rgba(255, 255, 255, 0.72) !important;
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(38, 37, 43, 0.08);
+}
+
+.header-kicker {
+  color: #7d7a88;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+}
+
+.header-title {
+  margin: 2px 0 0 !important;
+  color: #292735 !important;
+}
+
+.app-content {
+  padding: 26px 34px 46px;
+}
+
+.page-stack {
+  width: 100%;
+}
+
+.page-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.page-heading > .ant-space {
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+.page-heading .ant-tag {
+  white-space: nowrap;
+}
+
+.page-heading h2 {
+  margin-top: 0 !important;
+  margin-bottom: 4px !important;
+  letter-spacing: -0.02em;
+}
+
+.page-heading .ant-typography {
+  margin-bottom: 0;
+}
+
+.back-link {
+  padding-left: 0;
+}
+
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(38, 37, 43, 0.06);
+  box-shadow: 0 12px 30px rgba(36, 32, 58, 0.06);
+}
+
+.stat-card::after {
+  content: "";
+  position: absolute;
+  right: -18px;
+  top: -24px;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.08;
+}
+
+.stat-violet {
+  color: #6d5dfc;
+}
+
+.stat-amber {
+  color: #d97706;
+}
+
+.stat-green {
+  color: #15803d;
+}
+
+.stat-blue {
+  color: #0369a1;
+}
+
+.ant-card {
+  border: 1px solid rgba(38, 37, 43, 0.07);
+  box-shadow: 0 10px 30px rgba(36, 32, 58, 0.04);
+}
+
+.ant-table {
+  background: transparent;
+}
+
+.detail-tabs .ant-tabs-nav {
+  margin-bottom: 16px;
+}
+
+.progress-card {
+  background: linear-gradient(120deg, #f7f4ff, #fffdf7);
+  border-color: rgba(109, 93, 252, 0.18);
+}
+
+.progress-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.progress-head > div {
+  flex: 1;
+}
+
+.progress-card .ant-progress {
+  margin-bottom: 6px;
+}
+
+.compact-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+@media (max-width: 900px) {
+  .app-content {
+    padding: 18px;
+  }
+
+  .app-header {
+    padding: 0 18px;
+  }
+}

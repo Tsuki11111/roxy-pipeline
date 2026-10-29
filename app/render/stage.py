@@ -42,6 +42,11 @@ def build_stage_payload(spec: EpisodeSpec, timeline: Timeline) -> dict:
                 "section_index": item.section_index,
                 "character": character,
                 "card_html": render_card(shot.card),
+                "card_side": (
+                    "left"
+                    if character is not None and character["position"] == "right"
+                    else "right"
+                ),
                 "bg": asset_url(shot.bg) if shot.bg else None,
                 "floor": asset_url(shot.floor) if shot.floor else None,
                 "subtitle_chunks": [

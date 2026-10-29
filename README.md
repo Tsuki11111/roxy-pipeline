@@ -11,10 +11,10 @@
 [![LangGraph](https://img.shields.io/badge/LangGraph-AI%20subgraphs-1C3C3C)]()
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)]()
 
-**AI 科普视频自动生成 Agent 系统**：从选题、脚本、分镜，到逐句 TTS、卡片/逐帧渲染、ffmpeg 拼接和质检的全自动流水线。
+**AI 科普视频自动生成 Agent 系统**：从文章导入、AI 拆解润色、分镜，到逐句 TTS、卡片/逐帧渲染、ffmpeg 拼接和质检的全自动流水线。
 
 **定位**：个人自用项目；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守[需求文档第 11 章](docs/AI科普视频Agent系统需求分析文档.md)。
-**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用 + Asset Agent + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包/最终视频输出已跑通；下一步成本报表与监控。
+**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产持久化/复用 + Asset Agent + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包 + Web 控制台已跑通；按主题自动生成脚本的功能已移除，下一步成本报表与监控。
 
 ---
 
@@ -56,7 +56,7 @@
    重试/补偿   脚本/分镜/QC   音频装配      素材候选      + ffmpeg
 ```
 
-流水线：**选题 → 脚本 → 分镜 → TTS → 对齐 → 卡片 → 镜头 → 拼接 → 质检 → 发布包**。
+流水线：**文章导入 → AI 脚本/润色 → 分镜 → TTS → 对齐 → 卡片 → 镜头 → 拼接 → 质检 → 发布包**。
 
 **四条边界：**
 
@@ -74,7 +74,7 @@
 | 仓库初始化 + 文档规范化 | ✅ 2026-10-26 |
 | M1 渲染链路 + M1.1 API/DB | 🚧 渲染原型与 API/DB 骨架已跑通 |
 | M1.2 队列/状态机/render worker | ✅ outbox + Celery `render.shot` 并行 + `render.concat`；真实 RabbitMQ 验证 |
-| M2 脚本 Agent（LangGraph） | ✅ `script_graph` + DeepSeek `deepseek-flash` + 脚本校验/编辑/确认 |
+| 文章导入/文稿优化 Agent | ✅ DeepSeek 理解长文、拆章节问题、生成台词、润色；不再按主题自动生成脚本 |
 | M3 分镜 Agent + 节奏规则 | ✅ `storyboard_graph` + 确定性节奏修复；半身反应镜头/章首滑入已接入，Seedream 素材按需生成 |
 | M3.1 资产持久化/复用 | ✅ `asset` 表 + `data/assets` + `reuse_key`；生成前查重，生成后入库 |
 | Asset Agent | ✅ 文本→无文字演示素材；优先 `reuse_key` 复用，缺失才调 Seedream |
@@ -83,6 +83,7 @@
 | M4.2 字级对齐 | ✅ 中文 wav2vec2 强制对齐；字幕块按字级时间锚点显隐 |
 | M4.3 质检与报告 | ✅ 规则前置 + DeepSeek 抽帧质检；review 表与 QC API |
 | M5.1 局部修改/续跑/发布包 | ✅ 单句修订、镜头缓存、通用续跑、stale reconciler、本地发布包、时间戳输出目录 + MinIO |
+| Web 控制台 | ✅ 总览、视频期流程动作、脚本/分镜/音频/QC/发布包、资产生成与审批 |
 | M5.2 成本与监控 | ⏳ token/TTS 成本报表、告警与运维面板 |
 
 ## 环境隔离
@@ -175,12 +176,14 @@ uv run python scripts/demo/queue_demo_render.py --base-url http://localhost:8000
 uv run python scripts/demo/render_demo.py --spec specs/demo_placeholder.json --out tmp/render_demo/placeholder.mp4
 ```
 
-### M2 脚本生成
+### 文稿导入与润色
 
-确认选题会转 `SCRIPTING` 并投递 `script.generate` 到 `agent` 队列：
+不再按主题自动生成脚本；视频期通过「导入文稿」创建，或对已有空期调用导入接口：
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/confirm-topic
+curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/import-script \
+  -H "Content-Type: application/json" \
+  -d '{"article":"完整文章正文...","optimize":true}'
 ```
 
 查看/校验脚本：
@@ -189,13 +192,26 @@ curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/confirm-
 curl http://localhost:8000/api/v1/episodes/<episode_id>/script
 ```
 
-校验通过后确认脚本进入分镜阶段：
+校验通过后可以先润色文稿：保持章节/句数/说话人不变，把旁白改得更口语、增加生活例子，让洛琪希语气更丰富：
+
+```bash
+curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/optimize-script \
+  -H "Content-Type: application/json" \
+  -d '{"apply":true}'
+```
+
+润色后必须重新通过同一套校验；不通过不会写回。确认脚本进入分镜阶段：
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/confirm-script
 ```
 
-脚本生成使用 `prompts/script/` 下的 Prompt 和 DeepSeek `deepseek-flash`；校验规则是单句 ≤25 字、洛琪希 ≤15 字、全文字数 ±10%、章节顺序与覆盖。
+脚本由 `prompts/script/article.md` 和 DeepSeek `deepseek-flash` 生成，润色用 `prompts/script/optimize.md`；校验规则是单句 ≤25 字、洛琪希 ≤15 字、全文字数 ±10%、章节顺序与覆盖。
+
+- 支持最多 30000 字；前端视频期页提供「导入文稿」按钮，可直接粘贴或上传 `.txt`/`.md`。
+- 导入后保持 series 的章节标签顺序，生成问题式小标题和逐句台词。
+- 自动跑脚本校验和可选润色；导入后进入 `SCRIPT_REVIEW`。校验不通过会标记 WARNING，`confirm-script` 仍会拦截，先修稿再确认。
+- 视频期列表和详情页都有「取消」，运行中状态也可 `POST /api/v1/episodes/{id}/actions/cancel`；「删除」只清数据库记录和关联行，不动 `output/` 和 MinIO 成片，运行中的期必须先取消再删。
 
 ### M3 分镜生成
 
@@ -258,6 +274,21 @@ curl -X POST http://localhost:8000/api/v1/assets/generate \
 - 不生成角色立绘、动漫人物或带文字的信息卡片。
 - 新图默认 `CANDIDATE`；`auto_approve=true` 且 DeepSeek 视觉检查通过时才直接 `APPROVED`。
 - `IMAGE_PROVIDER=mock` 可本地跑通流程，不调用 Seedream。
+- 按整期文稿生成时用 `POST /episodes/{id}/actions/generate-assets`：Agent 读取 `script_line` 的章节和台词，生成结果记录 `episode_id`，不是脱离文稿的自由生成。
+
+### Web 控制台
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+- 默认 `http://127.0.0.1:5173`，Vite 把 `/api` 和 `/health` 代理到 `http://127.0.0.1:8000`。
+- 页面：总览、视频期列表/详情、资产库。
+- 详情页可直接导入/润色文稿、生成与确认分镜、配音、对齐、QC、渲染、发布包和发布，运行中显示节点进度并支持取消。
+- 资产库支持按文稿生成素材、审批/拒绝、DeepSeek 图片检查。
+- 生产构建：`npm run build`，产物在 `web/dist/`。
 
 ### 成片输出与 MinIO
 
@@ -282,7 +313,7 @@ cp .env.example .env
 uv run python scripts/tools/check_llm.py --live
 ```
 
-Celery/RabbitMQ worker 已在快速开始中给出启动命令；Web 前端尚未接入。
+Celery/RabbitMQ worker 已在快速开始中给出启动命令；Web 控制台见上一节。
 
 ## 模型配置
 

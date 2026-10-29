@@ -18,6 +18,7 @@ from app.render.stage import build_stage_payload
 from app.render.timeline import build_timeline
 from app.storage.output import export_episode_video
 from app.workflow.celery_app import celery_app
+from app.workflow.cancel import TaskCancelled, ensure_not_cancelled
 from app.workflow.db import run_async, task_session
 
 logger = get_task_logger(__name__)
@@ -33,6 +34,7 @@ def shot_render_hash(spec: EpisodeSpec, item) -> str:
             "background": spec.background,
             "floor": spec.floor,
             "watermark": spec.watermark,
+            "renderer_version": get_settings().renderer_version,
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -42,6 +44,7 @@ def shot_render_hash(spec: EpisodeSpec, item) -> str:
 
 async def _mark_running(episode_id: str, node_run_id: str) -> None:
     async with task_session() as session:
+        await ensure_not_cancelled(session, episode_id)
         node = await session.get(NodeRun, node_run_id)
         if node is not None:
             now = datetime.now(timezone.utc)
@@ -120,6 +123,14 @@ def mark_running(episode_id: str, node_run_id: str) -> None:
     run_async(_mark_running(episode_id, node_run_id))
 
 
+def _assert_not_cancelled(episode_id: str) -> None:
+    async def check():
+        async with task_session() as session:
+            await ensure_not_cancelled(session, episode_id)
+
+    run_async(check())
+
+
 def mark_success(episode_id: str, node_run_id: str, output_path: str) -> None:
     run_async(_mark_success(episode_id, node_run_id, output_path))
 
@@ -185,6 +196,7 @@ def render_shot_task(
     out_dir: str,
 ):
     try:
+        _assert_not_cancelled(episode_id)
         episode_spec = EpisodeSpec.model_validate(spec)
         timeline = build_timeline(episode_spec)
         payload = build_stage_payload(episode_spec, timeline)
@@ -244,6 +256,9 @@ def render_shot_task(
             "frame_count": item.frame_count,
             "cached": False,
         }
+    except TaskCancelled:
+        mark_failed(episode_id, node_run_id, "cancelled")
+        raise
     except Exception as exc:
         logger.exception("shot render failed episode=%s seq=%d", episode_id, seq)
         if self.request.retries < self.max_retries:
@@ -262,6 +277,7 @@ def render_concat_task(
     audio_path: str | None = None,
 ):
     try:
+        _assert_not_cancelled(episode_id)
         shots = sorted(
             (result for result in results if result),
             key=lambda result: result["seq"],
@@ -284,6 +300,9 @@ def render_concat_task(
             out_path,
         )
         return {"output_path": out_path, "shots": len(segments)}
+    except TaskCancelled:
+        mark_failed(episode_id, node_run_id, "cancelled")
+        raise
     except Exception as exc:
         logger.exception("concat failed episode=%s", episode_id)
         mark_failed(episode_id, node_run_id, f"concat failed: {exc}")

@@ -154,6 +154,36 @@ class ScriptLineUpdate(BaseModel):
     text: str = Field(min_length=1, max_length=200)
 
 
+class ScriptOptimizeRequest(BaseModel):
+    apply: bool = True
+    instructions: str = Field(default="", max_length=1000)
+
+
+class ScriptOptimizeRead(BaseModel):
+    episode_id: str
+    applied: bool
+    changed_count: int
+    lines: list[dict]
+    validation: ValidationResult
+
+
+class ArticleImportRequest(BaseModel):
+    article: str = Field(min_length=1, max_length=30000)
+    optimize: bool = True
+    instructions: str = Field(default="", max_length=1000)
+
+
+class ArticleImportRead(BaseModel):
+    episode_id: str
+    status: EpisodeStatus
+    summary: str
+    outline: list[dict]
+    validation: ValidationResult
+    optimized: bool
+    optimization_error: str | None
+    lines: list[ScriptLineRead]
+
+
 class ScriptLineUpdateResult(BaseModel):
     line: ScriptLineRead
     validation: ValidationResult
@@ -271,6 +301,14 @@ class AssetGenerateRequest(BaseModel):
     force: bool = False
 
 
+class EpisodeAssetGenerateRequest(BaseModel):
+    asset_type: Literal["background", "prop", "icon", "cover"] | None = None
+    count: int = Field(default=1, ge=1, le=3)
+    auto_approve: bool = False
+    check: bool | None = None
+    force: bool = False
+
+
 class AssetAgentItem(BaseModel):
     status: Literal["reused", "existing_candidate", "generated"]
     asset: AssetRead
@@ -278,5 +316,6 @@ class AssetAgentItem(BaseModel):
 
 class AssetGenerateResponse(BaseModel):
     text: str
+    episode_id: str | None = None
     items: list[AssetAgentItem]
     plans: list[dict]

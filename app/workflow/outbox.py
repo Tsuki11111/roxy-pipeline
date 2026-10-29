@@ -12,8 +12,6 @@ from app.models.core import OutboxEvent, OutboxStatus
 def queue_for(event_type: str) -> str:
     if event_type.startswith("render."):
         return "render"
-    if event_type.startswith("script."):
-        return "agent"
     if event_type.startswith("storyboard."):
         return "agent"
     if event_type.startswith("voice."):

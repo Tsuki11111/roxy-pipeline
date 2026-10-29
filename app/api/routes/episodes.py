@@ -1,11 +1,25 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from jinja2 import TemplateNotFound
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.script.service import ScriptConflict, ScriptRequestError, start_script
+from app.agents.asset.service import (
+    AssetAgentError,
+    generate_assets_for_episode,
+)
+from app.agents.script.optimizer import (
+    ScriptOptimizeConflict,
+    ScriptOptimizeError,
+    ScriptOptimizeInvalid,
+    optimize_script,
+)
+from app.agents.script.importer import (
+    ArticleImportConflict,
+    ArticleImportError,
+    import_article,
+)
 from app.agents.script.validation import ValidationResult
 from app.agents.script.utils import (
     load_lines,
@@ -35,17 +49,27 @@ from app.models.core import (
     Episode,
     EpisodeStatus,
     LineAudio,
+    NodeRun,
+    OutboxEvent,
     Review,
     ScriptLine,
     Series,
+    Shot,
 )
+from app.providers.imagegen import ImageGenError
+from app.providers.llm import LLMError
 from app.publish.package import build_package, load_package
 from app.qc.service import QcConflict, QcRequestError, start_qc
 from app.render.models import EpisodeSpec
 from app.render.stage import build_stage_payload
 from app.render.timeline import build_timeline
 from app.schemas.core import (
+    AssetAgentItem,
+    AssetGenerateResponse,
+    ArticleImportRead,
+    ArticleImportRequest,
     EpisodeActionAccepted,
+    EpisodeAssetGenerateRequest,
     EpisodeAudioRead,
     EpisodeCreate,
     EpisodeRead,
@@ -55,6 +79,8 @@ from app.schemas.core import (
     QcReport,
     ReviewRead,
     ScriptLineRead,
+    ScriptOptimizeRead,
+    ScriptOptimizeRequest,
     ScriptRead,
     ShotRead,
     StoryboardRead,
@@ -112,6 +138,34 @@ async def list_episodes(
         stmt = stmt.where(Episode.status == status_filter)
     result = await session.scalars(stmt)
     return list(result)
+
+
+@router.delete("/{episode_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_episode(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    episode = await session.get(Episode, episode_id)
+    if episode is None:
+        raise HTTPException(status_code=404, detail="episode not found")
+    running = {
+        EpisodeStatus.SCRIPTING,
+        EpisodeStatus.STORYBOARDING,
+        EpisodeStatus.VOICING,
+        EpisodeStatus.ALIGNING,
+        EpisodeStatus.RENDERING,
+        EpisodeStatus.QC,
+    }
+    if episode.status in running:
+        raise HTTPException(
+            status_code=409, detail="episode is running; cancel it first"
+        )
+
+    for model in (Review, LineAudio, OutboxEvent, NodeRun, Shot, ScriptLine):
+        await session.execute(delete(model).where(model.episode_id == episode_id))
+    await session.delete(episode)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{episode_id}", response_model=EpisodeRead)
@@ -189,80 +243,6 @@ async def _transition(
     return episode
 
 
-async def _script_action(
-    session: AsyncSession,
-    episode_id: str,
-    *,
-    regenerate: bool = False,
-    retry: bool = False,
-) -> EpisodeActionAccepted:
-    try:
-        episode, node = await start_script(
-            session, episode_id, regenerate=regenerate, retry=retry
-        )
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ScriptConflict as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except ScriptRequestError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    await session.commit()
-    await session.refresh(episode)
-    return EpisodeActionAccepted(
-        episode_id=episode.id,
-        status=episode.status,
-        node_key=node.node_key,
-        operation_id=node.id,
-    )
-
-
-@router.post(
-    "/{episode_id}/actions/confirm-topic",
-    response_model=EpisodeActionAccepted,
-    status_code=status.HTTP_202_ACCEPTED,
-)
-async def confirm_topic(
-    episode_id: str,
-    session: AsyncSession = Depends(get_session),
-) -> EpisodeActionAccepted:
-    episode = await session.get(Episode, episode_id, with_for_update=True)
-    if episode is None:
-        raise HTTPException(status_code=404, detail="episode not found")
-    if episode.status == EpisodeStatus.DRAFT:
-        episode.status = EpisodeStatus.TOPIC_CONFIRMED
-    elif episode.status != EpisodeStatus.TOPIC_CONFIRMED:
-        raise HTTPException(
-            status_code=409,
-            detail=f"episode status {episode.status.value} cannot confirm topic",
-        )
-    await session.flush()
-    return await _script_action(session, episode_id)
-
-
-@router.post(
-    "/{episode_id}/actions/retry-script",
-    response_model=EpisodeActionAccepted,
-    status_code=status.HTTP_202_ACCEPTED,
-)
-async def retry_script(
-    episode_id: str,
-    session: AsyncSession = Depends(get_session),
-) -> EpisodeActionAccepted:
-    return await _script_action(session, episode_id, retry=True)
-
-
-@router.post(
-    "/{episode_id}/actions/regenerate-script",
-    response_model=EpisodeActionAccepted,
-    status_code=status.HTTP_202_ACCEPTED,
-)
-async def regenerate_script(
-    episode_id: str,
-    session: AsyncSession = Depends(get_session),
-) -> EpisodeActionAccepted:
-    return await _script_action(session, episode_id, regenerate=True)
-
-
 @router.post("/{episode_id}/actions/confirm-script", response_model=EpisodeRead)
 async def confirm_script(
     episode_id: str,
@@ -317,6 +297,67 @@ async def get_script(
         lines=[ScriptLineRead.model_validate(line) for line in lines],
         validation=validation,
     )
+
+
+@router.post(
+    "/{episode_id}/actions/import-script",
+    response_model=ArticleImportRead,
+)
+async def import_episode_article(
+    episode_id: str,
+    payload: ArticleImportRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ArticleImportRead:
+    try:
+        result = await import_article(
+            session,
+            episode_id,
+            payload.article,
+            optimize=payload.optimize,
+            instructions=payload.instructions,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ArticleImportConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ArticleImportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await session.commit()
+    return ArticleImportRead(**result)
+
+
+@router.post(
+    "/{episode_id}/actions/optimize-script",
+    response_model=ScriptOptimizeRead,
+)
+async def optimize_episode_script(
+    episode_id: str,
+    payload: ScriptOptimizeRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ScriptOptimizeRead:
+    try:
+        result = await optimize_script(
+            session,
+            episode_id,
+            apply=payload.apply,
+            instructions=payload.instructions,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ScriptOptimizeConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ScriptOptimizeInvalid as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "optimized script validation failed",
+                "errors": exc.validation.errors,
+            },
+        ) from exc
+    except ScriptOptimizeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await session.commit()
+    return ScriptOptimizeRead(**result)
 
 
 @router.post("/{episode_id}/script/validate", response_model=ValidationResult)
@@ -525,6 +566,46 @@ async def revise_script_line(
         node_key=node.node_key,
         operation_id=node.id,
         line=ScriptLineRead.model_validate(line),
+    )
+
+
+@router.post(
+    "/{episode_id}/actions/generate-assets",
+    response_model=AssetGenerateResponse,
+)
+async def generate_episode_assets(
+    episode_id: str,
+    payload: EpisodeAssetGenerateRequest,
+    session: AsyncSession = Depends(get_session),
+) -> AssetGenerateResponse:
+    try:
+        result = await generate_assets_for_episode(
+            session,
+            episode_id,
+            asset_type=payload.asset_type,
+            count=payload.count,
+            auto_approve=payload.auto_approve,
+            check=payload.check,
+            force=payload.force,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AssetAgentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (ImageGenError, LLMError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    await session.commit()
+    return AssetGenerateResponse(
+        text=result["text"],
+        episode_id=result.get("episode_id"),
+        plans=result["plans"],
+        items=[
+            AssetAgentItem(
+                status=item["status"],
+                asset=AssetRead.model_validate(item["asset"]),
+            )
+            for item in result["items"]
+        ],
     )
 
 

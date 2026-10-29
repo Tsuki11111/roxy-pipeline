@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     asset_agent_max_count: int = 3
 
     script_target_chars_per_minute: int = 327
+    script_article_max_chars: int = 30000
     script_max_repairs: int = 2
     script_roxy_ratio_min: float = 0.10
     script_roxy_ratio_max: float = 0.30
@@ -117,6 +118,7 @@ class Settings(BaseSettings):
     celery_task_always_eager: bool = False
     outbox_poll_interval_s: float = 5.0
     render_dir: str = "./tmp/renders"
+    renderer_version: str = "m5.2"
     asset_storage: str = "local"
     asset_root: str = "./data/assets"
 

@@ -12,7 +12,7 @@ from app.agents.asset.models import AssetKind, AssetPlan
 from app.agents.asset.prompts import SYSTEM, build_user_prompt
 from app.assets.store import asset_path, ingest_asset
 from app.core.config import get_settings
-from app.models.core import Asset, AssetStatus, AssetType
+from app.models.core import Asset, AssetStatus, AssetType, Episode, ScriptLine
 from app.providers.imagegen import ImageProvider, build_image_provider
 from app.providers.llm import LLMClient, build_llm
 from app.qc.vision import check_image_asset
@@ -146,6 +146,7 @@ async def generate_assets_from_text(
     session: AsyncSession,
     text: str,
     *,
+    episode_id: str | None = None,
     asset_type: AssetKind | None = None,
     count: int = 1,
     auto_approve: bool = False,
@@ -193,6 +194,7 @@ async def generate_assets_from_text(
         await provider.generate(plan.prompt, out_path, plan.size)
         meta = {
             "agent_text": text,
+            "episode_id": episode_id,
             "plan": plan.model_dump(),
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -244,3 +246,50 @@ async def generate_assets_from_text(
         items.append({"status": "generated", "asset": asset})
 
     return {"text": text, "items": items, "plans": [plan.model_dump() for plan in plans]}
+
+
+async def generate_assets_for_episode(
+    session: AsyncSession,
+    episode_id: str,
+    *,
+    asset_type: AssetKind | None = None,
+    count: int = 1,
+    auto_approve: bool = False,
+    check: bool | None = None,
+    force: bool = False,
+    llm: LLMClient | None = None,
+    image_provider: ImageProvider | None = None,
+) -> dict:
+    episode = await session.get(Episode, episode_id)
+    if episode is None:
+        raise LookupError(f"episode not found: {episode_id}")
+    lines = list(
+        await session.scalars(
+            select(ScriptLine)
+            .where(ScriptLine.episode_id == episode_id)
+            .order_by(ScriptLine.seq)
+        )
+    )
+    if not lines:
+        raise AssetAgentError("episode has no script lines")
+
+    manuscript = [f"标题：{episode.title}", f"主题：{episode.topic}", ""]
+    current_section = None
+    for line in lines:
+        if line.section != current_section:
+            current_section = line.section
+            manuscript.append(f"【{line.section}】")
+        manuscript.append(f"{line.seq}. {line.text}")
+    result = await generate_assets_from_text(
+        session,
+        "\n".join(manuscript)[:12000],
+        episode_id=episode.id,
+        asset_type=asset_type,
+        count=count,
+        auto_approve=auto_approve,
+        check=check,
+        force=force,
+        llm=llm,
+        image_provider=image_provider,
+    )
+    return {**result, "episode_id": episode.id}

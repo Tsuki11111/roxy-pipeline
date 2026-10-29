@@ -23,6 +23,7 @@ from app.qc.rules import run_rules
 from app.qc.vision import check_frames
 from app.render.models import EpisodeSpec
 from app.workflow.celery_app import celery_app
+from app.workflow.cancel import TaskCancelled, ensure_not_cancelled
 from app.workflow.db import run_async, task_session
 from app.workflow.state_machine import transition_episode
 
@@ -67,6 +68,7 @@ async def _qc_episode(episode_id: str, node_run_id: str) -> None:
             raise RuntimeError(
                 f"episode status {episode.status.value} is not QC"
             )
+        await ensure_not_cancelled(session, episode_id)
         if not episode.output_path:
             raise RuntimeError("episode has no output video")
         spec = EpisodeSpec.model_validate(episode.render_spec)
@@ -199,6 +201,9 @@ async def _qc_episode(episode_id: str, node_run_id: str) -> None:
 def qc_episode_task(self, episode_id: str, node_run_id: str):
     try:
         run_async(_qc_episode(episode_id, node_run_id))
+    except TaskCancelled:
+        run_async(_mark_failed(episode_id, node_run_id, "cancelled"))
+        raise
     except Exception as exc:
         logger.exception("QC failed episode=%s", episode_id)
         if self.request.retries < self.max_retries:

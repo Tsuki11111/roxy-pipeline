@@ -58,6 +58,20 @@ body {
   display: none;
 }
 
+#card.card-left {
+  left: 80px;
+  right: auto;
+}
+
+#card.card-left .chat-bubble::after {
+  left: auto;
+  right: -22px;
+  border-left: none;
+  border-bottom: none;
+  border-right: 3px solid #2b2b2b;
+  border-top: 3px solid #2b2b2b;
+}
+
 #subtitle {
   position: absolute;
   left: 50%;

@@ -21,6 +21,7 @@ from app.models.core import (
 )
 from app.agents.storyboard.render_spec import build_episode_render_spec
 from app.workflow.celery_app import celery_app
+from app.workflow.cancel import TaskCancelled, ensure_not_cancelled
 from app.workflow.db import run_async, task_session
 from app.render.service import start_render
 from app.workflow.state_machine import transition_episode
@@ -96,6 +97,7 @@ async def _align_episode(episode_id: str, node_run_id: str) -> None:
             raise RuntimeError(
                 f"episode status {episode.status.value} is not ALIGNING"
             )
+        await ensure_not_cancelled(session, episode_id)
         if not episode.audio_meta or not episode.audio_meta.get("lines"):
             raise RuntimeError("episode has no sentence alignment")
 
@@ -267,6 +269,9 @@ async def _align_episode(episode_id: str, node_run_id: str) -> None:
 def align_episode_task(self, episode_id: str, node_run_id: str):
     try:
         run_async(_align_episode(episode_id, node_run_id))
+    except TaskCancelled:
+        run_async(_mark_failed(episode_id, node_run_id, "cancelled"))
+        raise
     except Exception as exc:
         logger.exception("alignment failed episode=%s", episode_id)
         if self.request.retries < self.max_retries:
