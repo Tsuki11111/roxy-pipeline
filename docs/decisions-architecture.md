@@ -248,5 +248,39 @@ M4 需要中文吐字清晰、音量充足的配音。实测 MeloTTS + RVC v3 �
 - 参考音克隆稳定性不足：增加参考音或改用微调，而不是回到 RVC。
 - 需要多 worker 并发生成：再评估 vLLM 服务化或第二张 GPU。
 
+---
+
+## ADR-008：字级对齐用中文 wav2vec2，不引入整套 WhisperX
+
+### 背景
+
+字幕需要字级时间戳（F-22/F-28），但 IndexTTS2 只给句级音频和时长。WhisperX 默认中文对齐模型是 `jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn`，但安装 WhisperX 会带入 faster-whisper、pyannote 等一整套 ASR/说话人日志依赖；本项目已经知道每句的准确台词，不需要再跑 ASR。
+
+### 决策
+
+- 只使用 WhisperX 同款中文 wav2vec2 CTC 模型，做“已知文本 → 音频”的强制对齐。
+- 在独立 Python 3.11 进程运行 `scripts/align_words.py`，用 `torchaudio.functional.forced_align` 求字符级路径；不安装 WhisperX 包。
+- 数字/符号先用 IndexTTS2 的文本归一化器转成实际读法，再用 `difflib` 映射回原文字符，保证字幕文本不变。
+- 字级时间写入 `episode.audio_meta.lines[].chars` 与 `alignment.json`；字幕块用字级起止时间显隐。
+
+### 理由
+
+1. 已知台词，强制对齐比 ASR + 对齐更直接、更可控，也不会因为识别错字导致时间偏移。
+2. 复用 IndexTTS2 的 Python 环境和 torch，不新增第二套深度学习依赖。
+3. 中文模型按字符对齐，正好匹配中文字幕；英文/数字按字符映射后再合并为字幕块。
+
+### 代价与风险
+
+- 模型约 1.2GB，每次对齐任务加载需要 20–30 秒；没有常驻服务。
+- 数字、英文缩写依赖归一化映射；异常文本可能退化为句内均匀分布。
+- 目前是“块级显隐”，不是逐字卡拉 OK 高亮；如需逐字高亮，渲染层要再消费 `chars`。
+- 与常驻 IndexTTS2 同时占显存时可能 OOM，脚本会回退 CPU，速度明显变慢。
+
+### 重新评估触发条件
+
+- 字幕需要逐字高亮/卡拉 OK：扩展渲染模板消费 `chars`，而不是改对齐方案。
+- 长文本对齐准确率不足：评估 MMS_FA 或微调中文对齐模型。
+- 对齐耗时成为瓶颈：改为常驻对齐服务，或与 TTS 分卡运行。
+
 
 

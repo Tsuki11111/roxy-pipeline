@@ -14,7 +14,7 @@
 **AI 科普视频自动生成 Agent 系统**：从选题、脚本、分镜，到逐句 TTS、卡片/逐帧渲染、ffmpeg 拼接和质检的全自动流水线。
 
 **定位**：个人自用项目；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守[需求文档第 11 章](docs/AI科普视频Agent系统需求分析文档.md)。
-**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用 + M4.1 逐句配音/句级对齐/真实音轨成片已跑通（FastAPI + SQLAlchemy + Alembic + Celery + LangGraph + IndexTTS2 + DeepSeek）；字级对齐与质检待接。
+**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用 + M4.1 逐句配音 + M4.2 字级对齐 + 真实音轨成片已跑通（FastAPI + SQLAlchemy + Alembic + Celery + LangGraph + IndexTTS2 + wav2vec2 + DeepSeek）；质检待接。
 
 ---
 
@@ -79,7 +79,8 @@
 | M3.1 资产持久化/复用 | ✅ `asset` 表 + `data/assets` + `reuse_key`；生成前查重，生成后入库 |
 | M4 源 TTS（IndexTTS2） | ✅ 本地 zero-shot 克隆 + 常驻服务；长文本 RTF 1.75 |
 | M4.1 逐句配音 + 音轨 | ✅ `line_audio` + media 任务 + 句级对齐 + 真实音轨成片 |
-| M4 字级对齐与质检 | ⏳ WhisperX 字/词级对齐、质检与修复 |
+| M4.2 字级对齐 | ✅ 中文 wav2vec2 强制对齐；字幕块按字级时间锚点显隐 |
+| M4.3 质检与修复 | ⏳ 音频/字幕/成片规则检查与自动修复 |
 | M5 局部修改、续跑、运维 | ⏳ |
 
 ## 环境隔离
@@ -152,7 +153,7 @@ uv run celery -A app.workflow.celery_app worker -Q workflow,agent,render -l info
 uv run celery -A app.workflow.celery_app worker -Q media -l info -c 1
 ```
 
-> Windows 本机调试要加 `--pool=solo`（Celery prefork 在 Windows 不可用）；并行渲染在 Linux VM 上用默认 prefork `-c 2`。media worker 会常驻 IndexTTS2 模型，必须单并发，且需要 GPU。
+> Windows 本机调试要加 `--pool=solo`（Celery prefork 在 Windows 不可用）；并行渲染在 Linux VM 上用默认 prefork `-c 2`。media worker 会常驻 IndexTTS2 模型并执行字级对齐，必须单并发，且需要 GPU（对齐显存不足会回退 CPU）。
 
 ```bash
 uv run celery -A app.workflow.celery_app beat -l info
@@ -261,6 +262,7 @@ Celery/RabbitMQ worker 与 Web 前端还在 M1.2 之后，尚未接入。
 | 图像素材 | `ARK_IMAGE_MODEL=doubao-seedream-5-0-pro-260628` | ✅ 可用（背景/舞台/演示物件） |
 | 视觉质检 | `ARK_MODEL_VISION` | ❌ 暂无；先 DOM 规则 |
 | TTS | `TTS_PROVIDER=indextts2` + `data/assets/voice/indextts2/` | ✅ 本地 IndexTTS2 zero-shot |
+| 字级对齐 | `ALIGN_MODEL_DIR` 中文 wav2vec2 | ✅ 本地强制对齐 |
 
 - DeepSeek Base URL：`https://api.deepseek.com`
 - 火山方舟 Base URL：`https://ark.cn-beijing.volces.com/api/v3`

@@ -24,6 +24,12 @@ class CardSpec(BaseModel):
     text: str = ""
 
 
+class CharTiming(BaseModel):
+    text: str
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(ge=0)
+
+
 class ShotSpec(BaseModel):
     shot_id: str
     seq: int = Field(ge=1)
@@ -34,6 +40,8 @@ class ShotSpec(BaseModel):
     card: CardSpec | None = None
     bg: str | None = None
     floor: str | None = None
+    # Character timings relative to shot start; populated after M4.2 alignment.
+    char_timings: list[CharTiming] = Field(default_factory=list)
 
 
 class EpisodeSpec(BaseModel):

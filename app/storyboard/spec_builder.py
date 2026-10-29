@@ -7,6 +7,7 @@ from app.models.core import Episode, ScriptLine, Series, Shot
 from app.render.models import (
     CardSpec,
     CharacterSpec,
+    CharTiming,
     EpisodeSpec,
     ShotSpec,
 )
@@ -51,6 +52,7 @@ def build_episode_spec(
     *,
     background: str | None = None,
     floor: str | None = None,
+    char_timings_by_line: dict[str, list[dict]] | None = None,
 ) -> EpisodeSpec:
     background = background or BACKGROUNDS["paper"]
     floor = floor or DEFAULT_FLOOR
@@ -99,6 +101,14 @@ def build_episode_spec(
                 card=CardSpec(type=card_type, style=style, text=line.text),
                 bg=background,
                 floor=floor,
+                char_timings=[
+                    CharTiming(
+                        text=str(item["text"]),
+                        start_ms=max(0, int(item["start_ms"])),
+                        end_ms=max(0, int(item["end_ms"])),
+                    )
+                    for item in (char_timings_by_line or {}).get(line.id, [])
+                ],
             )
         )
 

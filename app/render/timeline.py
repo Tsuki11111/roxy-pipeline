@@ -28,7 +28,9 @@ def split_subtitle(text: str, max_chars: int = 16) -> list[str]:
     # Merge a tiny tail into the previous chunk instead of flashing one or two chars.
     if len(chunks) > 1 and len(chunks[-1]) < 4:
         merged = chunks[-2] + chunks[-1]
-        if len(merged) <= max_chars:
+        if len(merged) <= max_chars or all(
+            char in _SENTENCE_END or char in _SOFT_BREAK for char in chunks[-1]
+        ):
             chunks[-2:] = [merged]
     return chunks
 
@@ -63,6 +65,56 @@ class Timeline:
     fps: int
 
 
+def _proportional_chunks(
+    labels: list[str], start_ms: int, end_ms: int
+) -> list[SubtitleChunk]:
+    duration_ms = end_ms - start_ms
+    total_chars = max(1, sum(len(chunk) for chunk in labels))
+    cursor = float(start_ms)
+    chunks: list[SubtitleChunk] = []
+    for index, text in enumerate(labels):
+        share = duration_ms * len(text) / total_chars
+        chunk_start = round(cursor)
+        chunk_end = round(cursor + share)
+        if index == len(labels) - 1:
+            chunk_end = end_ms
+        chunk_end = max(chunk_start + 1, chunk_end)
+        chunks.append(
+            SubtitleChunk(text=text, start_ms=chunk_start, end_ms=chunk_end)
+        )
+        cursor += share
+    return chunks
+
+
+def _timed_chunks(
+    shot: ShotSpec, labels: list[str], start_ms: int, end_ms: int
+) -> list[SubtitleChunk] | None:
+    if not shot.char_timings:
+        return None
+    text = shot.narration
+    cursor = 0
+    chunks: list[SubtitleChunk] = []
+    for label in labels:
+        index = text.find(label, cursor)
+        if index < 0:
+            return None
+        cursor = index + len(label)
+        timings = [
+            timing
+            for timing in shot.char_timings[index:cursor]
+            if timing.end_ms > timing.start_ms
+        ]
+        if not timings:
+            return None
+        chunk_start = max(start_ms, min(start_ms + timing.start_ms for timing in timings))
+        chunk_end = min(end_ms, max(start_ms + timing.end_ms for timing in timings))
+        chunk_end = max(chunk_start + 1, chunk_end)
+        chunks.append(
+            SubtitleChunk(text=label, start_ms=chunk_start, end_ms=chunk_end)
+        )
+    return chunks
+
+
 def build_timeline(spec: EpisodeSpec) -> Timeline:
     cursor_ms = 0
     shots: list[ShotTimeline] = []
@@ -76,18 +128,9 @@ def build_timeline(spec: EpisodeSpec) -> Timeline:
             frame_end = frame_start + 1
 
         labels = split_subtitle(shot.narration)
-        total_chars = max(1, sum(len(chunk) for chunk in labels))
-        chunk_cursor = float(start_ms)
-        chunks: list[SubtitleChunk] = []
-        for index, text in enumerate(labels):
-            share = shot.duration_ms * len(text) / total_chars
-            chunk_start = round(chunk_cursor)
-            chunk_end = round(chunk_cursor + share)
-            if index == len(labels) - 1:
-                chunk_end = end_ms
-            chunk_end = max(chunk_start + 1, chunk_end)
-            chunks.append(SubtitleChunk(text=text, start_ms=chunk_start, end_ms=chunk_end))
-            chunk_cursor += share
+        chunks = _timed_chunks(shot, labels, start_ms, end_ms)
+        if chunks is None:
+            chunks = _proportional_chunks(labels, start_ms, end_ms)
 
         shots.append(
             ShotTimeline(

@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app.core.config import get_settings
+from app.media.align_service import start_align
 from app.media.audio import assemble_audio, sha256_file
 from app.media.service import (
     MODEL,
@@ -248,7 +249,21 @@ async def _voice_episode(episode_id: str, node_run_id: str) -> None:
         total_ms,
     )
 
-    if settings.voice_auto_render:
+    if settings.voice_auto_align:
+        try:
+            async with task_session() as session:
+                await start_align(session, episode_id)
+                await session.commit()
+            logger.info("auto alignment queued episode=%s", episode_id)
+        except Exception:
+            logger.exception("auto alignment queue failed episode=%s", episode_id)
+            async with task_session() as session:
+                episode = await session.get(Episode, episode_id)
+                if episode is not None:
+                    episode.health = "FAILED"
+                    episode.current_node = None
+                await session.commit()
+    elif settings.voice_auto_render:
         try:
             async with task_session() as session:
                 await transition_episode(

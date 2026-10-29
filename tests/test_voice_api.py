@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import wave
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -7,6 +8,8 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app.core.config import get_settings
+from app.media.align_service import start_align
+from app.media.align_tasks import _align_episode
 from app.media.service import start_voice
 from app.media.tasks import _voice_episode
 from app.models.core import (
@@ -134,6 +137,7 @@ async def test_voice_episode_auto_queues_render(
     settings = get_settings()
     monkeypatch.setattr(settings, "audio_root", str(tmp_path / "audio"))
     monkeypatch.setattr(settings, "voice_pause_ms", 100)
+    monkeypatch.setattr(settings, "voice_auto_align", False)
     monkeypatch.setattr(settings, "voice_auto_render", True)
 
     @asynccontextmanager
@@ -142,6 +146,7 @@ async def test_voice_episode_auto_queues_render(
             yield db_session
 
     monkeypatch.setattr("app.media.tasks.task_session", fake_task_session)
+    monkeypatch.setattr("app.media.align_tasks.task_session", fake_task_session)
     monkeypatch.setattr(
         "app.media.tasks.build_tts_provider", lambda: FakeProvider()
     )
@@ -184,6 +189,7 @@ async def test_voice_episode_writes_audio_alignment_and_shots(
             yield db_session
 
     monkeypatch.setattr("app.media.tasks.task_session", fake_task_session)
+    monkeypatch.setattr("app.media.align_tasks.task_session", fake_task_session)
     monkeypatch.setattr(
         "app.media.tasks.build_tts_provider", lambda: FakeProvider()
     )
@@ -219,3 +225,105 @@ async def test_voice_episode_writes_audio_alignment_and_shots(
         with wave.open(episode_row.audio_path, "rb") as wav:
             duration_ms = round(wav.getnframes() * 1000 / wav.getframerate())
         assert duration_ms == 3000
+
+
+async def test_align_episode_writes_char_timings(
+    episode, session, db, monkeypatch, tmp_path
+):
+    _, ep = episode
+    _, session_factory = db
+    _use_test_reference(monkeypatch, tmp_path)
+    model_dir = tmp_path / "align_model"
+    model_dir.mkdir()
+    settings = get_settings()
+    monkeypatch.setattr(settings, "audio_root", str(tmp_path / "audio"))
+    monkeypatch.setattr(settings, "align_model_dir", str(model_dir))
+    monkeypatch.setattr(settings, "voice_pause_ms", 100)
+    monkeypatch.setattr(settings, "voice_auto_align", False)
+    monkeypatch.setattr(settings, "voice_auto_render", False)
+
+    @asynccontextmanager
+    async def fake_task_session():
+        async with session_factory() as db_session:
+            yield db_session
+
+    monkeypatch.setattr("app.media.tasks.task_session", fake_task_session)
+    monkeypatch.setattr("app.media.align_tasks.task_session", fake_task_session)
+    monkeypatch.setattr(
+        "app.media.tasks.build_tts_provider", lambda: FakeProvider()
+    )
+
+    def fake_aligner(input_path, output_path, _model_dir):
+        payload = json.loads(Path(input_path).read_text(encoding="utf-8"))
+        lines = []
+        for line in payload["lines"]:
+            count = max(1, len(line["text"]))
+            span = max(1, (line["end_ms"] - line["start_ms"]) // count)
+            chars = [
+                {
+                    "text": char,
+                    "start_ms": line["start_ms"] + index * span,
+                    "end_ms": line["start_ms"] + (index + 1) * span,
+                }
+                for index, char in enumerate(line["text"])
+            ]
+            lines.append(
+                {
+                    "id": line["id"],
+                    "seq": line["seq"],
+                    "chars": chars,
+                    "normalized": line["text"],
+                }
+            )
+        Path(output_path).write_text(
+            json.dumps({"lines": lines}, ensure_ascii=False), encoding="utf-8"
+        )
+
+    monkeypatch.setattr(
+        "app.media.align_tasks._run_aligner", fake_aligner
+    )
+
+    await seed_voicing(session, ep["id"])
+    _, voice_node = await start_voice(session, ep["id"])
+    await session.commit()
+    await _voice_episode(ep["id"], voice_node.id)
+    monkeypatch.setattr(settings, "voice_auto_render", True)
+
+    async with session_factory() as align_session:
+        _, align_node = await start_align(align_session, ep["id"])
+        await align_session.commit()
+        align_event = await align_session.scalar(
+            select(OutboxEvent).where(OutboxEvent.event_type == "align.episode")
+        )
+        assert align_event is not None
+    assert queue_for("align.episode") == "media"
+    await _align_episode(ep["id"], align_node.id)
+
+    async with session_factory() as check:
+        episode_row = await check.get(Episode, ep["id"])
+        assert episode_row.status == EpisodeStatus.RENDERING
+        assert episode_row.audio_meta["alignment_granularity"] == "char"
+        assert all(
+            len(item["chars"]) == len(item["text"])
+            for item in episode_row.audio_meta["lines"]
+        )
+        spec = episode_row.render_spec
+        assert spec is not None
+        assert all(shot["char_timings"] for shot in spec["shots"])
+
+        align = await check.scalar(
+            select(NodeRun).where(NodeRun.node_key == "align.episode")
+        )
+        assert align is not None
+        assert align.status == "SUCCESS"
+
+        render = await check.scalar(
+            select(NodeRun).where(NodeRun.node_key == "render.episode")
+        )
+        assert render is not None
+        assert render.status == "PENDING"
+        event = await check.scalar(
+            select(OutboxEvent).where(OutboxEvent.event_type == "render.episode")
+        )
+        assert event is not None
+        assert event.payload["audio_path"] == episode_row.audio_path

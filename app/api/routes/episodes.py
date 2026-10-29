@@ -21,6 +21,11 @@ from app.api.storyboard_utils import (
     validate_storyboard,
 )
 from app.db.session import get_session
+from app.media.align_service import (
+    AlignConflict,
+    AlignRequestError,
+    start_align,
+)
 from app.media.service import (
     VoiceConflict,
     VoiceRequestError,
@@ -400,6 +405,54 @@ async def retry_voice(
     session: AsyncSession = Depends(get_session),
 ) -> EpisodeActionAccepted:
     return await _voice_action(session, episode_id, retry=True)
+
+
+async def _align_action(
+    session: AsyncSession,
+    episode_id: str,
+    *,
+    retry: bool = False,
+) -> EpisodeActionAccepted:
+    try:
+        episode, node = await start_align(session, episode_id, retry=retry)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AlignConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except AlignRequestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await session.commit()
+    await session.refresh(episode)
+    return EpisodeActionAccepted(
+        episode_id=episode.id,
+        status=episode.status,
+        node_key=node.node_key,
+        operation_id=node.id,
+    )
+
+
+@router.post(
+    "/{episode_id}/actions/align",
+    response_model=EpisodeActionAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def align_episode_action(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> EpisodeActionAccepted:
+    return await _align_action(session, episode_id)
+
+
+@router.post(
+    "/{episode_id}/actions/retry-align",
+    response_model=EpisodeActionAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def retry_align(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> EpisodeActionAccepted:
+    return await _align_action(session, episode_id, retry=True)
 
 
 @router.get("/{episode_id}/audio", response_model=EpisodeAudioRead)

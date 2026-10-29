@@ -23,9 +23,9 @@
 
 ## 1. 当前状态一句话
 
-**M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产复用/持久化 + M4.1 逐句配音/句级对齐/真实音轨成片已跑通（2026-10-29）。**
+**M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产复用/持久化 + M4.1 逐句配音 + M4.2 字级对齐 + 真实音轨成片已跑通（2026-10-29）。**
 
-- 需求文档 v1.2、架构方案 v1.4、ADR-001～007 已写完。
+- 需求文档 v1.2、架构方案 v1.5、ADR-001～008 已写完。
 - GitHub 仓库已创建：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
 - 本地 initial commit 与文档规范化 commit 已推送到 `origin/main`（2026-10-26）。
 - `.env`、洛琪希参考图、`tmp/` 已由 `.gitignore` 排除；仓库只提交 `.env.example`。
@@ -71,6 +71,7 @@
 - `generate_seedream_image.py` 生成前查 `reuse_key`，命中 APPROVED 直接复用；生成后默认以 CANDIDATE 入库，`/assets/{id}/approve` 后才可复用。`scripts/ingest_assets.py` 可批量索引已有图片。
 - M4 音色已定：本地 **IndexTTS2** zero-shot 克隆，用户试听长文本后确认“效果非常好”。模型 `IndexTeam/IndexTTS-2` 在 `data/assets/voice/indextts2/`，参考音固定为 `data/assets/voice/indextts2/reference.wav`；RVC v3 / MeloTTS / Piper 已停用并清理，旧模型与工具链约 5GB 已删除。
 - M4.1 逐句配音已跑通：`line_audio` 表按 `(script_line, text_hash, voice_key)` 缓存；`voice.episode` 在 media 队列逐句合成，音频按内容寻址存 `data/audio/lines/`，自动回写镜头时长并装配 `audio.wav`（-14 LUFS），句级对齐写入 `episode.audio_meta`；默认自动进入 RENDERING，成片封装真实 AAC 音轨。实测 3 句 / 10.25 秒成片通过。
+- M4.2 字级对齐已跑通：`align.episode` 用中文 wav2vec2（`jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn`）对每句做 CTC 强制对齐；字级时间写入 `audio_meta.lines[].chars` 和 `alignment.json`，字幕块改用字级起止时间；模型在 `data/assets/voice/align/wav2vec2-chinese/`（1.2GB），显存不足自动回退 CPU。
 - 资产分工（2026-10-27）：角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
 - 当前阶段只生成角色立绘，按 **5 张/批**推进；背景/舞台/演示物件暂停，等系统工作流实现后由 Seedream 按需求生成。
 - AI 主题扩展：需求新增 R-17～R-28（讲解指向/白板/敲键盘/调试翻车/灵光一现/怀疑审视等），核心 6 个提示词在 `character_packs/roxy/ai_pose_prompts.md`（本地）。背景已出纸纹 + 木地板；道具在生成中。
@@ -84,7 +85,7 @@
 
 1. **确认 initial commit 已推到 GitHub**：`git status -sb` 应显示 `main...origin/main`；没有就 `git push -u origin main`。
 2. **确认运行环境**：本机 Docker Desktop/WSL2 是否可用；VM 是否已挂 ≥200GB 数据盘；8080/8443/9100/9101 是否空闲。
-3. **继续 M4 对齐**：M4.1 逐句配音已完成（`line_audio` + media 队列 + 时长回写 + `audio.wav` + 真实音轨成片），下一步用 WhisperX 做字/词级强制对齐，替换句级 `alignment.json`；随后接质检。
+3. **进入 M4.3 质检**：字级对齐已完成，下一步做音频时长/静音、字幕溢出、成片流参数与卡片规则检查；先规则后模型，异常进入人工介入或自动修复。
 4. **M3 分镜 Agent + 资产复用已完成**：真实脚本生成 29 镜头、节奏校验通过、render_spec 已生成；下一步 M4 TTS/对齐，或补半身反应镜头/角色位移。
 5. **M1.2 实机已验证**：`docker compose -f compose.infra.yml up -d` 起 Postgres/RabbitMQ/Redis，按 §4.2.2 启动 worker（加 `agent` 队列）、beat、API，再用 `scripts/queue_demo_render.py` 验证渲染链路。
 
@@ -282,6 +283,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - DeepSeek Base URL：`https://api.deepseek.com`
 - 火山方舟 Base URL：`https://ark.cn-beijing.volces.com/api/v3`
 - IndexTTS2：独立 Python 3.11 环境 `data/tools/indextts-venv`（torch 2.8 cu128）；`app/providers/tts.py` 自动拉起 `scripts/indextts_server.py`（`127.0.0.1:8765`，模型常驻）；8GB 显存用 fp16 + Wav2Vec2-BERT 放 CPU；长文本实测 RTF 1.75。
+- 字级对齐：同一 Python 3.11 环境运行 `scripts/align_words.py`；模型 `data/assets/voice/align/wav2vec2-chinese/`；默认 `ALIGN_DEVICE=cuda`，与常驻 TTS 抢显存时脚本会自动回退 CPU。
 - 校验脚本：`python scripts/check_llm.py --live`（DeepSeek 必检，Ark 可选）；`--require-ark` 把 Ark 当必检。
 - 图像生成测试产物在 `tmp/seedream_probe.png`（gitignore）。
 
@@ -319,7 +321,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - `-c` 是同时渲染的 Chromium 数量：2 vCPU/2GB 先 `-c 1`，4 核以上再 `-c 2`。
 - media worker 常驻 IndexTTS2（GPU），并发必须为 1；Windows 调试同样加 `--pool=solo`。
 - Windows 本机 Celery 默认 prefork 不可用：调试加 `--pool=solo`（单并发）；并行渲染在 Ubuntu VM 上用默认 prefork `-c N`。
-- 队列：`workflow`（状态推进/outbox 补投）、`agent`（`script.generate` / `storyboard.generate`）、`media`（`voice.episode`）、`render`（`render.episode` / `render.shot` / `render.concat`）。
+- 队列：`workflow`（状态推进/outbox 补投）、`agent`（`script.generate` / `storyboard.generate`）、`media`（`voice.episode` / `align.episode`）、`render`（`render.episode` / `render.shot` / `render.concat`）。
 - 触发真实队列渲染：`uv run python scripts/queue_demo_render.py --base-url http://localhost:8000`。
 - beat 每 5 秒执行 `workflow.dispatch_outbox`，把 PENDING 事件投到 RabbitMQ；失败按指数退避，5 次后置 FAILED。
 - `CELERY_TASK_ALWAYS_EAGER=true` 只用于任务级测试；在 async dispatcher 里同步执行 task 会和事件循环冲突。
@@ -454,6 +456,18 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 ---
 
 ## 6. 历史记录
+
+### 2026-10-29 · M4.2 字级强制对齐
+
+- 选用 WhisperX 同款中文 wav2vec2 模型 `jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn`，从 ModelScope 下载到 `data/assets/voice/align/wav2vec2-chinese/`（约 1.2GB，只保留 PyTorch 权重）。
+- 新增 `scripts/align_words.py`：已知台词 + 逐句音频 → CTC 强制对齐（`torchaudio.functional.forced_align`），输出原文字符级起止时间；数字/符号先用 IndexTTS2 的 `TextNormalizer` 归一，再用 `difflib` 映射回原文。
+- 字级时间先按模型帧取点，再把每个字的结束时间延到下一个字开始、最后一个字延到句尾，避免字幕单帧闪烁。
+- 新增 `align.episode` media 任务与 `start_align` 服务：校验句级对齐/逐句音频，调用独立 Python 进程，失败可重试；模型加载或推理显存不足时自动回退 CPU。
+- 新增 API：`POST /episodes/{id}/actions/align`、`POST /episodes/{id}/actions/retry-align`；`GET /episodes/{id}/audio` 返回字级 `chars`。
+- 字幕：`ShotSpec.char_timings` 保存镜头内字级时间，`build_timeline` 用字级起止生成字幕块；标点归并到前一块，避免单独闪一个标点。
+- 自动链路：`voice.episode` 完成后默认入 `align.episode`，对齐完成后再入 `render.episode`；`VOICE_AUTO_ALIGN` / `VOICE_AUTO_RENDER` 可分别关闭。
+- 实测 3 句：对齐字符数 21/18/16；首句字幕第一块 40–1223ms、第二块 1223–3587ms，截图确认 0.5s 与 1.6s 显示不同字幕块；成片重新渲染成功。
+- 已知限制：字幕是“块级显隐”，不是逐字卡拉 OK 高亮；标点时间为零宽；模型每次对齐任务加载约 20–30 秒。
 
 ### 2026-10-29 · M4.1 逐句配音与真实音轨成片
 

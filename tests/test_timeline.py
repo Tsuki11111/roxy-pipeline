@@ -54,6 +54,28 @@ def test_timeline_frames_and_chunks() -> None:
             assert chunk.start_ms < chunk.end_ms
 
 
+def test_char_timings_drive_subtitle_chunks() -> None:
+    text = "你好世界。"
+    spec = make_spec(
+        [
+            {
+                **shot(1, "问题", text, duration_ms=2000),
+                "char_timings": [
+                    {"text": "你", "start_ms": 0, "end_ms": 400},
+                    {"text": "好", "start_ms": 400, "end_ms": 800},
+                    {"text": "世", "start_ms": 900, "end_ms": 1200},
+                    {"text": "界", "start_ms": 1200, "end_ms": 1500},
+                    {"text": "。", "start_ms": 1500, "end_ms": 1500},
+                ],
+            }
+        ]
+    )
+    timeline = build_timeline(spec)
+    chunk = timeline.shots[0].chunks[0]
+    assert chunk.start_ms == 0
+    assert chunk.end_ms == 1500
+
+
 def test_subtitle_split_respects_limit() -> None:
     text = "第一步，先让AI自己看懂失败日志。然后它开始自己改测试，结果把数据库连错了。"
     chunks = split_subtitle(text, max_chars=16)

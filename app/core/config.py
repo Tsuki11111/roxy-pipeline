@@ -70,7 +70,17 @@ class Settings(BaseSettings):
     # gaps are inserted between lines so audio length matches shot durations.
     audio_root: str = "./data/audio"
     voice_pause_ms: int = 180
+    voice_auto_align: bool = True
     voice_auto_render: bool = True
+
+    # M4.2 character-level forced alignment (WhisperX's Chinese wav2vec2 model).
+    align_python: str = "./data/tools/indextts-venv/Scripts/python.exe"
+    align_script: str = "./scripts/align_words.py"
+    align_repo: str = "./data/tools/IndexTTS2"
+    align_model_dir: str = "./data/assets/voice/align/wav2vec2-chinese"
+    align_device: str = "cuda"
+    align_use_normalizer: bool = True
+    align_timeout_s: float = 1800.0
 
     celery_task_always_eager: bool = False
     outbox_poll_interval_s: float = 5.0

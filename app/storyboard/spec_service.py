@@ -12,7 +12,10 @@ from app.storyboard.spec_builder import build_episode_spec
 
 
 async def build_episode_render_spec(
-    session: AsyncSession, episode: Episode
+    session: AsyncSession,
+    episode: Episode,
+    *,
+    char_timings_by_line: dict[str, list[dict]] | None = None,
 ) -> EpisodeSpec:
     series = await session.get(Series, episode.series_id)
     if series is None:
@@ -30,6 +33,7 @@ async def build_episode_render_spec(
         shots,
         background=background,
         floor=floor,
+        char_timings_by_line=char_timings_by_line,
     )
     build_stage_payload(spec, build_timeline(spec))
     return spec

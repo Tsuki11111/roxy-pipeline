@@ -2,13 +2,13 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | v1.4 |
+| 文档版本 | v1.5 |
 | 文档状态 | 初稿，核心方案已确认 |
 | 日期 | 2026-10-29 |
 | 关联文档 | [需求分析文档](AI科普视频Agent系统需求分析文档.md)；[架构决策记录](decisions-architecture.md) |
 | 已确认约束 | 现有 Ubuntu VM 先跑；LLM 国内为主；TTS 用本地 IndexTTS2，不做付费云 TTS；`deepseek-flash` 文本主模型 + 火山方舟备选/图像 |
 | 推荐方案 | 方案 A：Python 模块化单体 + 进程级拆分 + Celery；AI 子图用 LangGraph |
-| 变更说明 | v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
+| 变更说明 | v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
 
 > 本文档回答“用什么做、怎么拆、怎么部署、接口长什么样”。需求编号（F-xx / N-xx / A-xx）沿用需求分析文档，不重复展开。
 
@@ -210,8 +210,8 @@
 TTS（逐句合成，IndexTTS2 常驻服务）
   │  line_<id>.wav + duration_ms
   ▼
-强制对齐（WhisperX / ctc-forced-aligner 兜底）
-  │  alignment.json（字/词级时间）
+强制对齐（中文 wav2vec2 字级对齐）
+  │  alignment.json（字级时间）
   ▼
 卡片渲染（HTML → PNG）
   │  card_<shot>.png
@@ -992,9 +992,9 @@ class TTSProvider(Protocol):
 **对齐策略：**
 
 1. IndexTTS2 只返回句级音频与时长，不提供字级时间戳。
-2. 以句子为时间锚点，字/词级时间用 WhisperX 对已合成音频做强制对齐；中文模型需单独配置。
-3. 仍不可用则用 `ctc-forced-aligner`；M4 前必须完成一次实测。
-4. 对齐结果做单调性、边界、静音段校验；异常进入 QC。
+2. 用 WhisperX 同款中文 wav2vec2 模型（`jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn`）对每句音频做 CTC 强制对齐，输出字级时间；已知台词直接作为对齐目标，不跑 ASR。
+3. 对齐在独立 Python 进程执行（`scripts/align_words.py`），模型常驻不可行时按集加载；显存不足自动回退 CPU。
+4. 对齐结果做单调性、边界、字表校验；失败进入 QC，不阻塞人工重试。
 
 **音色一致性：**
 
@@ -1218,7 +1218,9 @@ reuse_key → 查 asset 表
 | POST | `/episodes/{id}/actions/confirm-storyboard` | 确认分镜，进入 VOICING | operator/admin |
 | POST | `/episodes/{id}/actions/voice` | 开始逐句配音，投递 media 队列 | operator/admin |
 | POST | `/episodes/{id}/actions/retry-voice` | 重跑失败的配音 | operator/admin |
-| GET | `/episodes/{id}/audio` | 逐句音频与句级对齐 | 登录用户 |
+| POST | `/episodes/{id}/actions/align` | 开始字级强制对齐，投递 media 队列 | operator/admin |
+| POST | `/episodes/{id}/actions/retry-align` | 重跑失败的对齐 | operator/admin |
+| GET | `/episodes/{id}/audio` | 逐句音频、句级与字级对齐 | 登录用户 |
 | POST | `/episodes/{id}/actions/build-render-spec` | 由 shot 表生成渲染 spec | operator/admin |
 | PATCH | `/shots/{shot_id}` | 编辑单个镜头 | operator/admin |
 | GET | `/episodes/{id}/rhythm-report` | 节奏规则检查结果 | 登录用户 |
