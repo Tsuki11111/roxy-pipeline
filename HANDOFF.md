@@ -25,7 +25,7 @@
 
 **M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产复用/持久化 + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 质检 + M5.1 局部修改/续跑/发布包 + 真实音轨成片已跑通（2026-10-29）。**
 
-- 需求文档 v1.2、架构方案 v1.8、ADR-001～010 已写完。
+- 需求文档 v1.2、架构方案 v1.9、ADR-001～010 已写完。
 - GitHub 仓库已创建：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
 - 本地 initial commit 与文档规范化 commit 已推送到 `origin/main`（2026-10-26）。
 - `.env`、洛琪希参考图、`tmp/` 已由 `.gitignore` 排除；仓库只提交 `.env.example`。
@@ -67,7 +67,7 @@
 - M3 API：generate/retry/regenerate-storyboard、`GET /episodes/{id}/storyboard`、storyboard/validate、confirm-storyboard（进 VOICING）、`PATCH /shots/{id}`、build-render-spec。
 - M3 实测：29 句脚本生成 29 镜头、4 种卡片、角色占比 75.9%、节奏校验 valid；confirm 进 VOICING，build-render-spec 生成 29 镜头 spec，静帧已出图。
 - LLM JSON 增加 `json-repair` 兜底；分镜单次输出上限提高到 `max(2000, 行数×220)`，避免截断。
-- M3 待补：Seedream 背景/物件候选（生成 Agent 已实现，批量生成仍按需触发）、半身反应镜头/角色位移未接入分镜、P1 多模态分镜评审。
+- M3 已补：Seedream 生成 Agent 已实现（批量仍按需触发）、半身反应镜头/章首滑入已接入分镜与渲染；剩余 P1 多模态分镜评审、物件/卡片同组位移。
 - 资产复用已落地：`asset` 表 + `data/assets` 持久化仓库；已有 3 张背景 + 7 个物件复制入库、56 个角色在原目录索引；`build-render-spec` 自动解析入库的纸纹/木地板。
 - `generate_seedream_image.py` 生成前查 `reuse_key`，命中 APPROVED 直接复用；生成后默认以 CANDIDATE 入库，`/assets/{id}/approve` 后才可复用。`scripts/tools/ingest_assets.py` 可批量索引已有图片。
 - M4 音色已定：本地 **IndexTTS2** zero-shot 克隆，用户试听长文本后确认“效果非常好”。模型 `IndexTeam/IndexTTS-2` 在 `data/assets/voice/indextts2/`，参考音固定为 `data/assets/voice/indextts2/reference.wav`；RVC v3 / MeloTTS / Piper 已停用并清理，旧模型与工具链约 5GB 已删除。
@@ -75,6 +75,7 @@
 - M4.2 字级对齐已跑通：`align.episode` 用中文 wav2vec2（`jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn`）对每句做 CTC 强制对齐；字级时间写入 `audio_meta.lines[].chars` 和 `alignment.json`，字幕块改用字级起止时间；模型在 `data/assets/voice/align/wav2vec2-chinese/`（1.2GB），显存不足自动回退 CPU。
 - M4.3 质检已跑通：`render.concat` 完成后默认进入 QC；规则检查流参数/时长/响度/对齐/字幕/资产，再按镜头抽首帧+中间帧送 `deepseek-flash` 多模态；结果写 `review` 表与 `episode.qc_meta`。视觉问题默认 warning，`QC_VISION_BLOCKING=true` 才作为 error；图片资产可单独 `POST /assets/{id}/check`。
 - M5.1 已跑通：`POST /episodes/{id}/actions/revise-line` 改单句后重置到 VOICING，只重合成变化句、重对齐并重渲染；镜头片段带 hash 缓存，未变化镜头直接复用；`POST /actions/resume` 按当前状态续跑；`workflow.reconcile_nodes` 清理 stale RUNNING 节点；`POST /actions/package` / `POST /actions/publish` 生成本地发布包（视频、封面、SRT、脚本、metadata、音频）。
+- 最终视频输出：渲染完成后复制到 `output/YYYYMMDD-HHMMSS_<episode_id前8位>/episode.mp4`，同目录写 `metadata.json`；`episode.output_path` 指向该路径，`episode.output_meta` 记录本地路径与 MinIO URI。MinIO 上传由 `MINIO_UPLOAD_ENABLED` 控制，VM 可设 `MINIO_REQUIRED=true` 强制成功。
 - 资产分工（2026-10-27）：角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
 - 当前阶段仍以角色立绘为主；背景/舞台/演示物件可按需通过 Asset Agent 生成，不再固定暂停。
 - AI 主题扩展：需求新增 R-17～R-28（讲解指向/白板/敲键盘/调试翻车/灵光一现/怀疑审视等），核心 6 个提示词在 `character_packs/roxy/ai_pose_prompts.md`（本地）。背景已出纸纹 + 木地板；道具在生成中。
@@ -89,7 +90,7 @@
 1. **确认 initial commit 已推到 GitHub**：`git status -sb` 应显示 `main...origin/main`；没有就 `git push -u origin main`。
 2. **确认运行环境**：本机 Docker Desktop/WSL2 是否可用；VM 是否已挂 ≥200GB 数据盘；8080/8443/9100/9101 是否空闲。
 3. **进入 M5.2 成本与监控**：M5.1 已闭环绕过局部修改/续跑/发布包；下一步补 token/TTS 成本报表、告警和运维面板。也可以先跑一期完整 29 句做规模验收。
-4. **M3 分镜 Agent + 资产复用已完成**：真实脚本生成 29 镜头、节奏校验通过、render_spec 已生成；下一步 M4 TTS/对齐，或补半身反应镜头/角色位移。
+4. **M3 分镜 Agent + 资产复用已完成**：真实脚本生成 29 镜头、节奏校验通过；半身反应镜头与章首滑入已接入；下一步补 P1 多模态分镜评审或批量生成背景/道具。
 5. **M1.2 实机已验证**：`docker compose -f compose.infra.yml up -d` 起 Postgres/RabbitMQ/Redis，按 §4.2.2 启动 worker（加 `agent` 队列）、beat、API，再用 `scripts/demo/queue_demo_render.py` 验证渲染链路。
 
 ### 2.2 M1：渲染链路打通
@@ -136,7 +137,7 @@
 ### 2.3 M1 之后再动
 
 - **M2**：`script_graph`（LangGraph），DeepSeek `deepseek-flash` 生成大纲/分段/逐句。**已完成**；待补 Postgres checkpointer、模型自检、成本日志、章级重生成。
-- **M3**：`storyboard_graph` + 节奏规则；Seedream 素材候选 + 人工入库。**分镜与节奏已完成**；Seedream 资产、半身镜头、角色位移待补。
+- **M3**：`storyboard_graph` + 节奏规则；Seedream 素材 Agent + 人工入库。**分镜与节奏、半身反应/章首滑入已完成**；Seedream 批量生成、物件/卡片同组位移待补。
 - **M4**：TTS/对齐/质检；视觉质检先用 DOM 规则。
 - **M5**：局部重渲染、断点续跑、成本报表。
 
@@ -222,6 +223,7 @@ roxy_pipline/
 │  │  ├─ service.py
 │  │  └─ tasks.py
 │  ├─ publish/                     # M5 发布包
+│  ├─ storage/                     # 最终输出目录 + MinIO 上传
 │  ├─ render/                      # 渲染、镜头缓存与拼接
 │  │  ├─ models.py / timeline.py / cards.py / stage.py / capture.py / encode.py
 │  │  ├─ service.py                # start_render
@@ -470,6 +472,16 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 
 ## 6. 历史记录
 
+### 2026-10-29 · 视觉补全与最终输出/MinIO
+
+- 半身反应镜头：`load_character_assets` 不再排除 `pose=bust`；分镜提示词允许在强调/吐槽句选 bust；`spec_builder` 通过 `_bust_` 识别，设 `anchor_y=0`、高度 1000px。
+- 角色滑入：`CharacterSpec.move` 增加 `slide_in_left/right`、`shift_left/right`；Storyboard 在每章第一个有角色的镜头交替分配滑入；`renderer.js` 按 240ms ease-out 计算位移，`move` 参与镜头缓存 hash。
+- 已生成半身静帧验证：0.05s 与 0.4s 角色位置不同，半身图完整落在舞台内。
+- 最终输出：`app/storage/output.py` 把成片复制到 `output/YYYYMMDD-HHMMSS_<id8>/episode.mp4` 并写 `metadata.json`；`episode.output_path`/`output_meta` 记录本地路径和 MinIO URI。
+- 图片资产：`ingest_asset` 入库时同步镜像到 `roxy-assets/assets/<type>/<checksum>.<ext>`，对象信息写 `asset.meta["minio"]`；已有 APPROVED 资产在下次 ingest 时补传。已用 `scripts/tools/ingest_assets.py` 补传 66 个资产。
+- MinIO：新增 `minio` 依赖；默认上传到 `roxy-output/episodes/<目录名>/episode.mp4`；本地 MinIO 不在线只记 warning，VM `MINIO_REQUIRED=true` 失败即渲染失败。本机用 `[::1]:9100` 实测上传成功。
+- 测试：62 条通过，含输出目录与 MinIO 元数据测试。
+
 ### 2026-10-29 · Asset Agent（文本生成演示素材）
 
 - 新增 `app/agents/asset/`：DeepSeek 把文本规划成 background/prop/icon/cover 无文字素材请求；禁止角色立绘、动漫人物、文字/水印卡片。
@@ -496,6 +508,7 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 - 通用续跑：`POST /episodes/{id}/actions/resume` 按 VOICING/ALIGNING/QC/RENDERING 分派对应 start 服务；QC 的 SUCCESS+FAILED 也允许 retry。
 - 运维：新增 `workflow.reconcile_nodes` beat 任务，扫描 heartbeat 超时（默认 1800s）的 RUNNING 节点并标记 FAILED，供 resume/retry 接管。
 - 发布包：`POST /actions/package` 生成 `tmp/packages/{episode_id}/`，包含 `episode.mp4`、`cover.jpg`、`subtitles.srt`、`script.txt`、`metadata.json`、可选 `audio.wav` 和 `package.json`；`POST /actions/publish` 先建包再转 PUBLISHED；`GET /package` 返回清单。
+- 最终视频输出：渲染完成复制到 `output/YYYYMMDD-HHMMSS_<id8>/episode.mp4` + `metadata.json`；默认尝试上传 MinIO `episodes/<目录名>/episode.mp4`，本地失败只记 warning，VM `MINIO_REQUIRED=true` 时失败即渲染失败。
 - 元数据包含非商业声明和版权提示；发布包只落本地，不自动上传平台。
 - 测试 57 条全部通过，覆盖修订、续跑、reconciler 和发布包。
 

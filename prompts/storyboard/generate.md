@@ -24,6 +24,7 @@ $catalog
 约束：
 - line_seq 必须是该段台词的序号，且每句都要出现一次。
 - card_type / character_position 只能使用系统允许的值。
+- pose=standing 适合常规讲解；pose=bust 是半身反应图，适合强调、吐槽、惊讶等情绪镜头，可优先在这些句子使用。
 - 本节最后一个镜头必须是 icon 或 pure_text。
 - 连续 3 个镜头不要用同一卡片类型；角色连续出现不要超过 4 个。
 只输出 JSON。

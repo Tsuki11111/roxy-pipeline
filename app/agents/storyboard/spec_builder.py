@@ -17,6 +17,7 @@ from app.agents.storyboard.grammar import (
     DEFAULT_CARD_STYLES,
     DEFAULT_FLOOR,
     MOTIONS,
+    MOVES,
 )
 
 _CHARACTER_POSITIONS = {"left", "right", "center"}
@@ -75,6 +76,9 @@ def build_episode_spec(
         motion = payload.get("motion")
         if motion not in MOTIONS:
             motion = "idle_breathe"
+        move = payload.get("move")
+        if move not in MOVES:
+            move = "none"
 
         character = None
         if shot.character_image:
@@ -83,11 +87,14 @@ def build_episode_spec(
                 if shot.character_position in _CHARACTER_POSITIONS
                 else "left"
             )
+            bust = "_bust_" in shot.character_image
             character = CharacterSpec(
                 image=shot.character_image,
                 position=position,
                 height_px=1000,
                 motion=motion,
+                move=move,
+                anchor_y=0 if bust else None,
             )
 
         spec_shots.append(

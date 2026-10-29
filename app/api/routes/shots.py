@@ -19,6 +19,7 @@ from app.agents.storyboard.grammar import (
     POSITIONS,
     TRANSITIONS,
     MOTIONS,
+    MOVES,
     PROJECT_ROOT,
 )
 from app.agents.storyboard.spec_builder import shot_cache_key
@@ -60,6 +61,10 @@ async def update_shot(
         if payload.motion not in MOTIONS:
             raise HTTPException(status_code=422, detail="invalid motion")
         card_payload["motion"] = payload.motion
+    if "move" in fields and payload.move is not None:
+        if payload.move not in MOVES:
+            raise HTTPException(status_code=422, detail="invalid move")
+        card_payload["move"] = payload.move
     if "character_image" in fields:
         if payload.character_image:
             candidate = (PROJECT_ROOT / payload.character_image).resolve()

@@ -26,6 +26,7 @@ dist/
 # runtime data
 data/
 tmp/
+output/
 celerybeat-schedule*
 
 # logs

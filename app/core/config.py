@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     minio_bucket_assets: str = "roxy-assets"
     minio_bucket_artifacts: str = "roxy-artifacts"
     minio_bucket_output: str = "roxy-output"
+    output_root: str = "./output"
+    minio_upload_enabled: bool = True
+    minio_required: bool = False
+    minio_timeout_s: float = 10.0
 
     app_secret_key: str = "dev-only-change-me"
     jwt_secret: str = "dev-only-change-me"

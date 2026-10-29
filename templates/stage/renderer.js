@@ -11,6 +11,7 @@ const watermark = document.getElementById("watermark");
 
 const POSITIONS = { left: 210, center: 660, right: 1120 };
 const TRANSITION_MS = 180;
+const MOVE_MS = 240;
 
 let payload = null;
 let shots = [];
@@ -64,6 +65,18 @@ function applyCharacterStyle(layer, character, offsetX = 0, breath = 0) {
   layer.style.transform = `translateX(${offsetX.toFixed(2)}px)${anchorShift} translateY(${breath.toFixed(2)}px)`;
 }
 
+function characterMoveX(character, localMs) {
+  const move = character.move;
+  if (!move || move === "none") return 0;
+  const stageWidth = payload?.width ?? 1920;
+  const progress = easeOutCubic(Math.min(1, Math.max(0, localMs / MOVE_MS)));
+  if (move === "slide_in_left") return -stageWidth * 0.16 * (1 - progress);
+  if (move === "slide_in_right") return stageWidth * 0.16 * (1 - progress);
+  if (move === "shift_left") return -stageWidth * 0.06 * progress;
+  if (move === "shift_right") return stageWidth * 0.06 * progress;
+  return 0;
+}
+
 function startCharacterTransition(character, startMs) {
   if (currentCharacter === character.src) return;
 
@@ -98,6 +111,7 @@ function startCharacterTransition(character, startMs) {
 
 function updateCharacter(character, tMs, localMs) {
   const breath = character.motion === "idle_breathe" ? Math.sin(localMs / 700) * 3 : 0;
+  const moveX = characterMoveX(character, localMs);
 
   if (transition) {
     const p = Math.min(1, Math.max(0, (tMs - transition.start) / transition.duration));
@@ -105,9 +119,9 @@ function updateCharacter(character, tMs, localMs) {
     const oldLayer = characterLayers[transition.from];
     const newLayer = characterLayers[transition.to];
 
-    applyCharacterStyle(oldLayer, character, -30 * eased, breath);
+    applyCharacterStyle(oldLayer, character, -30 * eased + moveX, breath);
     oldLayer.style.opacity = (1 - eased).toFixed(3);
-    applyCharacterStyle(newLayer, character, 36 * (1 - eased), breath);
+    applyCharacterStyle(newLayer, character, 36 * (1 - eased) + moveX, breath);
     newLayer.style.opacity = eased.toFixed(3);
 
     if (p >= 1) {
@@ -115,7 +129,7 @@ function updateCharacter(character, tMs, localMs) {
       hideLayer(oldLayer);
       newLayer.style.zIndex = "3";
       newLayer.style.opacity = "1";
-      applyCharacterStyle(newLayer, character, 0, breath);
+      applyCharacterStyle(newLayer, character, moveX, breath);
       transition = null;
     }
     return;
@@ -125,7 +139,7 @@ function updateCharacter(character, tMs, localMs) {
   layer.style.display = "block";
   layer.style.opacity = "1";
   layer.style.zIndex = "3";
-  applyCharacterStyle(layer, character, 0, breath);
+  applyCharacterStyle(layer, character, moveX, breath);
   hideLayer(characterLayers[activeLayer === 0 ? 1 : 0]);
 }
 

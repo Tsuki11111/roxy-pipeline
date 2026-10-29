@@ -71,6 +71,7 @@ class EpisodeRead(BaseModel):
     audio_path: str | None
     audio_meta: dict | None
     qc_meta: dict | None
+    output_meta: dict | None
     version: int
     created_at: datetime
     updated_at: datetime
@@ -222,6 +223,7 @@ class ShotUpdate(BaseModel):
     bg: str | None = None
     transition: str | None = None
     motion: str | None = None
+    move: str | None = None
 
 
 class ShotUpdateResult(BaseModel):

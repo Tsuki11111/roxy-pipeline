@@ -29,6 +29,7 @@ def build_stage_payload(spec: EpisodeSpec, timeline: Timeline) -> dict:
                 "position": shot.character.position,
                 "height_px": shot.character.height_px,
                 "motion": shot.character.motion,
+                "move": shot.character.move,
                 "anchor_x": shot.character.anchor_x,
                 "anchor_y": shot.character.anchor_y,
                 "scale": shot.character.scale,

@@ -107,14 +107,26 @@ async def _generate_storyboard(episode_id: str, node_run_id: str) -> None:
                 )
 
             await session.execute(delete(Shot).where(Shot.episode_id == episode_id))
+            section_order: list[str] = []
             for item in shots:
                 line = line_by_seq.get(int(item["line_seq"]))
                 if line is None:
                     continue
+                section_new = line.section not in section_order
+                if section_new:
+                    section_order.append(line.section)
+                move = "none"
+                if section_new and item.get("character_image"):
+                    move = (
+                        "slide_in_left"
+                        if len(section_order) % 2 == 1
+                        else "slide_in_right"
+                    )
                 payload = {
                     "style": item.get("card_style", ""),
                     "text": line.text,
                     "motion": item.get("motion", "idle_breathe"),
+                    "move": move,
                 }
                 session.add(
                     Shot(

@@ -2,13 +2,13 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | v1.8 |
+| 文档版本 | v1.9 |
 | 文档状态 | 初稿，核心方案已确认 |
 | 日期 | 2026-10-29 |
 | 关联文档 | [需求分析文档](AI科普视频Agent系统需求分析文档.md)；[架构决策记录](decisions-architecture.md) |
 | 已确认约束 | 现有 Ubuntu VM 先跑；LLM 国内为主；TTS 用本地 IndexTTS2，不做付费云 TTS；视觉质检统一用 `deepseek-flash` 多模态；`deepseek-flash` 文本主模型 + 火山方舟备选/图像 |
 | 推荐方案 | 方案 A：Python 模块化单体 + 进程级拆分 + Celery；AI 子图用 LangGraph |
-| 变更说明 | v1.8：新增 Asset Agent（文本→无文字演示素材，reuse_key 复用，暂不引入 RAG）；v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
+| 变更说明 | v1.9：新增半身反应镜头与角色滑入、输出时间戳目录与 MinIO 上传；v1.8：新增 Asset Agent（文本→无文字演示素材，reuse_key 复用，暂不引入 RAG）；v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
 
 > 本文档回答“用什么做、怎么拆、怎么部署、接口长什么样”。需求编号（F-xx / N-xx / A-xx）沿用需求分析文档，不重复展开。
 
@@ -358,7 +358,7 @@ TTS（逐句合成，IndexTTS2 常驻服务）
 | 表 | 关键字段 | 说明 |
 |---|---|---|
 | `series` | id, name, voice_profile JSONB, section_labels JSONB, character_pack_id, watermark, template_version, non_commercial | 系列配置根；配置变更要版本化 |
-| `episode` | id, series_id, topic_id, title, target_duration_s, status, health, current_node, output_path, version, render_spec JSONB, script_meta JSONB, storyboard_meta JSONB, audio_path, audio_meta JSONB, qc_meta JSONB, created_at | `version` 做乐观锁；`health` 表示 OK/WARNING/BLOCKED；`render_spec` 是 M1.2 手工渲染 spec 的临时桥，M3 后由 shot 表生成；`script_meta`/`storyboard_meta` 存生成与校验快照；`audio_meta` 存句级/字级对齐；`qc_meta` 存 QC 汇总 |
+| `episode` | id, series_id, topic_id, title, target_duration_s, status, health, current_node, output_path, version, render_spec JSONB, script_meta JSONB, storyboard_meta JSONB, audio_path, audio_meta JSONB, qc_meta JSONB, output_meta JSONB, created_at | `version` 做乐观锁；`health` 表示 OK/WARNING/BLOCKED；`render_spec` 是 M1.2 手工渲染 spec 的临时桥，M3 后由 shot 表生成；`script_meta`/`storyboard_meta` 存生成与校验快照；`audio_meta` 存句级/字级对齐；`qc_meta` 存 QC 汇总；`output_meta` 存最终输出与 MinIO 位置 |
 | `topic_candidate` | id, series_id, source, title, hook, audience, fit_score, est_sections, raw JSONB, status | 抓取原文放 `raw`，只作数据，不作指令 |
 | `script_line` | id, episode_id, seq, speaker, section, text, char_count, version | `seq` 唯一且连续；`char_count` 由服务端计算 |
 | `line_audio` | id, episode_id, script_line_id, line_version, speaker, text_hash, voice_key, provider, model, ref_audio, path, duration_ms, sample_rate, checksum | `(script_line_id, text_hash, voice_key)` 唯一；文本或音色变化时重合成，否则复用 |
@@ -403,15 +403,17 @@ s3://roxy-artifacts/                    # 中间产物，按 episode + cache_key
   <episode_id>/cards/card_0001.png
 
 s3://roxy-output/                       # 最终交付
-  <episode_id>/episode.mp4
-  <episode_id>/cover.jpg
-  <episode_id>/episode.srt
-  <episode_id>/metadata.json
-  <episode_id>/qc/...
+  episodes/<YYYYMMDD-HHMMSS>_<episode_id8>/episode.mp4
+  episodes/<YYYYMMDD-HHMMSS>_<episode_id8>/metadata.json
+  episodes/<YYYYMMDD-HHMMSS>_<episode_id8>/cover.jpg
+  episodes/<YYYYMMDD-HHMMSS>_<episode_id8>/subtitles.srt
 ```
 
 **规则：**
 
+- 最终视频先落本地 `output/YYYYMMDD-HHMMSS_<episode_id8>/episode.mp4`，同目录写 `metadata.json`；`episode.output_path` 指向该文件，`episode.output_meta` 记录 MinIO URI。
+- 图片资产入库时同步镜像到 `roxy-assets/assets/<type>/<checksum前16位>.<ext>`，对象信息写 `asset.meta["minio"]`；已有 APPROVED 资产在下次 ingest 时补传。
+- MinIO 上传对象为 `episodes/<目录名>/episode.mp4`；本地开发 `MINIO_UPLOAD_ENABLED=true` 但 MinIO 不在线时只记录 `minio_error`，VM 用 `MINIO_REQUIRED=true` 强制成功。
 - 原始逐帧 PNG 不长期保存。渲染 worker 把帧直接管道给 ffmpeg 编码成镜头 MP4；只保留失败镜头的首帧/中间帧作为证据。
 - 所有产物写入使用“临时文件 + 原子 rename”或 MinIO 的 multipart 完成语义，避免半成品被下游读到。
 - 成片与元数据保留 ≥1 年；中间产物 90 天；日志 90 天；成本日志可保留 1 年（聚合后）。
@@ -853,6 +855,8 @@ ffmpeg -i video.mp4 -i audio_norm.wav \
 - 半身镜头前后仍用 180ms 角色交叉淡入，避免硬切。
 - 用半身镜头遮换姿势时：旧全身淡出 → bust 进入 → 新全身淡入，总过渡控制在 0.4–0.6 秒。
 
+> 2026-10-29 实现：bust 资产已进入分镜 catalog，`spec_builder` 通过文件名 `_bust_` 识别并设 `anchor_y=0`、高度 1000px；分镜提示词允许在强调/吐槽句选择 bust。当前尚未强制每 3–5 镜插入，也尚未做 bust 专属淡入曲线。
+
 ### 10.11 角色位移与物件联动
 
 **目的：** 角色全程钉在画面同一位置会显得僵硬；换位、让位或展示道具时，角色应作为整体做自然的快速平移，参考片里的滑入/滑出。
@@ -870,6 +874,8 @@ ffmpeg -i video.mp4 -i audio_norm.wav \
 - 位移由 `renderAt(tMs)` 根据 `start_ms/duration_ms/easing` 计算，禁止 CSS transition/animation。
 - `move` 参与 `shot.cache_key`；修改位移必须使缓存失效。
 - 入场/出场时角色和道具必须作为整体移出画面，不允许原地消失。
+
+> 2026-10-29 实现：当前用简化枚举 `CharacterSpec.move`（`slide_in_left/slide_in_right/shift_left/shift_right/none`），240ms ease-out；Storyboard 在每章第一个有角色的镜头自动交替分配 `slide_in_left/right`。`shift_*` 已支持渲染但尚未自动分配；物件/卡片同组移动还未接入。
 
 ---
 
@@ -1733,6 +1739,7 @@ roxy_pipeline/
 │  ├─ voice/               # 逐句 TTS、字级对齐、音轨装配
 │  ├─ qc/                  # 规则 + DeepSeek 多模态质检
 │  ├─ publish/             # 本地发布包
+│  ├─ storage/             # 时间戳输出目录、MinIO 上传
 │  ├─ render/              # 舞台、逐帧、镜头缓存、拼接
 │  ├─ assets/              # 资产持久化/复用
 │  ├─ providers/           # llm / tts 适配层

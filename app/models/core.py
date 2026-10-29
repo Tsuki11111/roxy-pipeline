@@ -125,6 +125,8 @@ class Episode(Base):
     audio_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # M4.3: QC summary and review findings.
     qc_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # M5.2: final output location and MinIO object metadata.
+    output_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(

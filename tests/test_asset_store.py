@@ -98,3 +98,36 @@ async def test_candidate_is_not_reusable(db, session):
     finally:
         shutil.rmtree(root, ignore_errors=True)
         source.unlink(missing_ok=True)
+
+
+async def test_ingest_mirrors_asset_to_minio(
+    db, session, monkeypatch, tmp_path
+):
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "minio_upload_enabled", True)
+    monkeypatch.setattr(
+        "app.assets.store.upload_to_minio",
+        lambda path, object_name, **kwargs: {
+            "bucket": "roxy-assets",
+            "object": object_name,
+            "uri": f"s3://roxy-assets/{object_name}",
+        },
+    )
+    root = PROJECT_ROOT / "tmp" / f"asset_minio_{uuid.uuid4().hex}"
+    source = make_png(tmp_path / "source.png")
+    try:
+        asset = await ingest_asset(
+            session,
+            source,
+            asset_type=AssetType.PROP,
+            name="minio-prop",
+            reuse_key="prop:minio-mirror",
+            root=root,
+        )
+        await session.commit()
+        assert asset.meta["minio"]["bucket"] == "roxy-assets"
+        assert asset.meta["minio"]["object"].startswith("assets/prop/")
+    finally:
+        shutil.rmtree(root, ignore_errors=True)

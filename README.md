@@ -14,7 +14,7 @@
 **AI 科普视频自动生成 Agent 系统**：从选题、脚本、分镜，到逐句 TTS、卡片/逐帧渲染、ffmpeg 拼接和质检的全自动流水线。
 
 **定位**：个人自用项目；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守[需求文档第 11 章](docs/AI科普视频Agent系统需求分析文档.md)。
-**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用 + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包已跑通；下一步成本报表与监控。
+**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用 + Asset Agent + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包/最终视频输出已跑通；下一步成本报表与监控。
 
 ---
 
@@ -75,14 +75,14 @@
 | M1 渲染链路 + M1.1 API/DB | 🚧 渲染原型与 API/DB 骨架已跑通 |
 | M1.2 队列/状态机/render worker | ✅ outbox + Celery `render.shot` 并行 + `render.concat`；真实 RabbitMQ 验证 |
 | M2 脚本 Agent（LangGraph） | ✅ `script_graph` + DeepSeek `deepseek-flash` + 脚本校验/编辑/确认 |
-| M3 分镜 Agent + 节奏规则 | ✅ `storyboard_graph` + 确定性节奏修复；Seedream 素材/半身镜头待补 |
+| M3 分镜 Agent + 节奏规则 | ✅ `storyboard_graph` + 确定性节奏修复；半身反应镜头/章首滑入已接入，Seedream 素材按需生成 |
 | M3.1 资产持久化/复用 | ✅ `asset` 表 + `data/assets` + `reuse_key`；生成前查重，生成后入库 |
 | Asset Agent | ✅ 文本→无文字演示素材；优先 `reuse_key` 复用，缺失才调 Seedream |
 | M4 源 TTS（IndexTTS2） | ✅ 本地 zero-shot 克隆 + 常驻服务；长文本 RTF 1.75 |
 | M4.1 逐句配音 + 音轨 | ✅ `line_audio` + media 任务 + 句级对齐 + 真实音轨成片 |
 | M4.2 字级对齐 | ✅ 中文 wav2vec2 强制对齐；字幕块按字级时间锚点显隐 |
 | M4.3 质检与报告 | ✅ 规则前置 + DeepSeek 抽帧质检；review 表与 QC API |
-| M5.1 局部修改/续跑/发布包 | ✅ 单句修订、镜头缓存、通用续跑、stale reconciler、本地发布包 |
+| M5.1 局部修改/续跑/发布包 | ✅ 单句修订、镜头缓存、通用续跑、stale reconciler、本地发布包、时间戳输出目录 + MinIO |
 | M5.2 成本与监控 | ⏳ token/TTS 成本报表、告警与运维面板 |
 
 ## 环境隔离
@@ -243,7 +243,7 @@ curl "http://localhost:8000/api/v1/assets?type=background&status=APPROVED"
 uv run python scripts/tools/generate_seedream_image.py --prompt "..." --out tmp/new_bg.png --asset-type background --reuse-key bg:paper:dark
 ```
 
-新图默认以 `CANDIDATE` 入库，人工筛选后调用 `POST /api/v1/assets/{id}/approve` 才会被复用。
+新图默认以 `CANDIDATE` 入库，人工筛选后调用 `POST /api/v1/assets/{id}/approve` 才会被复用。所有新入库/索引的图片会同时镜像到 MinIO 的 `MINIO_BUCKET_ASSETS`，对象路径为 `assets/<type>/<checksum前16位>.<ext>`，记录在 `asset.meta["minio"]`。
 
 ### 文本生成演示素材 Agent
 
@@ -258,6 +258,21 @@ curl -X POST http://localhost:8000/api/v1/assets/generate \
 - 不生成角色立绘、动漫人物或带文字的信息卡片。
 - 新图默认 `CANDIDATE`；`auto_approve=true` 且 DeepSeek 视觉检查通过时才直接 `APPROVED`。
 - `IMAGE_PROVIDER=mock` 可本地跑通流程，不调用 Seedream。
+
+### 成片输出与 MinIO
+
+每次渲染完成，成片会复制到时间戳目录：
+
+```text
+output/20261029-185432_8c7ade6b/
+├─ episode.mp4
+└─ metadata.json
+```
+
+- `OUTPUT_ROOT=./output`（VM 为 `/data/output`）。
+- `MINIO_UPLOAD_ENABLED=true` 时同时上传到 `MINIO_BUCKET_OUTPUT`，对象路径为 `episodes/<输出目录名>/episode.mp4`。
+- 本地 MinIO 未启动时默认只记录 `minio_error`，不阻塞成片；VM 设置 `MINIO_REQUIRED=true` 后上传失败会判定渲染失败。
+- `episode.output_path` 指向 output 目录，`episode.output_meta` 记录本地路径和 MinIO URI。
 
 ### 模型校验
 

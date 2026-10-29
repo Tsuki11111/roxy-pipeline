@@ -9,6 +9,13 @@ CARD_TYPES = ("chat_bubble", "terminal", "browser", "icon", "pure_text")
 POSITIONS = ("left", "right", "center", "none")
 TRANSITIONS = ("cut", "fade", "slide_in")
 MOTIONS = ("none", "idle_breathe", "card_pop", "subtle_pan")
+MOVES = (
+    "none",
+    "slide_in_left",
+    "slide_in_right",
+    "shift_left",
+    "shift_right",
+)
 
 MIN_DURATION_MS = 1500
 MAX_DURATION_MS = 6000
@@ -57,7 +64,7 @@ def load_character_assets(pack: str | None = None) -> list[dict]:
         data = json.loads(manifest_path.read_text(encoding="utf-8"))
         assets: list[dict] = []
         for asset in data.get("assets", []):
-            if asset.get("scene_asset") or asset.get("pose") == "bust":
+            if asset.get("scene_asset"):
                 continue
             file_name = asset.get("file")
             if not file_name:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -15,6 +16,7 @@ from app.render.encode import concat_and_mux, get_ffmpeg
 from app.render.models import EpisodeSpec
 from app.render.stage import build_stage_payload
 from app.render.timeline import build_timeline
+from app.storage.output import export_episode_video
 from app.workflow.celery_app import celery_app
 from app.workflow.db import run_async, task_session
 
@@ -59,21 +61,29 @@ async def _mark_success(
 ) -> None:
     async with task_session() as session:
         node = await session.get(NodeRun, node_run_id)
+        episode = await session.get(Episode, episode_id)
+        exported = await asyncio.to_thread(
+            export_episode_video,
+            Path(output_path),
+            episode_id,
+            title=episode.title if episode is not None else "",
+        )
+        final_path = exported["path"]
         if node is not None:
             now = datetime.now(timezone.utc)
             node.status = NodeStatus.SUCCESS
             node.finished_at = now
             node.heartbeat_at = now
-            node.output_ref = output_path
+            node.output_ref = final_path
             node.error = None
-        episode = await session.get(Episode, episode_id)
         qc_enabled = get_settings().qc_auto_run
         if episode is not None:
             episode.status = (
                 EpisodeStatus.QC if qc_enabled else EpisodeStatus.READY
             )
             episode.current_node = "qc.episode" if qc_enabled else None
-            episode.output_path = output_path
+            episode.output_path = final_path
+            episode.output_meta = exported["meta"]
             episode.health = "OK"
         await session.commit()
 

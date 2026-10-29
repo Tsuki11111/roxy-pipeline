@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import mimetypes
 import shutil
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.models.core import Asset, AssetStatus, AssetType
+from app.storage.output import upload_to_minio
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -52,6 +54,33 @@ async def find_reusable(
     )
 
 
+async def _mirror_asset_to_minio(
+    asset: Asset, local_path: Path, meta: dict
+) -> dict:
+    settings = get_settings()
+    if not settings.minio_upload_enabled or meta.get("minio"):
+        return meta
+    if not local_path.is_file():
+        return meta
+    object_name = (
+        f"assets/{asset.type.value}/{asset.checksum[:16]}"
+        f"{local_path.suffix.lower()}"
+    )
+    try:
+        meta["minio"] = await asyncio.to_thread(
+            upload_to_minio,
+            local_path,
+            object_name,
+            bucket=settings.minio_bucket_assets,
+            content_type=asset.mime,
+        )
+    except Exception as exc:
+        meta["minio_error"] = str(exc)[:1000]
+        if settings.minio_required:
+            raise
+    return meta
+
+
 async def ingest_asset(
     session: AsyncSession,
     source_path: Path,
@@ -79,6 +108,10 @@ async def ingest_asset(
         select(Asset).where(Asset.reuse_key == reuse_key)
     )
     if existing is not None and existing.status == AssetStatus.APPROVED:
+        local = (PROJECT_ROOT / existing.path).resolve()
+        existing.meta = await _mirror_asset_to_minio(
+            existing, local, dict(existing.meta or {})
+        )
         return existing
 
     checksum = sha256_file(source_path)
@@ -129,4 +162,11 @@ async def ingest_asset(
         for key, value in fields.items():
             setattr(asset, key, value)
     await session.flush()
+    asset.meta = await _mirror_asset_to_minio(
+        asset,
+        (PROJECT_ROOT / stored_path).resolve(),
+        dict(asset.meta or {}),
+    )
+    await session.flush()
+    return asset
     return asset

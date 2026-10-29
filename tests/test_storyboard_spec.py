@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.models.core import Episode, ScriptLine, Series, Shot
 from app.render.timeline import build_timeline
+from app.agents.storyboard.grammar import load_character_assets
 from app.agents.storyboard.spec_builder import build_episode_spec, shot_cache_key
 
 LABELS = ["问题", "解决", "结尾"]
@@ -72,6 +73,22 @@ def test_build_episode_spec_from_shots():
     )
     assert custom.background == "data/assets/background/custom.png"
     assert custom.floor == "data/assets/background/floor.png"
+
+
+def test_bust_and_move_are_projected():
+    episode, series, lines, shots = make_rows()
+    shots[0].character_image = "character_packs/roxy/roxy_bust_calm_01.png"
+    shots[0].card_payload = {**shots[0].card_payload, "move": "slide_in_left"}
+    spec = build_episode_spec(episode, series, lines, shots)
+    character = spec.shots[0].character
+    assert character is not None
+    assert character.anchor_y == 0
+    assert character.move == "slide_in_left"
+
+
+def test_character_catalog_includes_bust_assets():
+    assets = load_character_assets("roxy")
+    assert any("_bust_" in asset["path"] for asset in assets)
 
 
 def test_shot_cache_key_is_stable_and_sensitive():

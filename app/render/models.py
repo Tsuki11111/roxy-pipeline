@@ -13,6 +13,13 @@ class CharacterSpec(BaseModel):
     position: Position = "left"
     height_px: int = 1000
     motion: Literal["none", "idle_breathe"] = "idle_breathe"
+    move: Literal[
+        "none",
+        "slide_in_left",
+        "slide_in_right",
+        "shift_left",
+        "shift_right",
+    ] = "none"
     anchor_x: float | None = Field(default=None, ge=0.0, le=1.0)
     anchor_y: int | None = Field(default=None, ge=0)
     scale: float = Field(default=1.0, gt=0.0, le=2.0)
