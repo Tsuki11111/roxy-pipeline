@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.storyboard_utils import (
+from app.agents.storyboard.utils import (
     load_script_lines,
     load_shots,
     store_rhythm,
@@ -12,7 +12,7 @@ from app.api.storyboard_utils import (
 from app.db.session import get_session
 from app.models.core import Episode, ScriptLine, Series, Shot
 from app.schemas.core import ShotRead, ShotUpdate, ShotUpdateResult
-from app.storyboard.grammar import (
+from app.agents.storyboard.grammar import (
     BACKGROUNDS,
     CARD_TYPES,
     DEFAULT_CARD_STYLES,
@@ -21,7 +21,7 @@ from app.storyboard.grammar import (
     MOTIONS,
     PROJECT_ROOT,
 )
-from app.storyboard.spec_builder import shot_cache_key
+from app.agents.storyboard.spec_builder import shot_cache_key
 
 router = APIRouter(prefix="/api/v1/shots", tags=["storyboard"])
 

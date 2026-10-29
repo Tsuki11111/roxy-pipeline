@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.store import find_reusable
-from app.storyboard.grammar import (
+from app.agents.storyboard.grammar import (
     BACKGROUNDS,
     DEFAULT_BACKGROUND_KEY,
     DEFAULT_FLOOR,

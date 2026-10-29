@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.storyboard.graph import run_storyboard_graph
+from app.agents.storyboard.graph import run_storyboard_graph
 
 LABELS = ["问题", "解决", "结尾"]
 CATALOG = [

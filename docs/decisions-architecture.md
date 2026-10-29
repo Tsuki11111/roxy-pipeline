@@ -225,7 +225,7 @@ M4 需要中文吐字清晰、音量充足的配音。实测 MeloTTS + RVC v3 �
 ### 决策
 
 - 源 TTS 用 **IndexTTS2 zero-shot 声音克隆**，模型 `IndexTeam/IndexTTS-2`，参考音为用户提供的 20 句干净录音中的 4.94 秒片段。
-- IndexTTS2 跑在独立 Python 3.11 + torch 2.8 cu128 环境，由 `scripts/indextts_server.py` 常驻 `127.0.0.1:8765`，模型只加载一次，逐句合成走 HTTP。
+- IndexTTS2 跑在独立 Python 3.11 + torch 2.8 cu128 环境，由 `scripts/runtime/indextts_server.py` 常驻 `127.0.0.1:8765`，模型只加载一次，逐句合成走 HTTP。
 - 8GB 显存：fp16、关闭 QwenEmotion、Wav2Vec2-BERT 放 CPU 做一次性音色编码。
 - 删除 RVC 变声层、MeloTTS/Piper 基础设施和训练模型；不再维护第二套音色转换链。
 
@@ -259,7 +259,7 @@ M4 需要中文吐字清晰、音量充足的配音。实测 MeloTTS + RVC v3 �
 ### 决策
 
 - 只使用 WhisperX 同款中文 wav2vec2 CTC 模型，做“已知文本 → 音频”的强制对齐。
-- 在独立 Python 3.11 进程运行 `scripts/align_words.py`，用 `torchaudio.functional.forced_align` 求字符级路径；不安装 WhisperX 包。
+- 在独立 Python 3.11 进程运行 `scripts/runtime/align_words.py`，用 `torchaudio.functional.forced_align` 求字符级路径；不安装 WhisperX 包。
 - 数字/符号先用 IndexTTS2 的文本归一化器转成实际读法，再用 `difflib` 映射回原文字符，保证字幕文本不变。
 - 字级时间写入 `episode.audio_meta.lines[].chars` 与 `alignment.json`；字幕块用字级起止时间显隐。
 

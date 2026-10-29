@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.storyboard.models import ShotDraft
-from app.storyboard.rhythm import apply_rhythm_fixes, validate_rhythm
+from app.agents.storyboard.models import ShotDraft
+from app.agents.storyboard.rhythm import apply_rhythm_fixes, validate_rhythm
 
 LABELS = ["问题", "解决", "结尾"]
 CARDS = ["chat_bubble", "terminal", "chat_bubble", "browser", "terminal", "chat_bubble", "icon", "pure_text"]

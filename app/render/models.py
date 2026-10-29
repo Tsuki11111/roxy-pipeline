@@ -40,6 +40,7 @@ class ShotSpec(BaseModel):
     card: CardSpec | None = None
     bg: str | None = None
     floor: str | None = None
+    template_version: str = "v1"
     # Character timings relative to shot start; populated after M4.2 alignment.
     char_timings: list[CharTiming] = Field(default_factory=list)
 

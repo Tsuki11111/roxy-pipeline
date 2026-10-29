@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     tts_indextts_python: str = "./data/tools/indextts-venv/Scripts/python.exe"
     tts_indextts_repo: str = "./data/tools/IndexTTS2"
     tts_indextts_model_dir: str = "./data/assets/voice/indextts2/IndexTTS-2"
-    tts_indextts_server: str = "./scripts/indextts_server.py"
+    tts_indextts_server: str = "./scripts/runtime/indextts_server.py"
     tts_indextts_ref_audio: str = "./data/assets/voice/indextts2/reference.wav"
     tts_indextts_url: str = "http://127.0.0.1:8765"
     tts_indextts_use_fp16: bool = True
@@ -75,7 +75,7 @@ class Settings(BaseSettings):
 
     # M4.2 character-level forced alignment (WhisperX's Chinese wav2vec2 model).
     align_python: str = "./data/tools/indextts-venv/Scripts/python.exe"
-    align_script: str = "./scripts/align_words.py"
+    align_script: str = "./scripts/runtime/align_words.py"
     align_repo: str = "./data/tools/IndexTTS2"
     align_model_dir: str = "./data/assets/voice/align/wav2vec2-chinese"
     align_device: str = "cuda"
@@ -92,6 +92,11 @@ class Settings(BaseSettings):
     qc_vision_max_tokens: int = 2000
     # Vision findings are advisory by default; deterministic rule errors block.
     qc_vision_blocking: bool = False
+
+    # M5 ops: mark RUNNING nodes without heartbeat as failed so they can resume.
+    reconciler_stale_s: int = 1800
+    reconciler_interval_s: int = 60
+    package_dir: str = "./tmp/packages"
 
     celery_task_always_eager: bool = False
     outbox_poll_interval_s: float = 5.0

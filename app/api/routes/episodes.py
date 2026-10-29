@@ -5,15 +5,15 @@ from jinja2 import TemplateNotFound
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.script_service import ScriptConflict, ScriptRequestError, start_script
-from app.agents.script_validation import ValidationResult
-from app.api.script_utils import (
+from app.agents.script.service import ScriptConflict, ScriptRequestError, start_script
+from app.agents.script.validation import ValidationResult
+from app.agents.script.utils import (
     load_lines,
     load_series,
     store_validation,
     validate_episode,
 )
-from app.api.storyboard_utils import (
+from app.agents.storyboard.utils import (
     build_render_spec,
     load_script_lines,
     load_shots,
@@ -21,12 +21,12 @@ from app.api.storyboard_utils import (
     validate_storyboard,
 )
 from app.db.session import get_session
-from app.media.align_service import (
+from app.voice.align_service import (
     AlignConflict,
     AlignRequestError,
     start_align,
 )
-from app.media.service import (
+from app.voice.service import (
     VoiceConflict,
     VoiceRequestError,
     start_voice,
@@ -39,6 +39,7 @@ from app.models.core import (
     ScriptLine,
     Series,
 )
+from app.publish.package import build_package, load_package
 from app.qc.service import QcConflict, QcRequestError, start_qc
 from app.render.models import EpisodeSpec
 from app.render.stage import build_stage_payload
@@ -49,6 +50,8 @@ from app.schemas.core import (
     EpisodeCreate,
     EpisodeRead,
     LineAudioRead,
+    LineRevisionAccepted,
+    LineRevisionRequest,
     QcReport,
     ReviewRead,
     ScriptLineRead,
@@ -56,17 +59,23 @@ from app.schemas.core import (
     ShotRead,
     StoryboardRead,
 )
-from app.storyboard.models import RhythmReport
-from app.storyboard.service import (
+from app.agents.storyboard.models import RhythmReport
+from app.agents.storyboard.service import (
     StoryboardConflict,
     StoryboardRequestError,
     start_storyboard,
 )
-from app.workflow.render_service import (
+from app.render.service import (
     RenderConflict,
     RenderRequestError,
     start_render,
 )
+from app.workflow.revision import (
+    RevisionConflict,
+    RevisionRequestError,
+    revise_line,
+)
+from app.workflow.resume import ResumeConflict, resume_episode
 from app.workflow.state_machine import InvalidTransition, transition_episode
 
 router = APIRouter(prefix="/api/v1/episodes", tags=["episodes"])
@@ -339,7 +348,59 @@ async def publish_episode(
     episode_id: str,
     session: AsyncSession = Depends(get_session),
 ) -> Episode:
-    return await _transition(session, episode_id, EpisodeStatus.PUBLISHED)
+    episode = await session.get(Episode, episode_id, with_for_update=True)
+    if episode is None:
+        raise HTTPException(status_code=404, detail="episode not found")
+    if episode.status != EpisodeStatus.READY:
+        raise HTTPException(
+            status_code=409,
+            detail=f"episode status {episode.status.value} is not READY",
+        )
+    try:
+        await build_package(session, episode)
+        episode = await transition_episode(
+            session, episode_id, EpisodeStatus.PUBLISHED
+        )
+    except InvalidTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (ValueError, LookupError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    await session.refresh(episode)
+    return episode
+
+
+@router.post("/{episode_id}/actions/package", response_model=dict)
+async def package_episode_action(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    episode = await session.get(Episode, episode_id)
+    if episode is None:
+        raise HTTPException(status_code=404, detail="episode not found")
+    if episode.status not in {EpisodeStatus.READY, EpisodeStatus.PUBLISHED}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"episode status {episode.status.value} cannot package",
+        )
+    try:
+        return await build_package(session, episode)
+    except (ValueError, LookupError, RuntimeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/{episode_id}/package", response_model=dict)
+async def get_package(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    episode = await session.get(Episode, episode_id)
+    if episode is None:
+        raise HTTPException(status_code=404, detail="episode not found")
+    manifest = load_package(episode_id)
+    if manifest is None:
+        raise HTTPException(status_code=404, detail="package not built")
+    return manifest
 
 
 async def _storyboard_action(
@@ -390,6 +451,80 @@ async def _voice_action(
         status=episode.status,
         node_key=node.node_key,
         operation_id=node.id,
+    )
+
+
+@router.post(
+    "/{episode_id}/actions/resume",
+    response_model=EpisodeActionAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def resume_episode_action(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> EpisodeActionAccepted:
+    try:
+        episode, node = await resume_episode(session, episode_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ResumeConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (
+        VoiceConflict,
+        AlignConflict,
+        QcConflict,
+        RenderConflict,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (
+        VoiceRequestError,
+        AlignRequestError,
+        QcRequestError,
+        RenderRequestError,
+    ) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await session.commit()
+    await session.refresh(episode)
+    return EpisodeActionAccepted(
+        episode_id=episode.id,
+        status=episode.status,
+        node_key=node.node_key,
+        operation_id=node.id,
+    )
+
+
+@router.post(
+    "/{episode_id}/actions/revise-line",
+    response_model=LineRevisionAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def revise_script_line(
+    episode_id: str,
+    payload: LineRevisionRequest,
+    session: AsyncSession = Depends(get_session),
+) -> LineRevisionAccepted:
+    try:
+        episode, line, node = await revise_line(
+            session, episode_id, payload.line_id, payload.text
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RevisionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except RevisionRequestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (VoiceConflict, VoiceRequestError) as exc:
+        status_code = 409 if isinstance(exc, VoiceConflict) else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    await session.commit()
+    await session.refresh(episode)
+    await session.refresh(line)
+    return LineRevisionAccepted(
+        episode_id=episode.id,
+        status=episode.status,
+        node_key=node.node_key,
+        operation_id=node.id,
+        line=ScriptLineRead.model_validate(line),
     )
 
 

@@ -19,7 +19,7 @@
 AI 科普视频自动生成 Agent 系统：选题 → 脚本 → 分镜 → 逐句 TTS/对齐 → HTML 卡片/逐帧渲染 → ffmpeg 拼接 → 质检。
 
 - **个人自用项目**；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守需求文档第 11 章。
-- **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用 + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 规则/DeepSeek 多模态质检 + 真实音轨成片已跑通；下一步 M5 局部修改与运维。
+- **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用 + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包已跑通；下一步成本报表与监控。
 - **GitHub**：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
 - **仓库不包含**：`.env`、洛琪希参考图/立绘、`tmp/`、私有 character pack。
 
@@ -82,8 +82,8 @@ Playwright/Chromium + ffmpeg + LangGraph（仅 AI 子图）；前端 React + Vit
 ### 5. 运行环境
 
 - 开发机：Windows 11 + Git Bash；Python 可用；Docker Desktop 已可用。本地 compose 默认只起 Postgres/RabbitMQ/Redis，MinIO 用 `storage` profile。
-- **IndexTTS2 独立环境**：主项目 Python 3.12；IndexTTS2 固定在 `data/tools/indextts-venv`（Python 3.11 + torch 2.8 cu128），由 `scripts/indextts_server.py` 常驻 `127.0.0.1:8765`；模型在 `data/assets/voice/indextts2/`（gitignore）。8GB 显存下用 fp16，并把 Wav2Vec2-BERT 放 CPU 做一次性音色编码。
-- **字级对齐**：同一 Python 3.11 环境运行 `scripts/align_words.py`，中文模型在 `data/assets/voice/align/wav2vec2-chinese/`；`align.episode` 与 `voice.episode` 都在 media 队列，TTS 并发固定 1。
+- **IndexTTS2 独立环境**：主项目 Python 3.12；IndexTTS2 固定在 `data/tools/indextts-venv`（Python 3.11 + torch 2.8 cu128），由 `scripts/runtime/indextts_server.py` 常驻 `127.0.0.1:8765`；模型在 `data/assets/voice/indextts2/`（gitignore）。8GB 显存下用 fp16，并把 Wav2Vec2-BERT 放 CPU 做一次性音色编码。
+- **字级对齐**：同一 Python 3.11 环境运行 `scripts/runtime/align_words.py`，中文模型在 `data/assets/voice/align/wav2vec2-chinese/`；`align.episode` 与 `voice.episode` 都在 media 队列，TTS 并发固定 1。
 - 部署目标：Ubuntu 24.04 VM，Docker 29 / Compose 2.40。
 - **本地与 VM 资源隔离**：本地用 `ROXY_ENV=local` / `COMPOSE_PROJECT_NAME=roxy-local`，VM 用 `ROXY_ENV=vm` / `COMPOSE_PROJECT_NAME=roxy-vm`；容器名、网络、数据卷按环境分开，不能共用同一套资源。
 - **后端禁止写死服务地址**：数据库、RabbitMQ、Redis、MinIO、API 地址全部从环境变量 / `Settings` 读取；业务模块不出现 `localhost`、VM IP 或容器名。地址只出现在 `.env` / `.env.vm` 和 compose 的环境变量里。

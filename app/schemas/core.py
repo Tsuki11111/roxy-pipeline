@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.agents.script_validation import ValidationResult
+from app.agents.script.validation import ValidationResult
 from app.models.core import (
     AssetStatus,
     AssetType,
@@ -12,7 +12,7 @@ from app.models.core import (
     NodeStatus,
     ReviewLevel,
 )
-from app.storyboard.models import RhythmReport
+from app.agents.storyboard.models import RhythmReport
 
 
 class HealthResponse(BaseModel):
@@ -82,6 +82,11 @@ class EpisodeActionAccepted(BaseModel):
     operation_id: str
 
 
+class LineRevisionRequest(BaseModel):
+    line_id: str
+    text: str = Field(min_length=1, max_length=200)
+
+
 class ScriptLineRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -93,6 +98,10 @@ class ScriptLineRead(BaseModel):
     text: str
     char_count: int
     version: int
+
+
+class LineRevisionAccepted(EpisodeActionAccepted):
+    line: ScriptLineRead
 
 
 class ShotRead(BaseModel):

@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.script_utils import (
+from app.agents.script.utils import (
     load_lines,
     load_series,
     store_validation,

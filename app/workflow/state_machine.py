@@ -43,7 +43,11 @@ TRANSITIONS: dict[EpisodeStatus, frozenset[EpisodeStatus]] = {
         }
     ),
     EpisodeStatus.READY: frozenset(
-        {EpisodeStatus.PUBLISHED, EpisodeStatus.CANCELLED}
+        {
+            EpisodeStatus.PUBLISHED,
+            EpisodeStatus.VOICING,
+            EpisodeStatus.CANCELLED,
+        }
     ),
     EpisodeStatus.PUBLISHED: frozenset(),
     EpisodeStatus.CANCELLED: frozenset(),

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.agents.script_graph import run_script_graph
+from app.agents.script.graph import run_script_graph
 
 LABELS = ["问题", "解决", "结尾"]
 

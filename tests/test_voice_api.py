@@ -8,10 +8,10 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app.core.config import get_settings
-from app.media.align_service import start_align
-from app.media.align_tasks import _align_episode
-from app.media.service import start_voice
-from app.media.tasks import _voice_episode
+from app.voice.align_service import start_align
+from app.voice.align_tasks import _align_episode
+from app.voice.service import start_voice
+from app.voice.tasks import _voice_episode
 from app.models.core import (
     Episode,
     EpisodeStatus,
@@ -145,10 +145,10 @@ async def test_voice_episode_auto_queues_render(
         async with session_factory() as db_session:
             yield db_session
 
-    monkeypatch.setattr("app.media.tasks.task_session", fake_task_session)
-    monkeypatch.setattr("app.media.align_tasks.task_session", fake_task_session)
+    monkeypatch.setattr("app.voice.tasks.task_session", fake_task_session)
+    monkeypatch.setattr("app.voice.align_tasks.task_session", fake_task_session)
     monkeypatch.setattr(
-        "app.media.tasks.build_tts_provider", lambda: FakeProvider()
+        "app.voice.tasks.build_tts_provider", lambda: FakeProvider()
     )
 
     await seed_voicing(session, ep["id"])
@@ -188,10 +188,10 @@ async def test_voice_episode_writes_audio_alignment_and_shots(
         async with session_factory() as db_session:
             yield db_session
 
-    monkeypatch.setattr("app.media.tasks.task_session", fake_task_session)
-    monkeypatch.setattr("app.media.align_tasks.task_session", fake_task_session)
+    monkeypatch.setattr("app.voice.tasks.task_session", fake_task_session)
+    monkeypatch.setattr("app.voice.align_tasks.task_session", fake_task_session)
     monkeypatch.setattr(
-        "app.media.tasks.build_tts_provider", lambda: FakeProvider()
+        "app.voice.tasks.build_tts_provider", lambda: FakeProvider()
     )
 
     await seed_voicing(session, ep["id"])
@@ -247,10 +247,10 @@ async def test_align_episode_writes_char_timings(
         async with session_factory() as db_session:
             yield db_session
 
-    monkeypatch.setattr("app.media.tasks.task_session", fake_task_session)
-    monkeypatch.setattr("app.media.align_tasks.task_session", fake_task_session)
+    monkeypatch.setattr("app.voice.tasks.task_session", fake_task_session)
+    monkeypatch.setattr("app.voice.align_tasks.task_session", fake_task_session)
     monkeypatch.setattr(
-        "app.media.tasks.build_tts_provider", lambda: FakeProvider()
+        "app.voice.tasks.build_tts_provider", lambda: FakeProvider()
     )
 
     def fake_aligner(input_path, output_path, _model_dir):
@@ -280,7 +280,7 @@ async def test_align_episode_writes_char_timings(
         )
 
     monkeypatch.setattr(
-        "app.media.align_tasks._run_aligner", fake_aligner
+        "app.voice.align_tasks._run_aligner", fake_aligner
     )
 
     await seed_voicing(session, ep["id"])

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.models.core import Episode, ScriptLine, Series, Shot
 from app.render.timeline import build_timeline
-from app.storyboard.spec_builder import build_episode_spec, shot_cache_key
+from app.agents.storyboard.spec_builder import build_episode_spec, shot_cache_key
 
 LABELS = ["问题", "解决", "结尾"]
 CHARACTER = "character_packs/placeholder/character.png"

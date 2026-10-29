@@ -14,7 +14,7 @@
 **AI 科普视频自动生成 Agent 系统**：从选题、脚本、分镜，到逐句 TTS、卡片/逐帧渲染、ffmpeg 拼接和质检的全自动流水线。
 
 **定位**：个人自用项目；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守[需求文档第 11 章](docs/AI科普视频Agent系统需求分析文档.md)。
-**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用 + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 规则/DeepSeek 多模态质检 + 真实音轨成片已跑通；下一步 M5 局部修改与运维。
+**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产持久化/复用 + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包已跑通；下一步成本报表与监控。
 
 ---
 
@@ -81,8 +81,8 @@
 | M4.1 逐句配音 + 音轨 | ✅ `line_audio` + media 任务 + 句级对齐 + 真实音轨成片 |
 | M4.2 字级对齐 | ✅ 中文 wav2vec2 强制对齐；字幕块按字级时间锚点显隐 |
 | M4.3 质检与报告 | ✅ 规则前置 + DeepSeek 抽帧质检；review 表与 QC API |
-| M5 局部修改与运维 | ⏳ 局部重跑、续跑、发布包与运维 |
-| M5 局部修改、续跑、运维 | ⏳ |
+| M5.1 局部修改/续跑/发布包 | ✅ 单句修订、镜头缓存、通用续跑、stale reconciler、本地发布包 |
+| M5.2 成本与监控 | ⏳ token/TTS 成本报表、告警与运维面板 |
 
 ## 环境隔离
 
@@ -100,14 +100,14 @@ cd roxy-pipeline
 UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple uv sync
 uv run playwright install chromium
 uv run pytest -q
-uv run python scripts/render_demo.py
+uv run python scripts/demo/render_demo.py
 ```
 
 输出：`tmp/render_demo/demo_episode.mp4`（3 镜头、12 秒、1920×1080、25fps、H.264/AAC）。
 只出静帧调布局：
 
 ```bash
-uv run python scripts/render_demo.py --stills-only --still-ms 2000 --still-out tmp/render_demo/still_2s.png
+uv run python scripts/demo/render_demo.py --stills-only --still-ms 2000 --still-out tmp/render_demo/still_2s.png
 ```
 
 > 当前 demo 引用本地 `character_packs/roxy/` 与 `tmp/seedream_assets/`，这些素材不进公开仓库；公开复现需要后续补 placeholder pack。
@@ -163,7 +163,7 @@ uv run celery -A app.workflow.celery_app beat -l info
 触发一次完整链路（创建期 → 挂 render spec → outbox → RabbitMQ → render worker → 成片）：
 
 ```bash
-uv run python scripts/queue_demo_render.py --base-url http://localhost:8000
+uv run python scripts/demo/queue_demo_render.py --base-url http://localhost:8000
 ```
 
 > 已在本机 Postgres + RabbitMQ + Redis 上实测：3 镜头 6.00 秒成片，outbox DISPATCHED、episode READY。
@@ -171,7 +171,7 @@ uv run python scripts/queue_demo_render.py --base-url http://localhost:8000
 公开占位素材可直接复现：
 
 ```bash
-uv run python scripts/render_demo.py --spec specs/demo_placeholder.json --out tmp/render_demo/placeholder.mp4
+uv run python scripts/demo/render_demo.py --spec specs/demo_placeholder.json --out tmp/render_demo/placeholder.mp4
 ```
 
 ### M2 脚本生成
@@ -227,7 +227,7 @@ curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/build-re
 把已有图片索引到数据库；`tmp/seedream_assets` 的背景/物件会复制到 `data/assets`，角色包在原目录索引：
 
 ```bash
-uv run python scripts/ingest_assets.py
+uv run python scripts/tools/ingest_assets.py
 ```
 
 查询可复用资产：
@@ -239,7 +239,7 @@ curl "http://localhost:8000/api/v1/assets?type=background&status=APPROVED"
 生成新图时先给 `reuse_key`；命中 APPROVED 资产就不会调用 Seedream：
 
 ```bash
-uv run python scripts/generate_seedream_image.py --prompt "..." --out tmp/new_bg.png --asset-type background --reuse-key bg:paper:dark
+uv run python scripts/tools/generate_seedream_image.py --prompt "..." --out tmp/new_bg.png --asset-type background --reuse-key bg:paper:dark
 ```
 
 新图默认以 `CANDIDATE` 入库，人工筛选后调用 `POST /api/v1/assets/{id}/approve` 才会被复用。
@@ -249,7 +249,7 @@ uv run python scripts/generate_seedream_image.py --prompt "..." --out tmp/new_bg
 ```bash
 cp .env.example .env
 # 在 .env 填入 DeepSeek / 火山方舟凭据
-uv run python scripts/check_llm.py --live
+uv run python scripts/tools/check_llm.py --live
 ```
 
 Celery/RabbitMQ worker 与 Web 前端还在 M1.2 之后，尚未接入。
@@ -267,7 +267,7 @@ Celery/RabbitMQ worker 与 Web 前端还在 M1.2 之后，尚未接入。
 
 - DeepSeek Base URL：`https://api.deepseek.com`
 - 火山方舟 Base URL：`https://ark.cn-beijing.volces.com/api/v3`
-- 校验脚本：[scripts/check_llm.py](scripts/check_llm.py)；Key 只在本地 `.env`，不会提交。
+- 校验脚本：[scripts/tools/check_llm.py](scripts/tools/check_llm.py)；Key 只在本地 `.env`，不会提交。
 
 ## 文档
 

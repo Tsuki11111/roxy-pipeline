@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.agents.script_validation import (
+from app.agents.script.validation import (
     ScriptLineData,
     target_chars_for_duration,
     validate_script,

@@ -2,13 +2,13 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | v1.6 |
+| 文档版本 | v1.7 |
 | 文档状态 | 初稿，核心方案已确认 |
 | 日期 | 2026-10-29 |
 | 关联文档 | [需求分析文档](AI科普视频Agent系统需求分析文档.md)；[架构决策记录](decisions-architecture.md) |
 | 已确认约束 | 现有 Ubuntu VM 先跑；LLM 国内为主；TTS 用本地 IndexTTS2，不做付费云 TTS；视觉质检统一用 `deepseek-flash` 多模态；`deepseek-flash` 文本主模型 + 火山方舟备选/图像 |
 | 推荐方案 | 方案 A：Python 模块化单体 + 进程级拆分 + Celery；AI 子图用 LangGraph |
-| 变更说明 | v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
+| 变更说明 | v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
 
 > 本文档回答“用什么做、怎么拆、怎么部署、接口长什么样”。需求编号（F-xx / N-xx / A-xx）沿用需求分析文档，不重复展开。
 
@@ -278,12 +278,12 @@ TTS（逐句合成，IndexTTS2 常驻服务）
 
 | 进程 | 入口 | 队列 | 建议副本 | 资源/副本 | 说明 |
 |---|---|---|---|---|---|
-| api | `uvicorn app.api:app` | 无 | 1–2 | 0.5–1GB | REST、SSE、认证、人工闸口 |
-| workflow-worker | `celery -A app.workflow worker -Q workflow` | workflow | 1 | 0.5GB | 状态推进、节点调度、补偿 |
-| agent-worker | `celery -A app.agents worker -Q agent` | agent | 1–4 | 0.5–1GB | 运行 LangGraph 子图、LLM 调用，网络等待为主 |
-| media-worker | `celery -A app.media worker -Q media` | media | TTS 1 副本；对齐 1–4 | 4–8GB VRAM（IndexTTS2 常驻） | 逐句 TTS、对齐、音频装配；TTS 并发固定为 1 |
-| asset-worker | `celery -A app.assets worker -Q asset` | asset | 1–2 | 1GB | 图像生成、背景移除、缩放、候选入库 |
-| render-worker | `celery -A app.render worker -Q render` | render | 1–N | 2 vCPU / 2GB | Chromium + ffmpeg，CPU 密集 |
+| api | `uvicorn app.api.main:app` | 无 | 1–2 | 0.5–1GB | REST、SSE、认证、人工闸口 |
+| workflow-worker | `celery -A app.workflow.celery_app worker -Q workflow` | workflow | 1 | 0.5GB | 状态推进、节点调度、补偿 |
+| agent-worker | `celery -A app.workflow.celery_app worker -Q agent` | agent | 1–4 | 0.5–1GB | 运行 LangGraph 子图、LLM 调用、QC，网络等待为主 |
+| media-worker | `celery -A app.workflow.celery_app worker -Q media` | media | TTS 1 副本；对齐 1–4 | 4–8GB VRAM（IndexTTS2 常驻） | 逐句 TTS、对齐、音频装配；TTS 并发固定为 1 |
+| asset-worker | 暂未拆进程 | asset | — | — | 当前资产生成/检查走 API 或脚本 |
+| render-worker | `celery -A app.workflow.celery_app worker -Q render` | render | 1–N | 2 vCPU / 2GB | Chromium + ffmpeg，CPU 密集 |
 | scheduler | `celery beat` 或 APScheduler | 无 | 1 | 256MB | 候选抓取、清理、reconciler、成本汇总 |
 | web | Nginx + 静态文件 | 无 | 1 | 128MB | SPA 与反向代理 |
 
@@ -994,7 +994,7 @@ class TTSProvider(Protocol):
 
 1. IndexTTS2 只返回句级音频与时长，不提供字级时间戳。
 2. 用 WhisperX 同款中文 wav2vec2 模型（`jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn`）对每句音频做 CTC 强制对齐，输出字级时间；已知台词直接作为对齐目标，不跑 ASR。
-3. 对齐在独立 Python 进程执行（`scripts/align_words.py`），模型常驻不可行时按集加载；显存不足自动回退 CPU。
+3. 对齐在独立 Python 进程执行（`scripts/runtime/align_words.py`），模型常驻不可行时按集加载；显存不足自动回退 CPU。
 4. 对齐结果做单调性、边界、字表校验；失败进入 QC，不阻塞人工重试。
 
 **音色一致性：**
@@ -1205,9 +1205,12 @@ reuse_key → 查 asset 表
 | POST | `/episodes/{id}/actions/retry-script` | 重跑失败的脚本生成 | operator/admin |
 | POST | `/episodes/{id}/actions/regenerate-script` | 重新生成整份脚本 | operator/admin |
 | POST | `/episodes/{id}/actions/retry` | 重跑指定节点/阶段 | operator/admin |
+| POST | `/episodes/{id}/actions/resume` | 按当前状态续跑失败阶段 | operator/admin |
 | POST | `/episodes/{id}/actions/resume-agent` | 恢复被 interrupt 的 LangGraph 子图 | operator/admin |
+| POST | `/episodes/{id}/actions/revise-line` | 修改单句并从配音起局部重跑 | operator/admin |
 | POST | `/episodes/{id}/actions/cancel` | 取消 | operator/admin |
-| POST | `/episodes/{id}/actions/publish` | 标记已发布 | operator/admin |
+| POST | `/episodes/{id}/actions/publish` | 生成发布包并标记已发布 | operator/admin |
+| POST | `/episodes/{id}/actions/package` | 重新生成发布包 | operator/admin |
 | GET | `/episodes/{id}/script` | 脚本全文 + 校验结果 | 登录用户 |
 | PATCH | `/script-lines/{line_id}` | 编辑单句 | operator/admin |
 | POST | `/script-lines/{line_id}/regenerate` | 重生成单句 | operator/admin |
@@ -1715,33 +1718,26 @@ roxy_pipeline/
 ├─ compose.prod.yml
 ├─ app/
 │  ├─ api/                 # FastAPI 路由、认证、SSE
-│  ├─ workflow/            # 状态机、节点注册、dispatcher、reconciler
-│  ├─ agents/              # LangGraph 子图
-│  │  ├─ graphs/           # script_graph / storyboard_graph / qc_repair_graph
-│  │  ├─ state.py          # 图 State 定义
-│  │  └─ checkpoint.py     # Postgres checkpointer 配置
-│  ├─ domains/
-│  │  ├─ topic/
-│  │  ├─ script/
-│  │  ├─ storyboard/
-│  │  ├─ voice/
-│  │  ├─ render/
-│  │  ├─ qc/
-│  │  ├─ asset/
-│  │  └─ publish/
-│  ├─ providers/           # llm / tts / align / vision / imagegen 适配层
-│  ├─ infrastructure/      # db / queue / storage / observability
-│  └─ config/
+│  ├─ agents/              # 所有 LangGraph 智能体
+│  │  ├─ script/           # 脚本 Agent：graph/validation/service/tasks
+│  │  └─ storyboard/       # 分镜 Agent：graph/rhythm/service/spec
+│  ├─ voice/               # 逐句 TTS、字级对齐、音轨装配
+│  ├─ qc/                  # 规则 + DeepSeek 多模态质检
+│  ├─ publish/             # 本地发布包
+│  ├─ render/              # 舞台、逐帧、镜头缓存、拼接
+│  ├─ assets/              # 资产持久化/复用
+│  ├─ providers/           # llm / tts 适配层
+│  ├─ workflow/            # Celery、outbox、状态机、resume/revision
+│  ├─ models/              # SQLAlchemy 模型
+│  ├─ schemas/             # Pydantic API schema
+│  ├─ db/                  # Base + async session
+│  └─ core/                # settings
 ├─ templates/              # stage / cards / partials
 ├─ prompts/                # 版本化 Prompt
 ├─ assets/                 # 角色/背景/字体/BGM（或放 MinIO）
 ├─ character_packs/        # 角色包：canonical 设定图、表情/姿势、manifest
 ├─ migrations/             # Alembic
-├─ tests/
-│  ├─ unit/
-│  ├─ integration/
-│  ├─ golden/
-│  └─ e2e/
+├─ tests/                  # pytest（当前扁平结构）
 ├─ web/                    # React + Vite
 └─ docs/
 ```
@@ -1752,11 +1748,11 @@ roxy_pipeline/
 services:
   nginx:        { ports: ["8080:80", "8443:443"] }
   api:          { expose: ["8000"] }
-  workflow:     { command: celery -A app.workflow worker -Q workflow }
-  agent:        { command: celery -A app.agents worker -Q agent }
-  media:        { command: celery -A app.media worker -Q media }
-  render:       { command: celery -A app.render worker -Q render, deploy: { replicas: 2 } }
-  scheduler:    { command: celery -A app.workflow beat }
+  workflow:     { command: celery -A app.workflow.celery_app worker -Q workflow }
+  agent:        { command: celery -A app.workflow.celery_app worker -Q agent }
+  media:        { command: celery -A app.workflow.celery_app worker -Q media }
+  render:       { command: celery -A app.workflow.celery_app worker -Q render, deploy: { replicas: 2 } }
+  scheduler:    { command: celery -A app.workflow.celery_app beat }
   postgres:     { volumes: ["/data/postgres:/var/lib/postgresql/data"] }
   rabbitmq:     { expose: ["5672", "15672"] }
   redis:        { expose: ["6379"] }

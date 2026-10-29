@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.media.audio import sha256_file
+from app.voice.audio import sha256_file
 from app.models.core import Episode, EpisodeStatus, NodeRun, NodeStatus
 from app.workflow.outbox import enqueue_outbox
 
@@ -76,7 +76,12 @@ async def start_qc(
     elif node.status in {NodeStatus.PENDING, NodeStatus.RUNNING}:
         raise QcConflict("QC is already queued or running")
     elif node.status == NodeStatus.SUCCESS:
-        raise QcConflict("this video already passed through QC")
+        if retry and episode.health == "FAILED":
+            node.status = NodeStatus.PENDING
+            node.attempt += 1
+            node.error = None
+        else:
+            raise QcConflict("this video already passed through QC")
     else:
         node.status = NodeStatus.PENDING
         node.attempt += 1

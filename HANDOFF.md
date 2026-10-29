@@ -23,9 +23,9 @@
 
 ## 1. 当前状态一句话
 
-**M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产复用/持久化 + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 质检 + 真实音轨成片已跑通（2026-10-29）。**
+**M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + M2 脚本 Agent + M3 分镜 Agent + 资产复用/持久化 + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 质检 + M5.1 局部修改/续跑/发布包 + 真实音轨成片已跑通（2026-10-29）。**
 
-- 需求文档 v1.2、架构方案 v1.6、ADR-001～009 已写完。
+- 需求文档 v1.2、架构方案 v1.7、ADR-001～009 已写完。
 - GitHub 仓库已创建：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
 - 本地 initial commit 与文档规范化 commit 已推送到 `origin/main`（2026-10-26）。
 - `.env`、洛琪希参考图、`tmp/` 已由 `.gitignore` 排除；仓库只提交 `.env.example`。
@@ -33,7 +33,7 @@
   - DeepSeek `deepseek-flash`：**PASS**。
   - 火山方舟 `doubao-seed-2-1-pro-260915` / `lite`：**PASS**；`turbo` 仍 `ModelNotOpen`。
   - 火山方舟 Seedream 5.0 Pro：**PASS**（关闭安全体验模式后，1024×1024 测试成功）。
-  - 豆包视觉模型：当前账号无可用模型；视觉质检先走 DOM/几何规则。
+  - 视觉质检：统一用 `deepseek-flash` 多模态；图片直接读图，视频按镜头抽帧 + ffmpeg 指标；不接豆包 Vision。
   - 火山 TTS：不使用（改为本地 IndexTTS2），云 TTS 凭据不再是 M4 前置条件。
 - 角色包：正式资产选用豆包版 `character_packs/roxy/roxy_calm_standing_01.png`（1080×1920 RGBA，水印已排除，本地，gitignored）；ChatGPT 版留在 `alternates/`。Seedream 不能生成洛琪希。
 - Batch 1 已完成：R-02 疑惑、R-03 惊讶、R-04 无奈、R-05 得意、R-06 思考，共 6 张入库；首版最低 18 张，还差 12 张。
@@ -69,11 +69,12 @@
 - LLM JSON 增加 `json-repair` 兜底；分镜单次输出上限提高到 `max(2000, 行数×220)`，避免截断。
 - M3 待补：Seedream 背景/物件候选（用户暂停）、半身反应镜头/角色位移未接入分镜、P1 多模态分镜评审。
 - 资产复用已落地：`asset` 表 + `data/assets` 持久化仓库；已有 3 张背景 + 7 个物件复制入库、56 个角色在原目录索引；`build-render-spec` 自动解析入库的纸纹/木地板。
-- `generate_seedream_image.py` 生成前查 `reuse_key`，命中 APPROVED 直接复用；生成后默认以 CANDIDATE 入库，`/assets/{id}/approve` 后才可复用。`scripts/ingest_assets.py` 可批量索引已有图片。
+- `generate_seedream_image.py` 生成前查 `reuse_key`，命中 APPROVED 直接复用；生成后默认以 CANDIDATE 入库，`/assets/{id}/approve` 后才可复用。`scripts/tools/ingest_assets.py` 可批量索引已有图片。
 - M4 音色已定：本地 **IndexTTS2** zero-shot 克隆，用户试听长文本后确认“效果非常好”。模型 `IndexTeam/IndexTTS-2` 在 `data/assets/voice/indextts2/`，参考音固定为 `data/assets/voice/indextts2/reference.wav`；RVC v3 / MeloTTS / Piper 已停用并清理，旧模型与工具链约 5GB 已删除。
 - M4.1 逐句配音已跑通：`line_audio` 表按 `(script_line, text_hash, voice_key)` 缓存；`voice.episode` 在 media 队列逐句合成，音频按内容寻址存 `data/audio/lines/`，自动回写镜头时长并装配 `audio.wav`（-14 LUFS），句级对齐写入 `episode.audio_meta`；默认自动进入 RENDERING，成片封装真实 AAC 音轨。实测 3 句 / 10.25 秒成片通过。
 - M4.2 字级对齐已跑通：`align.episode` 用中文 wav2vec2（`jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn`）对每句做 CTC 强制对齐；字级时间写入 `audio_meta.lines[].chars` 和 `alignment.json`，字幕块改用字级起止时间；模型在 `data/assets/voice/align/wav2vec2-chinese/`（1.2GB），显存不足自动回退 CPU。
 - M4.3 质检已跑通：`render.concat` 完成后默认进入 QC；规则检查流参数/时长/响度/对齐/字幕/资产，再按镜头抽首帧+中间帧送 `deepseek-flash` 多模态；结果写 `review` 表与 `episode.qc_meta`。视觉问题默认 warning，`QC_VISION_BLOCKING=true` 才作为 error；图片资产可单独 `POST /assets/{id}/check`。
+- M5.1 已跑通：`POST /episodes/{id}/actions/revise-line` 改单句后重置到 VOICING，只重合成变化句、重对齐并重渲染；镜头片段带 hash 缓存，未变化镜头直接复用；`POST /actions/resume` 按当前状态续跑；`workflow.reconcile_nodes` 清理 stale RUNNING 节点；`POST /actions/package` / `POST /actions/publish` 生成本地发布包（视频、封面、SRT、脚本、metadata、音频）。
 - 资产分工（2026-10-27）：角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
 - 当前阶段只生成角色立绘，按 **5 张/批**推进；背景/舞台/演示物件暂停，等系统工作流实现后由 Seedream 按需求生成。
 - AI 主题扩展：需求新增 R-17～R-28（讲解指向/白板/敲键盘/调试翻车/灵光一现/怀疑审视等），核心 6 个提示词在 `character_packs/roxy/ai_pose_prompts.md`（本地）。背景已出纸纹 + 木地板；道具在生成中。
@@ -87,9 +88,9 @@
 
 1. **确认 initial commit 已推到 GitHub**：`git status -sb` 应显示 `main...origin/main`；没有就 `git push -u origin main`。
 2. **确认运行环境**：本机 Docker Desktop/WSL2 是否可用；VM 是否已挂 ≥200GB 数据盘；8080/8443/9100/9101 是否空闲。
-3. **进入 M5 局部修改与运维**：M4 四个阶段已闭环；下一步做局部重跑（改一句只重跑该句 TTS/对齐/受影响镜头）、发布包、续跑与清理策略。也可以先跑一期完整 29 句做规模验收。
+3. **进入 M5.2 成本与监控**：M5.1 已闭环绕过局部修改/续跑/发布包；下一步补 token/TTS 成本报表、告警和运维面板。也可以先跑一期完整 29 句做规模验收。
 4. **M3 分镜 Agent + 资产复用已完成**：真实脚本生成 29 镜头、节奏校验通过、render_spec 已生成；下一步 M4 TTS/对齐，或补半身反应镜头/角色位移。
-5. **M1.2 实机已验证**：`docker compose -f compose.infra.yml up -d` 起 Postgres/RabbitMQ/Redis，按 §4.2.2 启动 worker（加 `agent` 队列）、beat、API，再用 `scripts/queue_demo_render.py` 验证渲染链路。
+5. **M1.2 实机已验证**：`docker compose -f compose.infra.yml up -d` 起 Postgres/RabbitMQ/Redis，按 §4.2.2 启动 worker（加 `agent` 队列）、beat、API，再用 `scripts/demo/queue_demo_render.py` 验证渲染链路。
 
 ### 2.2 M1：渲染链路打通
 
@@ -109,7 +110,7 @@
 - `pyproject.toml` + `uv` 环境；Playwright 钉在 1.59（复用本机 Chromium）。
 - `app/render/`：models / timeline / cards / stage / capture / encode。
 - 舞台模板 `templates/stage/` 与 5 类卡片模板 `templates/cards/`。
-- `specs/demo_episode.json`：3 镜头、12 秒；`scripts/render_demo.py` 输出 `tmp/render_demo/demo_episode.mp4`。
+- `specs/demo_episode.json`：3 镜头、12 秒；`scripts/demo/render_demo.py` 输出 `tmp/render_demo/demo_episode.mp4`。
 - `uv run pytest` 7 条通过；demo 视频 1920×1080 / 25fps / H.264 / AAC 48kHz。
 - `compose.infra.yml`：Postgres / RabbitMQ / Redis / MinIO + minio-init，端口避开现有栈（5433/5673/15673/6380/9100/9101）。
 - FastAPI：`app/api`、`app/models`、`app/schemas`、`app/core`；`/health`、`/api/v1/series`、`/api/v1/episodes`。
@@ -183,45 +184,51 @@ roxy_pipline/
 │     ├─ background.png
 │     └─ floor.png
 ├─ app/
-│  ├─ render/                      # M1 渲染原型
-│  │  ├─ models.py
-│  │  ├─ timeline.py
-│  │  ├─ cards.py
-│  │  ├─ stage.py
-│  │  ├─ capture.py
-│  │  └─ encode.py
-│  ├─ workflow/                    # M1.2 队列/状态机
-│  │  ├─ celery_app.py
-│  │  ├─ tasks.py                  # dispatch_outbox
-│  │  ├─ outbox.py
-│  │  ├─ state_machine.py
-│  │  ├─ render_service.py
-│  │  ├─ render_tasks.py           # render.episode/shot/concat
-│  │  └─ db.py
-│  ├─ agents/                      # M2 脚本 Agent
-│  │  ├─ script_graph.py
-│  │  ├─ script_validation.py
-│  │  ├─ script_service.py
-│  │  ├─ prompts.py
-│  │  └─ tasks.py                  # script.generate
-│  ├─ storyboard/                  # M3 分镜 Agent
-│  │  ├─ graph.py
-│  │  ├─ grammar.py
-│  │  ├─ rhythm.py
-│  │  ├─ models.py
+│  ├─ api/                         # FastAPI app + routes
+│  ├─ agents/                      # 所有 LangGraph 智能体
+│  │  ├─ script/                   # M2 脚本 Agent
+│  │  │  ├─ graph.py               # outline → sections → lines → validate → repair
+│  │  │  ├─ validation.py
+│  │  │  ├─ service.py
+│  │  │  ├─ utils.py               # 脚本读取/校验/保存
+│  │  │  ├─ prompts.py
+│  │  │  └─ tasks.py               # script.generate
+│  │  └─ storyboard/               # M3 分镜 Agent
+│  │     ├─ graph.py
+│  │     ├─ grammar.py
+│  │     ├─ rhythm.py
+│  │     ├─ models.py
+│  │     ├─ service.py
+│  │     ├─ tasks.py               # storyboard.generate
+│  │     ├─ prompts.py
+│  │     ├─ loaders.py
+│  │     ├─ utils.py               # 分镜校验/保存
+│  │     ├─ spec_builder.py        # shot → EpisodeSpec
+│  │     └─ render_spec.py         # 从 DB/资产构建渲染 spec
+│  ├─ voice/                       # M4 配音与对齐
+│  │  ├─ service.py                # voice.episode 启动
+│  │  ├─ tasks.py
+│  │  ├─ align_service.py
+│  │  ├─ align_tasks.py
+│  │  └─ audio.py                  # 音轨装配/响度
+│  ├─ qc/                          # M4.3 质检
+│  │  ├─ rules.py
+│  │  ├─ frames.py
+│  │  ├─ vision.py                 # DeepSeek 多模态
 │  │  ├─ service.py
-│  │  ├─ tasks.py                  # storyboard.generate
-│  │  ├─ prompts.py
-│  │  └─ spec_builder.py           # shot → EpisodeSpec
+│  │  └─ tasks.py
+│  ├─ publish/                     # M5 发布包
+│  ├─ render/                      # 渲染、镜头缓存与拼接
+│  │  ├─ models.py / timeline.py / cards.py / stage.py / capture.py / encode.py
+│  │  ├─ service.py                # start_render
+│  │  └─ tasks.py                  # render.episode/shot/concat
 │  ├─ assets/                      # 资产持久化/复用
-│  │  ├─ store.py                  # asset 表 + data/assets
-│  │  └─ registry.py               # reuse_key → 背景/地面
-│  ├─ providers/llm.py             # DeepSeek client
-│  ├─ core/config.py               # pydantic-settings
+│  ├─ providers/                   # llm / tts 适配层
+│  ├─ workflow/                    # Celery、outbox、状态机、resume/revision
+│  ├─ core/config.py
 │  ├─ db/                          # Base + async session
-│  ├─ models/core.py               # series/episode/script_line/shot/node_run/outbox_event
-│  ├─ schemas/core.py              # API schemas
-│  └─ api/                         # FastAPI app + routes
+│  ├─ models/core.py
+│  └─ schemas/core.py
 ├─ migrations/                     # Alembic
 ├─ alembic.ini
 ├─ compose.infra.yml               # Postgres/RabbitMQ/Redis/MinIO
@@ -284,9 +291,9 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 
 - DeepSeek Base URL：`https://api.deepseek.com`
 - 火山方舟 Base URL：`https://ark.cn-beijing.volces.com/api/v3`
-- IndexTTS2：独立 Python 3.11 环境 `data/tools/indextts-venv`（torch 2.8 cu128）；`app/providers/tts.py` 自动拉起 `scripts/indextts_server.py`（`127.0.0.1:8765`，模型常驻）；8GB 显存用 fp16 + Wav2Vec2-BERT 放 CPU；长文本实测 RTF 1.75。
-- 字级对齐：同一 Python 3.11 环境运行 `scripts/align_words.py`；模型 `data/assets/voice/align/wav2vec2-chinese/`；默认 `ALIGN_DEVICE=cuda`，与常驻 TTS 抢显存时脚本会自动回退 CPU。
-- 校验脚本：`python scripts/check_llm.py --live`（DeepSeek 必检，Ark 可选）；`--require-ark` 把 Ark 当必检。
+- IndexTTS2：独立 Python 3.11 环境 `data/tools/indextts-venv`（torch 2.8 cu128）；`app/providers/tts.py` 自动拉起 `scripts/runtime/indextts_server.py`（`127.0.0.1:8765`，模型常驻）；8GB 显存用 fp16 + Wav2Vec2-BERT 放 CPU；长文本实测 RTF 1.75。
+- 字级对齐：同一 Python 3.11 环境运行 `scripts/runtime/align_words.py`；模型 `data/assets/voice/align/wav2vec2-chinese/`；默认 `ALIGN_DEVICE=cuda`，与常驻 TTS 抢显存时脚本会自动回退 CPU。
+- 校验脚本：`python scripts/tools/check_llm.py --live`（DeepSeek 必检，Ark 可选）；`--require-ark` 把 Ark 当必检。
 - 图像生成测试产物在 `tmp/seedream_probe.png`（gitignore）。
 
 ### 4.2 本地渲染环境（M1）
@@ -296,8 +303,8 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - Playwright 钉在 **1.59.0**，复用本机 `chromium-1217`；升级 Playwright 前先确认对应 Chromium 已安装，否则 `uv run playwright install chromium`。
 - ffmpeg 用 `imageio-ffmpeg` 自带二进制（`imageio-ffmpeg==0.6.0`，含 libx264/AAC），本机不需要系统 ffmpeg。
 - 测试：`uv run pytest -q`
-- 渲染成片：`uv run python scripts/render_demo.py`
-- 只出静帧：`uv run python scripts/render_demo.py --stills-only --still-ms 2000 --still-out tmp/render_demo/still_2s.png`
+- 渲染成片：`uv run python scripts/demo/render_demo.py`
+- 只出静帧：`uv run python scripts/demo/render_demo.py --stills-only --still-ms 2000 --still-out tmp/render_demo/still_2s.png`
 - 当前单进程速度约 **0.53 秒/帧**；10 分钟片约 2.3 小时，后续必须并行 render worker。
 
 ### 4.2.1 API / 基础设施（M1.1）
@@ -324,7 +331,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - media worker 常驻 IndexTTS2（GPU），并发必须为 1；Windows 调试同样加 `--pool=solo`。
 - Windows 本机 Celery 默认 prefork 不可用：调试加 `--pool=solo`（单并发）；并行渲染在 Ubuntu VM 上用默认 prefork `-c N`。
 - 队列：`workflow`（状态推进/outbox 补投）、`agent`（`script.generate` / `storyboard.generate` / `qc.episode`）、`media`（`voice.episode` / `align.episode`）、`render`（`render.episode` / `render.shot` / `render.concat`）。
-- 触发真实队列渲染：`uv run python scripts/queue_demo_render.py --base-url http://localhost:8000`。
+- 触发真实队列渲染：`uv run python scripts/demo/queue_demo_render.py --base-url http://localhost:8000`。
 - beat 每 5 秒执行 `workflow.dispatch_outbox`，把 PENDING 事件投到 RabbitMQ；失败按指数退避，5 次后置 FAILED。
 - `CELERY_TASK_ALWAYS_EAGER=true` 只用于任务级测试；在 async dispatcher 里同步执行 task 会和事件循环冲突。
 - 本机实测（2026-10-28）：`queue_demo_render.py` 3 镜头 6.00 秒成片，outbox DISPATCHED、episode READY、node_run SUCCESS；worker 用 `--pool=solo`。
@@ -347,12 +354,12 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - 编辑单镜头：`PATCH /api/v1/shots/{shot_id}`，支持 card_type / character_image / character_position / duration_ms / bg / transition / motion；修改后会自动重算节奏。
 - `POST /api/v1/episodes/{id}/actions/confirm-storyboard` 校验通过后进入 VOICING。
 - `POST /api/v1/episodes/{id}/actions/build-render-spec` 把 shot 表转成 `EpisodeSpec` 存回 `episode.render_spec`，之后可直接调 `actions/render` 渲染。
-- 节奏规则是纯函数（`app/storyboard/rhythm.py`）；LLM 只负责语义选镜，违规由确定性修复器兜底，最多修 4 轮。
+- 节奏规则是纯函数（`app/agents/storyboard/rhythm.py`）；LLM 只负责语义选镜，违规由确定性修复器兜底，最多修 4 轮。
 - 分镜生成使用 `prompts/storyboard/`；`shot.cache_key` 由台词文本、卡片类型、payload、角色图和模板版本计算。
 
 ### 4.2.5 资产持久化与复用（M3.1）
 
-- 已有图片入库：`uv run python scripts/ingest_assets.py`；会把 `tmp/seedream_assets` 的背景/物件复制到 `data/assets`，角色包在原目录索引，写入 `asset` 表。
+- 已有图片入库：`uv run python scripts/tools/ingest_assets.py`；会把 `tmp/seedream_assets` 的背景/物件复制到 `data/assets`，角色包在原目录索引，写入 `asset` 表。
 - `asset.reuse_key` 是复用的唯一键：背景 `bg:paper:light` / `bg:floor:wood` / `bg:wood:table`，角色 `character:<pack>:<id>`，物件 `prop:<name>`。
 - `build-render-spec` 会优先解析 `APPROVED` 的背景/地面资产；找不到才退回 placeholder。
 - 生成前先查复用键：`generate_seedream_image.py --reuse-key bg:paper:dark --asset-type background`；命中 APPROVED 时不会调用 Seedream。
@@ -433,7 +440,7 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 
 - 公开仓库不提交洛琪希参考图/立绘；`docs/assets/roxy_reference.webp` 已 gitignore。
 - Seedream 版权过滤：带“洛琪希”名字、参考图，或高度相似的“蓝发魔女 + 长风衣”描述，会返回 `OutputImageSensitiveContentDetected.PolicyViolation`；不要用改词/裁剪参考图的方式绕过。AI 生成只用于原创角色/背景/装饰；洛琪希 pack 自绘或外包。
-- ChatGPT 在线生图可用于本地洛琪希候选（用户自用、非商业）；产物只放 `character_packs/roxy/`（gitignored），不要提交公开仓库。处理脚本：`scripts/prepare_character_asset.py`。
+- ChatGPT 在线生图可用于本地洛琪希候选（用户自用、非商业）；产物只放 `character_packs/roxy/`（gitignored），不要提交公开仓库。处理脚本：`scripts/tools/prepare_character_asset.py`。
 - 豆包生成图右下角有“豆包 AI 生成”水印；不要直接入成片。脚本可用 `--keep-largest-component` 排除孤立水印；使用前先确认豆包条款是否允许去除/隐藏水印。
 - 原创角色/背景 AI 生成后必须人工筛选、去背景、统一尺寸、入库；不要每期重生成。
 - AI 生成的洛琪希衍生图仍受 C-01～C-06 约束；生成服务条款也要看。
@@ -459,6 +466,25 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 
 ## 6. 历史记录
 
+### 2026-10-29 · 目录规范化
+
+- 所有 LangGraph 智能体统一收进 `app/agents/`：`agents/script/`（脚本）与 `agents/storyboard/`（分镜）；包内文件改为 `graph.py` / `validation.py` / `service.py` / `utils.py`。
+- `app/media` → `app/voice`，统一放 TTS、字级对齐和音轨装配。
+- 渲染服务和任务从 `app/workflow` 移到 `app/render/service.py` / `tasks.py`；workflow 只保留 Celery、outbox、状态机、resume/revision。
+- `api/script_utils.py` / `api/storyboard_utils.py` 下沉为 `script/utils.py` / `storyboard/utils.py`；`storyboard/spec_service.py` 改名 `render_spec.py`。
+- `scripts/` 拆为 `runtime/`（IndexTTS2、对齐）、`tools/`（资产/LLM 工具）、`demo/`（演示渲染与队列脚本）。
+- 同步更新所有导入、Celery 任务注册、配置默认路径和文档；57 条测试通过，Celery 任务全部注册。
+
+### 2026-10-29 · M5.1 局部修改、续跑与发布包
+
+- 单句修订：`POST /episodes/{id}/actions/revise-line` 接收 `line_id/text`，仅允许 READY/QC 状态；更新行版本后回到 VOICING，自动重跑配音（不变句命中 `line_audio` 缓存）、对齐和渲染。
+- 镜头缓存：每镜头写 `shots/shot_XXXX.json`（含 shot/render hash）；`render_shot_task` 命中相同 hash 直接复用 MP4，只有变化镜头重新渲染，拼接仍用全量片段 `-c copy`。
+- 通用续跑：`POST /episodes/{id}/actions/resume` 按 VOICING/ALIGNING/QC/RENDERING 分派对应 start 服务；QC 的 SUCCESS+FAILED 也允许 retry。
+- 运维：新增 `workflow.reconcile_nodes` beat 任务，扫描 heartbeat 超时（默认 1800s）的 RUNNING 节点并标记 FAILED，供 resume/retry 接管。
+- 发布包：`POST /actions/package` 生成 `tmp/packages/{episode_id}/`，包含 `episode.mp4`、`cover.jpg`、`subtitles.srt`、`script.txt`、`metadata.json`、可选 `audio.wav` 和 `package.json`；`POST /actions/publish` 先建包再转 PUBLISHED；`GET /package` 返回清单。
+- 元数据包含非商业声明和版权提示；发布包只落本地，不自动上传平台。
+- 测试 57 条全部通过，覆盖修订、续跑、reconciler 和发布包。
+
 ### 2026-10-29 · M4.3 质检与 DeepSeek 多模态
 
 - 新增 `review` 表与 `episode.qc_meta`（迁移 `a1b2c3d4e5f6`）；`review.level` = PASS/WARNING/ERROR/MANUAL。
@@ -473,7 +499,7 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 ### 2026-10-29 · M4.2 字级强制对齐
 
 - 选用 WhisperX 同款中文 wav2vec2 模型 `jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn`，从 ModelScope 下载到 `data/assets/voice/align/wav2vec2-chinese/`（约 1.2GB，只保留 PyTorch 权重）。
-- 新增 `scripts/align_words.py`：已知台词 + 逐句音频 → CTC 强制对齐（`torchaudio.functional.forced_align`），输出原文字符级起止时间；数字/符号先用 IndexTTS2 的 `TextNormalizer` 归一，再用 `difflib` 映射回原文。
+- 新增 `scripts/runtime/align_words.py`：已知台词 + 逐句音频 → CTC 强制对齐（`torchaudio.functional.forced_align`），输出原文字符级起止时间；数字/符号先用 IndexTTS2 的 `TextNormalizer` 归一，再用 `difflib` 映射回原文。
 - 字级时间先按模型帧取点，再把每个字的结束时间延到下一个字开始、最后一个字延到句尾，避免字幕单帧闪烁。
 - 新增 `align.episode` media 任务与 `start_align` 服务：校验句级对齐/逐句音频，调用独立 Python 进程，失败可重试；模型加载或推理显存不足时自动回退 CPU。
 - 新增 API：`POST /episodes/{id}/actions/align`、`POST /episodes/{id}/actions/retry-align`；`GET /episodes/{id}/audio` 返回字级 `chars`。
@@ -485,7 +511,7 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 ### 2026-10-29 · M4.1 逐句配音与真实音轨成片
 
 - 新增 `line_audio` 表（迁移 `f7b8c9d0e1f2`）与 `episode.audio_path/audio_meta`：按 `(script_line_id, text_hash, voice_key)` 缓存逐句音频；文本、参考音或模型变化才重合成。
-- 新增 `app/media/`：`service.py` 负责启动校验与 NodeRun 幂等，`tasks.py` 的 `voice.episode` 在 `media` 队列逐句调用 IndexTTS2，`audio.py` 用 ffmpeg concat + 句间静音 + 单遍 loudnorm（-14 LUFS）装配 `audio.wav`。
+- 新增 `app/voice/`：`service.py` 负责启动校验与 NodeRun 幂等，`tasks.py` 的 `voice.episode` 在 `media` 队列逐句调用 IndexTTS2，`audio.py` 用 ffmpeg concat + 句间静音 + 单遍 loudnorm（-14 LUFS）装配 `audio.wav`。
 - 逐句音频内容寻址存 `data/audio/lines/<voice_key>/<text_hash>.wav`；整期音轨与 `alignment.json` 存 `data/audio/episodes/<episode_id>/`。
 - 镜头时长回写为 `max(1500, 音频时长 + 180ms)`，上限 15s；`alignment.json` 记录每句 start/end 与 shot_end，粒度 sentence。
 - 新增 API：`POST /episodes/{id}/actions/voice`、`POST /episodes/{id}/actions/retry-voice`、`GET /episodes/{id}/audio`；`voice.episode` 路由到 `media` 队列。
@@ -501,7 +527,7 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 - 参考音固定为 20 句干净录音中的「人们端午节吃粽子…」，4.94 秒，复制到 `data/assets/voice/indextts2/reference.wav`；原始 20 句保留。
 - 8GB 显存策略：fp16 + `use_qwen_emo=False` + Wav2Vec2-BERT 放 CPU 做一次性音色编码；实测可跑。
 - 实测 224 字长文本生成 44.74 秒，RTF 1.75；用户试听确认“效果非常好，就以这样为准”。
-- 新增 `scripts/indextts_server.py` 常驻 HTTP 服务（`127.0.0.1:8765`，模型加载一次、单句合成）；`app/providers/tts.py` 改为 `IndexTTS2Provider`，首次合成自动拉起服务，进程退出时关闭；配置项迁到 `tts_indextts_*`。
+- 新增 `scripts/runtime/indextts_server.py` 常驻 HTTP 服务（`127.0.0.1:8765`，模型加载一次、单句合成）；`app/providers/tts.py` 改为 `IndexTTS2Provider`，首次合成自动拉起服务，进程退出时关闭；配置项迁到 `tts_indextts_*`。
 - 清理：删除 RVC v3 模型/index、MeloTTS 源码与 venv、Piper venv 与模型、MeloTTS 模型/BERT、IndexTTS2 重复 `conformer_shaw.pt` 与重复 semantic codec，共约 5.1GB；未动外部 RVC 仓库（4GB）。
 - 测试：42 条全部通过；provider 端到端合成 3.45 秒测试音频成功。
 - 待办：`line` 音频表 + 逐句合成任务 + 时长写回 + 音轨装配；再决定强制对齐方案。
@@ -538,11 +564,11 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 - 入库结果：3 张背景、7 个物件、56 个角色；`data/assets` 约 16MB。
 - `build-render-spec` 自动使用入库的纸纹/木地板；静帧确认正常。
 - `generate_seedream_image.py` 生成前查 `reuse_key`，命中 APPROVED 直接复用；生成后默认 CANDIDATE 入库，需 `/assets/{id}/approve`。
-- 新增 `scripts/ingest_assets.py`、`/api/v1/assets` 查询与 approve/reject；测试 42 条通过。
+- 新增 `scripts/tools/ingest_assets.py`、`/api/v1/assets` 查询与 approve/reject；测试 42 条通过。
 
 ### 2026-10-28 · M3 分镜 Agent
 
-- 新增 `app/storyboard/`：视觉语法、节奏规则/确定性修复器、LangGraph `storyboard_graph`、shot 持久化、shot → `EpisodeSpec` 构建器。
+- 新增 `app/agents/storyboard/`：视觉语法、节奏规则/确定性修复器、LangGraph `storyboard_graph`、shot 持久化、shot → `EpisodeSpec` 构建器。
 - 分镜生成按章节调用 DeepSeek，代码归一化 schema；节奏违规由纯函数修复，不依赖 LLM 重排。
 - 新增 `episode.storyboard_meta` 迁移 `d4e5f6a7b8c9`；新增分镜查看/校验/确认/重生成、`PATCH /shots`、`build-render-spec` API。
 - 实测真实脚本生成 29 镜头、4 种卡片、角色占比 75.9%、节奏 valid；confirm 进 VOICING；render_spec 29 镜头，静帧正常。
@@ -645,7 +671,7 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 ### 2026-10-27 · M1 渲染链路原型跑通
 
 - 新建 `pyproject.toml` + `uv.lock`；Playwright 钉 1.59，ffmpeg 用 `imageio-ffmpeg`。
-- 新增 `app/render/`（models / timeline / cards / stage / capture / encode）、舞台与 5 类卡片模板、`specs/demo_episode.json`、`scripts/render_demo.py`。
+- 新增 `app/render/`（models / timeline / cards / stage / capture / encode）、舞台与 5 类卡片模板、`specs/demo_episode.json`、`scripts/demo/render_demo.py`。
 - 3 镜头 / 12 秒 / 300 帧 demo 输出成功：1920×1080、25fps、H.264、AAC 48kHz；单进程约 160 秒。
 - `uv run pytest` 4 条通过；静帧模式可快速调布局。
 - 未接 API/DB/队列；当前是单进程 CLI，后续拆 render-worker 并做并行渲染。
