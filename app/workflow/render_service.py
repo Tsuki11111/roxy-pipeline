@@ -94,6 +94,7 @@ async def start_render(
             "episode_id": episode.id,
             "node_run_id": node.id,
             "spec": spec.model_dump(),
+            "audio_path": episode.audio_path,
         },
         episode_id=episode.id,
     )

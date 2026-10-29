@@ -21,14 +21,21 @@ from app.api.storyboard_utils import (
     validate_storyboard,
 )
 from app.db.session import get_session
-from app.models.core import Episode, EpisodeStatus, Series
+from app.media.service import (
+    VoiceConflict,
+    VoiceRequestError,
+    start_voice,
+)
+from app.models.core import Episode, EpisodeStatus, LineAudio, ScriptLine, Series
 from app.render.models import EpisodeSpec
 from app.render.stage import build_stage_payload
 from app.render.timeline import build_timeline
 from app.schemas.core import (
     EpisodeActionAccepted,
+    EpisodeAudioRead,
     EpisodeCreate,
     EpisodeRead,
+    LineAudioRead,
     ScriptLineRead,
     ScriptRead,
     ShotRead,
@@ -344,6 +351,81 @@ async def _storyboard_action(
         status=episode.status,
         node_key=node.node_key,
         operation_id=node.id,
+    )
+
+
+async def _voice_action(
+    session: AsyncSession,
+    episode_id: str,
+    *,
+    retry: bool = False,
+) -> EpisodeActionAccepted:
+    try:
+        episode, node = await start_voice(session, episode_id, retry=retry)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except VoiceConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except VoiceRequestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await session.commit()
+    await session.refresh(episode)
+    return EpisodeActionAccepted(
+        episode_id=episode.id,
+        status=episode.status,
+        node_key=node.node_key,
+        operation_id=node.id,
+    )
+
+
+@router.post(
+    "/{episode_id}/actions/voice",
+    response_model=EpisodeActionAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def voice_episode_action(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> EpisodeActionAccepted:
+    return await _voice_action(session, episode_id)
+
+
+@router.post(
+    "/{episode_id}/actions/retry-voice",
+    response_model=EpisodeActionAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def retry_voice(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> EpisodeActionAccepted:
+    return await _voice_action(session, episode_id, retry=True)
+
+
+@router.get("/{episode_id}/audio", response_model=EpisodeAudioRead)
+async def get_episode_audio(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> EpisodeAudioRead:
+    episode = await session.get(Episode, episode_id)
+    if episode is None:
+        raise HTTPException(status_code=404, detail="episode not found")
+    rows = await session.execute(
+        select(LineAudio, ScriptLine.seq)
+        .join(ScriptLine, LineAudio.script_line_id == ScriptLine.id)
+        .where(LineAudio.episode_id == episode_id)
+        .order_by(ScriptLine.seq)
+    )
+    lines = [
+        LineAudioRead.model_validate(audio).model_copy(update={"seq": seq})
+        for audio, seq in rows.all()
+    ]
+    return EpisodeAudioRead(
+        episode_id=episode.id,
+        status=episode.status,
+        audio_path=episode.audio_path,
+        meta=episode.audio_meta,
+        lines=lines,
     )
 
 

@@ -113,6 +113,9 @@ class Episode(Base):
     script_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # M3: rhythm report and storyboard generation metadata.
     storyboard_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # M4: assembled voice track and sentence-level alignment.
+    audio_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    audio_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -149,6 +152,40 @@ class ScriptLine(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     episode: Mapped[Episode] = relationship(back_populates="script_lines")
+
+
+class LineAudio(Base):
+    __tablename__ = "line_audio"
+    __table_args__ = (
+        UniqueConstraint(
+            "script_line_id",
+            "text_hash",
+            "voice_key",
+            name="uq_line_audio_text_voice",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    episode_id: Mapped[str] = mapped_column(
+        ForeignKey("episode.id", ondelete="CASCADE"), index=True
+    )
+    script_line_id: Mapped[str] = mapped_column(
+        ForeignKey("script_line.id", ondelete="CASCADE"), index=True
+    )
+    line_version: Mapped[int] = mapped_column(Integer, default=1)
+    speaker: Mapped[str] = mapped_column(String(30), default="narrator")
+    text_hash: Mapped[str] = mapped_column(String(64))
+    voice_key: Mapped[str] = mapped_column(String(64))
+    provider: Mapped[str] = mapped_column(String(50), default="indextts2")
+    model: Mapped[str] = mapped_column(String(100), default="IndexTTS-2")
+    ref_audio: Mapped[str] = mapped_column(String(500), default="")
+    path: Mapped[str] = mapped_column(String(500))
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    sample_rate: Mapped[int] = mapped_column(Integer, default=22050)
+    checksum: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
 
 class Shot(Base):

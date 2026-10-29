@@ -70,7 +70,13 @@ def finish_segment(proc: subprocess.Popen) -> None:
         raise RuntimeError(f"ffmpeg segment failed:\n{stderr}")
 
 
-def concat_and_mux(ffmpeg: str, segments: list[Path], out: Path, duration_ms: int) -> None:
+def concat_and_mux(
+    ffmpeg: str,
+    segments: list[Path],
+    out: Path,
+    duration_ms: int,
+    audio_path: Path | None = None,
+) -> None:
     if not segments:
         raise ValueError("no segments to concat")
     list_file = out.parent / "segments.txt"
@@ -104,12 +110,30 @@ def concat_and_mux(ffmpeg: str, segments: list[Path], out: Path, duration_ms: in
         raise RuntimeError(f"ffmpeg concat failed:\n{concat.stderr[-2000:]}")
 
     duration_s = duration_ms / 1000
-    mux = subprocess.run(
-        [
-            ffmpeg,
-            "-y",
-            "-loglevel",
-            "error",
+    if audio_path is not None:
+        if not audio_path.is_file():
+            raise FileNotFoundError(f"voice track not found: {audio_path}")
+        mux_args = [
+            "-i",
+            str(video_only),
+            "-i",
+            str(audio_path),
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-ar",
+            "48000",
+            "-shortest",
+        ]
+    else:
+        mux_args = [
             "-i",
             str(video_only),
             "-f",
@@ -124,6 +148,14 @@ def concat_and_mux(ffmpeg: str, segments: list[Path], out: Path, duration_ms: in
             "aac",
             "-b:a",
             "192k",
+        ]
+    mux = subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-loglevel",
+            "error",
+            *mux_args,
             "-movflags",
             "+faststart",
             str(out),

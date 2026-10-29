@@ -61,6 +61,8 @@ class EpisodeRead(BaseModel):
     render_spec: dict | None
     script_meta: dict | None
     storyboard_meta: dict | None
+    audio_path: str | None
+    audio_meta: dict | None
     version: int
     created_at: datetime
     updated_at: datetime
@@ -145,6 +147,31 @@ class StoryboardRead(BaseModel):
     meta: dict | None
     shots: list[ShotRead]
     rhythm: RhythmReport
+
+
+class LineAudioRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    script_line_id: str
+    line_version: int
+    speaker: str
+    provider: str
+    model: str
+    path: str
+    duration_ms: int
+    sample_rate: int
+    checksum: str
+    created_at: datetime
+    seq: int | None = None
+
+
+class EpisodeAudioRead(BaseModel):
+    episode_id: str
+    status: EpisodeStatus
+    audio_path: str | None
+    meta: dict | None
+    lines: list[LineAudioRead]
 
 
 class ShotUpdate(BaseModel):

@@ -16,6 +16,8 @@ def queue_for(event_type: str) -> str:
         return "agent"
     if event_type.startswith("storyboard."):
         return "agent"
+    if event_type.startswith("voice."):
+        return "media"
     return "workflow"
 
 

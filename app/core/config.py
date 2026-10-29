@@ -66,6 +66,12 @@ class Settings(BaseSettings):
     tts_indextts_timeout_s: float = 600.0
     tts_indextts_log: str = "./data/logs/indextts_server.log"
 
+    # M4.1 voice track. Sentence audio is content-addressed under audio_root;
+    # gaps are inserted between lines so audio length matches shot durations.
+    audio_root: str = "./data/audio"
+    voice_pause_ms: int = 180
+    voice_auto_render: bool = True
+
     celery_task_always_eager: bool = False
     outbox_poll_interval_s: float = 5.0
     render_dir: str = "./tmp/renders"

@@ -83,7 +83,12 @@ def mark_failed(episode_id: str, node_run_id: str, error: str) -> None:
 
 
 @celery_app.task(name="render.episode")
-def render_episode_task(episode_id: str, node_run_id: str, spec: dict):
+def render_episode_task(
+    episode_id: str,
+    node_run_id: str,
+    spec: dict,
+    audio_path: str | None = None,
+):
     settings = get_settings()
     try:
         episode_spec = EpisodeSpec.model_validate(spec)
@@ -112,6 +117,7 @@ def render_episode_task(episode_id: str, node_run_id: str, spec: dict):
         node_run_id=node_run_id,
         total_ms=timeline.total_ms,
         out_path=str(out_dir / "episode.mp4"),
+        audio_path=audio_path,
     )
     chord(header)(body)
     logger.info(
@@ -170,6 +176,7 @@ def render_concat_task(
     node_run_id: str,
     total_ms: int,
     out_path: str,
+    audio_path: str | None = None,
 ):
     try:
         shots = sorted(
@@ -179,7 +186,13 @@ def render_concat_task(
         if not shots:
             raise RuntimeError("no shot results to concatenate")
         segments = [Path(result["segment"]) for result in shots]
-        concat_and_mux(get_ffmpeg(), segments, Path(out_path), total_ms)
+        concat_and_mux(
+            get_ffmpeg(),
+            segments,
+            Path(out_path),
+            total_ms,
+            Path(audio_path) if audio_path else None,
+        )
         mark_success(episode_id, node_run_id, out_path)
         logger.info(
             "concat done episode=%s shots=%d out=%s",

@@ -358,9 +358,10 @@ TTS（逐句合成，IndexTTS2 常驻服务）
 | 表 | 关键字段 | 说明 |
 |---|---|---|
 | `series` | id, name, voice_profile JSONB, section_labels JSONB, character_pack_id, watermark, template_version, non_commercial | 系列配置根；配置变更要版本化 |
-| `episode` | id, series_id, topic_id, title, target_duration_s, status, health, current_node, output_path, version, render_spec JSONB, script_meta JSONB, storyboard_meta JSONB, created_at | `version` 做乐观锁；`health` 表示 OK/WARNING/BLOCKED；`render_spec` 是 M1.2 手工渲染 spec 的临时桥，M3 后由 shot 表生成；`script_meta`/`storyboard_meta` 存生成与校验快照 |
+| `episode` | id, series_id, topic_id, title, target_duration_s, status, health, current_node, output_path, version, render_spec JSONB, script_meta JSONB, storyboard_meta JSONB, audio_path, audio_meta JSONB, created_at | `version` 做乐观锁；`health` 表示 OK/WARNING/BLOCKED；`render_spec` 是 M1.2 手工渲染 spec 的临时桥，M3 后由 shot 表生成；`script_meta`/`storyboard_meta` 存生成与校验快照；`audio_meta` 存句级对齐 |
 | `topic_candidate` | id, series_id, source, title, hook, audience, fit_score, est_sections, raw JSONB, status | 抓取原文放 `raw`，只作数据，不作指令 |
 | `script_line` | id, episode_id, seq, speaker, section, text, char_count, version | `seq` 唯一且连续；`char_count` 由服务端计算 |
+| `line_audio` | id, episode_id, script_line_id, line_version, speaker, text_hash, voice_key, provider, model, ref_audio, path, duration_ms, sample_rate, checksum | `(script_line_id, text_hash, voice_key)` 唯一；文本或音色变化时重合成，否则复用 |
 | `shot` | id, episode_id, script_line_id, seq, duration_ms, card_type, card_payload JSONB, character_image, character_position, bg, transition, cache_key, template_version | `cache_key` 唯一索引；`script_line_id` 允许 1:N（MVP 默认 1:1） |
 | `asset` | id, type, name, reuse_key, path, mime, width, height, checksum, tags, license, source, provider, model, prompt, seed, reference, status | 角色/背景/物件/字体/BGM/模板；`reuse_key` 唯一，用于生成前查重；`checksum` 去重；`path` 内容寻址（本机 `data/assets`，VM `/data/assets`）；AI 生成资产记录来源与 prompt/seed；`status` = CANDIDATE/APPROVED/REJECTED |
 | `node_run` | id, episode_id, node_key, parent_id, status, input_hash, cache_key, attempt, error, started_at, finished_at, heartbeat_at, output_ref | 幂等与续跑的核心表 |
@@ -1215,6 +1216,9 @@ reuse_key → 查 asset 表
 | POST | `/episodes/{id}/actions/retry-storyboard` | 重跑失败的分镜生成 | operator/admin |
 | POST | `/episodes/{id}/actions/regenerate-storyboard` | 重新生成分镜 | operator/admin |
 | POST | `/episodes/{id}/actions/confirm-storyboard` | 确认分镜，进入 VOICING | operator/admin |
+| POST | `/episodes/{id}/actions/voice` | 开始逐句配音，投递 media 队列 | operator/admin |
+| POST | `/episodes/{id}/actions/retry-voice` | 重跑失败的配音 | operator/admin |
+| GET | `/episodes/{id}/audio` | 逐句音频与句级对齐 | 登录用户 |
 | POST | `/episodes/{id}/actions/build-render-spec` | 由 shot 表生成渲染 spec | operator/admin |
 | PATCH | `/shots/{shot_id}` | 编辑单个镜头 | operator/admin |
 | GET | `/episodes/{id}/rhythm-report` | 节奏规则检查结果 | 登录用户 |
