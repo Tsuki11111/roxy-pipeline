@@ -10,6 +10,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app.core.config import get_settings
+from app.providers.tts import request_tts_shutdown
 from app.voice.align_service import _resolve
 from app.models.core import (
     Episode,
@@ -23,6 +24,7 @@ from app.agents.storyboard.render_spec import build_episode_render_spec
 from app.workflow.celery_app import celery_app
 from app.workflow.cancel import TaskCancelled, ensure_not_cancelled
 from app.workflow.db import run_async, task_session
+from app.workflow.memory import release_memory
 from app.render.service import start_render
 from app.workflow.state_machine import transition_episode
 
@@ -47,6 +49,8 @@ def _run_aligner(
     input_path: Path, output_path: Path, model_dir: Path
 ) -> None:
     settings = get_settings()
+    if settings.align_stop_tts and request_tts_shutdown():
+        logger.info("stopped IndexTTS2 server before alignment to free memory")
     script = _resolve(settings.align_script)
     python = _resolve(settings.align_python)
     repo = _resolve(settings.align_repo)
@@ -156,9 +160,12 @@ async def _align_episode(episode_id: str, node_run_id: str) -> None:
             encoding="utf-8",
         )
 
-    await asyncio.to_thread(
-        _run_aligner, input_path, output_path, model_dir
-    )
+    try:
+        await asyncio.to_thread(
+            _run_aligner, input_path, output_path, model_dir
+        )
+    finally:
+        release_memory()
 
     aligned = json.loads(output_path.read_text(encoding="utf-8"))
     by_id = {item["id"]: item for item in aligned.get("lines", [])}

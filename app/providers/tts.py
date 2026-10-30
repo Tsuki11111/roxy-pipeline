@@ -44,6 +44,35 @@ def _resolve(value: str) -> Path:
     return path if path.is_absolute() else (PROJECT_ROOT / path).resolve()
 
 
+def request_tts_shutdown(timeout_s: float = 10.0) -> bool:
+    """Stop the resident TTS server to free memory for the aligner."""
+    settings = get_settings()
+    url = f"{settings.tts_indextts_url.rstrip('/')}/shutdown"
+    request = urllib.request.Request(
+        url,
+        data=b"{}",
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            if response.status != 200:
+                return False
+    except (urllib.error.URLError, ConnectionError, TimeoutError):
+        return False
+
+    deadline = time.monotonic() + timeout_s
+    health_url = f"{settings.tts_indextts_url.rstrip('/')}/health"
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(health_url, timeout=1):
+                pass
+        except (urllib.error.URLError, ConnectionError, TimeoutError):
+            return True
+        time.sleep(0.2)
+    return False
+
+
 class IndexTTS2Provider:
     """IndexTTS2 zero-shot TTS served by a long-lived local process.
 

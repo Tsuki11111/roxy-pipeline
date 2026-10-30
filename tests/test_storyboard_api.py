@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.models.core import (
     Episode,
     EpisodeStatus,
@@ -149,11 +150,12 @@ async def test_patch_shot_and_build_render_spec(client, episode, session):
 
     response = await client.patch(
         f"/api/v1/shots/{shot.id}",
-        json={"duration_ms": 2500},
+        json={"duration_ms": 2500, "card_text": "编辑后的卡片文案"},
     )
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["shot"]["duration_ms"] == 2500
+    assert body["shot"]["card_payload"]["text"] == "编辑后的卡片文案"
     assert body["rhythm"]["valid"] is True
 
     response = await client.patch(
@@ -162,6 +164,24 @@ async def test_patch_shot_and_build_render_spec(client, episode, session):
     )
     assert response.status_code == 422
 
+    response = await client.patch(
+        f"/api/v1/shots/{shot.id}",
+        json={
+            "overlay_image": "character_packs/placeholder/background.png",
+            "overlay_position": "center",
+            "overlay_width_px": 320,
+            "overlay_bottom": 80,
+            "overlay_opacity": 0.8,
+            "overlay_blend": "multiply",
+        },
+    )
+    assert response.status_code == 200, response.text
+    overlay = response.json()["shot"]["card_payload"]["overlay"]
+    assert overlay["image"] == "character_packs/placeholder/background.png"
+    assert overlay["width_px"] == 320
+    assert overlay["opacity"] == 0.8
+    assert overlay["blend"] == "multiply"
+
     response = await client.post(
         f"/api/v1/episodes/{ep['id']}/actions/build-render-spec"
     )
@@ -169,3 +189,61 @@ async def test_patch_shot_and_build_render_spec(client, episode, session):
     spec = response.json()["render_spec"]
     assert spec["title"] == "M1.2 测试期"
     assert len(spec["shots"]) == 24
+    assert spec["shots"][0]["card"]["text"] == "编辑后的卡片文案"
+    assert spec["shots"][0]["overlay"]["image"] == (
+        "character_packs/placeholder/background.png"
+    )
+
+    response = await client.patch(
+        f"/api/v1/shots/{shot.id}",
+        json={"overlay_image": None},
+    )
+    assert response.status_code == 200
+    assert "overlay" not in response.json()["shot"]["card_payload"]
+
+
+async def test_rerender_ready_episode(client, episode, session):
+    _, ep = episode
+    await seed_storyboard(session, ep["id"])
+
+    response = await client.post(
+        f"/api/v1/episodes/{ep['id']}/actions/build-render-spec"
+    )
+    assert response.status_code == 200, response.text
+
+    episode_row = await session.get(Episode, ep["id"])
+    episode_row.status = EpisodeStatus.READY
+    await session.commit()
+
+    response = await client.post(f"/api/v1/episodes/{ep['id']}/actions/rerender")
+    assert response.status_code == 202, response.text
+    body = response.json()
+    assert body["status"] == "RENDERING"
+    assert body["node_key"] == "render.episode"
+
+    await session.refresh(episode_row)
+    assert episode_row.status == EpisodeStatus.RENDERING
+    event = await session.scalar(
+        select(OutboxEvent).where(OutboxEvent.event_type == "render.episode")
+    )
+    assert event is not None
+    node = await session.get(NodeRun, body["operation_id"])
+    assert node is not None
+    assert node.status == "PENDING"
+
+
+async def test_episode_video_route(client, episode, session, tmp_path, monkeypatch):
+    _, ep = episode
+    settings = get_settings()
+    monkeypatch.setattr(settings, "output_root", str(tmp_path))
+    video = tmp_path / "episode.mp4"
+    video.write_bytes(b"fake-mp4")
+
+    episode_row = await session.get(Episode, ep["id"])
+    episode_row.output_path = str(video)
+    await session.commit()
+
+    response = await client.get(f"/api/v1/episodes/{ep['id']}/video")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("video/mp4")
+    assert response.content == b"fake-mp4"

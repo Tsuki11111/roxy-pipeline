@@ -47,9 +47,6 @@ def validate_episode(
         target_duration_s=episode.target_duration_s,
         section_labels=section_labels_for(series),
         target_chars_per_minute=settings.script_target_chars_per_minute,
-        roxy_ratio_min=settings.script_roxy_ratio_min,
-        roxy_ratio_max=settings.script_roxy_ratio_max,
-        min_lines_for_ratio=settings.script_min_lines_for_ratio,
     )
 
 

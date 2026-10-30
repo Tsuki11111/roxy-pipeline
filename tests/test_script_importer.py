@@ -60,5 +60,6 @@ async def test_import_article_builds_script(episode, session):
         )
     )
     assert len(rows) == 11
+    assert all(row.speaker == "roxy" for row in rows)
     assert rows[0].section == "问题"
     assert rows[-1].section == "结尾"

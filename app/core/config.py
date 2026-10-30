@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -60,10 +61,6 @@ class Settings(BaseSettings):
 
     script_target_chars_per_minute: int = 327
     script_article_max_chars: int = 30000
-    script_max_repairs: int = 2
-    script_roxy_ratio_min: float = 0.10
-    script_roxy_ratio_max: float = 0.30
-    script_min_lines_for_ratio: int = 20
 
     storyboard_max_repairs: int = 2
 
@@ -79,6 +76,7 @@ class Settings(BaseSettings):
     tts_indextts_url: str = "http://127.0.0.1:8765"
     tts_indextts_use_fp16: bool = True
     tts_indextts_semantic_on_cpu: bool = True
+    tts_unload_after_voice: bool = True
     tts_indextts_load_timeout_s: float = 600.0
     tts_indextts_timeout_s: float = 600.0
     tts_indextts_log: str = "./data/logs/indextts_server.log"
@@ -96,7 +94,9 @@ class Settings(BaseSettings):
     align_repo: str = "./data/tools/IndexTTS2"
     align_model_dir: str = "./data/assets/voice/align/wav2vec2-chinese"
     align_device: str = "cuda"
+    align_level: Literal["sentence", "char"] = "sentence"
     align_use_normalizer: bool = True
+    align_stop_tts: bool = True
     align_timeout_s: float = 1800.0
 
     # M4.3 QC: deterministic rules first, then DeepSeek multimodal on frames.
@@ -118,7 +118,7 @@ class Settings(BaseSettings):
     celery_task_always_eager: bool = False
     outbox_poll_interval_s: float = 5.0
     render_dir: str = "./tmp/renders"
-    renderer_version: str = "m5.2"
+    renderer_version: str = "m5.6-overlay"
     asset_storage: str = "local"
     asset_root: str = "./data/assets"
 

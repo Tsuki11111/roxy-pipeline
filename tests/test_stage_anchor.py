@@ -30,6 +30,37 @@ def test_stage_card_moves_opposite_character():
     assert payload["shots"][0]["card_side"] == "left"
 
 
+def test_stage_payload_keeps_same_character_across_shots():
+    spec = EpisodeSpec.model_validate_json(SPEC_PATH.read_text(encoding="utf-8"))
+    payload = build_stage_payload(spec, build_timeline(spec))
+    assert payload["shots"][1]["character_from"] is not None
+    assert (
+        payload["shots"][1]["character_from"]["src"]
+        == payload["shots"][1]["character"]["src"]
+    )
+
+
+def test_stage_payload_carries_previous_character():
+    raw = json.loads(SPEC_PATH.read_text(encoding="utf-8"))
+    raw["shots"][1]["character"]["image"] = "character_packs/placeholder/background.png"
+    spec = EpisodeSpec.model_validate(raw)
+    payload = build_stage_payload(spec, build_timeline(spec))
+    transition_from = payload["shots"][1]["character_from"]
+    assert transition_from is not None
+    assert transition_from["src"].endswith("character.png")
+    assert transition_from["move"] == "none"
+    assert payload["shots"][0]["character_from"] is None
+
+
+def test_stage_payload_fades_out_missing_character():
+    raw = json.loads(SPEC_PATH.read_text(encoding="utf-8"))
+    raw["shots"][1]["character"] = None
+    spec = EpisodeSpec.model_validate(raw)
+    payload = build_stage_payload(spec, build_timeline(spec))
+    assert payload["shots"][1]["character"] is None
+    assert payload["shots"][1]["character_from"]["src"].endswith("character.png")
+
+
 def test_character_anchor_validation():
     with pytest.raises(ValidationError):
         CharacterSpec(image="x.png", anchor_x=1.5)

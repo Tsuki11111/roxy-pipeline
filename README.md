@@ -14,7 +14,7 @@
 **AI 科普视频自动生成 Agent 系统**：从文章导入、AI 拆解润色、分镜，到逐句 TTS、卡片/逐帧渲染、ffmpeg 拼接和质检的全自动流水线。
 
 **定位**：个人自用项目；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守[需求文档第 11 章](docs/AI科普视频Agent系统需求分析文档.md)。
-**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产持久化/复用 + Asset Agent + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包 + Web 控制台已跑通；按主题自动生成脚本的功能已移除，下一步成本报表与监控。
+**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产持久化/复用 + Asset Agent + M4.1 逐句配音 + M4.2 句级对齐（字级可选） + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包 + Web 控制台 + 分镜时间线编辑器已跑通；按主题自动生成脚本的功能已移除，下一步成本报表与监控。
 
 ---
 
@@ -80,7 +80,7 @@
 | Asset Agent | ✅ 文本→无文字演示素材；优先 `reuse_key` 复用，缺失才调 Seedream |
 | M4 源 TTS（IndexTTS2） | ✅ 本地 zero-shot 克隆 + 常驻服务；长文本 RTF 1.75 |
 | M4.1 逐句配音 + 音轨 | ✅ `line_audio` + media 任务 + 句级对齐 + 真实音轨成片 |
-| M4.2 字级对齐 | ✅ 中文 wav2vec2 强制对齐；字幕块按字级时间锚点显隐 |
+| M4.2 对齐 | ✅ 默认句级，字幕整句显示；字级 wav2vec2 强制对齐可选 |
 | M4.3 质检与报告 | ✅ 规则前置 + DeepSeek 抽帧质检；review 表与 QC API |
 | M5.1 局部修改/续跑/发布包 | ✅ 单句修订、镜头缓存、通用续跑、stale reconciler、本地发布包、时间戳输出目录 + MinIO |
 | Web 控制台 | ✅ 总览、视频期流程动作、脚本/分镜/音频/QC/发布包、资产生成与审批 |
@@ -156,7 +156,11 @@ uv run celery -A app.workflow.celery_app worker -Q workflow,agent,render -l info
 uv run celery -A app.workflow.celery_app worker -Q media -l info -c 1
 ```
 
-> Windows 本机调试要加 `--pool=solo`（Celery prefork 在 Windows 不可用）；并行渲染在 Linux VM 上用默认 prefork `-c 2`。media worker 会常驻 IndexTTS2 模型并执行字级对齐，必须单并发，且需要 GPU（对齐显存不足会回退 CPU）。
+> Windows 本机调试要加 `--pool=solo`（Celery prefork 在 Windows 不可用）；并行渲染在 Linux VM 上用默认 prefork `-c 2`。media worker 常驻 IndexTTS2 模型；默认句级对齐，开启 `ALIGN_LEVEL=char` 时才执行字级对齐，TTS 与字级对齐都必须单并发。
+
+> 16GB 本机默认 `TTS_UNLOAD_AFTER_VOICE=true`：配音结束停掉常驻 TTS，对齐前再兜底 `/shutdown`；每镜头渲染、对齐、QC、拼接结束都会回收内存，TTS 下次配音自动重启。
+
+> 每个镜头独立按自己的起点初始化渲染器；角色从最近侧屏幕外 280ms 冲入，旧角色 80ms 模糊让位，只预加载本镜头素材。卡片与字幕换镜时直接切换，不再从透明淡入。
 
 ```bash
 uv run celery -A app.workflow.celery_app beat -l info
@@ -192,7 +196,7 @@ curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/import-s
 curl http://localhost:8000/api/v1/episodes/<episode_id>/script
 ```
 
-校验通过后可以先润色文稿：保持章节/句数/说话人不变，把旁白改得更口语、增加生活例子，让洛琪希语气更丰富：
+校验通过后可以先润色文稿：保持章节/句数不变，把整段口播改得更口语、增加生活例子，让洛琪希语气更丰富：
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/optimize-script \
@@ -206,7 +210,7 @@ curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/optimize
 curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/confirm-script
 ```
 
-脚本由 `prompts/script/article.md` 和 DeepSeek `deepseek-flash` 生成，润色用 `prompts/script/optimize.md`；校验规则是单句 ≤25 字、洛琪希 ≤15 字、全文字数 ±10%、章节顺序与覆盖。
+脚本由 `prompts/script/article.md` 和 DeepSeek `deepseek-flash` 生成，润色用 `prompts/script/optimize.md`；校验规则是单句 ≤25 字、全文字数 ±10%、章节顺序与覆盖。所有台词统一由洛琪希单人口播，不设旁白。
 
 - 支持最多 30000 字；前端视频期页提供「导入文稿」按钮，可直接粘贴或上传 `.txt`/`.md`。
 - 导入后保持 series 的章节标签顺序，生成问题式小标题和逐句台词。
@@ -287,8 +291,22 @@ npm run dev
 - 默认 `http://127.0.0.1:5173`，Vite 把 `/api` 和 `/health` 代理到 `http://127.0.0.1:8000`。
 - 页面：总览、视频期列表/详情、资产库。
 - 详情页可直接导入/润色文稿、生成与确认分镜、配音、对齐、QC、渲染、发布包和发布，运行中显示节点进度并支持取消。
+- 详情页「剪辑」tab 是分镜时间线编辑器：成片预览 + 镜头时间线 + 视觉属性面板；可改卡片类型/文案、角色立绘/位置、背景、动作和入场方向，保存后只重渲染受影响镜头。
 - 资产库支持按文稿生成素材、审批/拒绝、DeepSeek 图片检查。
 - 生产构建：`npm run build`，产物在 `web/dist/`。
+
+### 分镜编辑器（视觉属性）
+
+详情页「剪辑」tab：
+
+- 上方是上一次成片预览；点时间线镜头会跳转到对应时间点。
+- 时间线按镜头时长排布，显示镜头号、卡片类型和时长。
+- 属性面板可改卡片类型/文案、角色立绘/位置、背景、动作、入场方向；镜头时长由配音决定，只读。
+- **贴图层**：可上传 PNG/JPG/WebP，或输入描述让 DeepSeek 写 Seedream 提示词后在线生成候选；可调位置/宽度/底部距离/不透明度，白底素材选「白底融合」（multiply）。
+- 「保存镜头」只写 `shot` 与缓存键；「保存并重渲染」会重建 `render_spec` 并投递渲染，未变化的镜头复用片段缓存。
+- 预览基于上一次成片，重渲染完成后自动刷新视频。
+- 相关 API：`GET /api/v1/episodes/{id}/video`、`POST /api/v1/episodes/{id}/actions/rerender`、`PATCH /api/v1/shots/{id}`（`card_text` / `overlay_*`）、`POST /api/v1/assets/upload`、`POST /api/v1/assets/image-prompt`、`POST /api/v1/assets/seedream`、`GET /api/v1/assets/file`。
+- Seedream 生成的素材默认 `CANDIDATE`，可直接应用到镜头，后续在资产库审批；不可生成洛琪希等已有版权角色。
 
 ### 成片输出与 MinIO
 
@@ -324,7 +342,7 @@ Celery/RabbitMQ worker 已在快速开始中给出启动命令；Web 控制台�
 | 图像素材 | `ARK_IMAGE_MODEL=doubao-seedream-5-0-pro-260628` | ✅ 可用（背景/舞台/演示物件） |
 | 视觉质检 | `DEEPSEEK_MODEL=deepseek-flash`（多模态：图片/视频抽帧） | ✅ 可用 |
 | TTS | `TTS_PROVIDER=indextts2` + `data/assets/voice/indextts2/` | ✅ 本地 IndexTTS2 zero-shot |
-| 字级对齐 | `ALIGN_MODEL_DIR` 中文 wav2vec2 | ✅ 本地强制对齐 |
+| 对齐 | `ALIGN_LEVEL=sentence`（默认）/ `char` + `ALIGN_MODEL_DIR` | ✅ 默认句级；字级可选 |
 
 - DeepSeek Base URL：`https://api.deepseek.com`
 - 火山方舟 Base URL：`https://ark.cn-beijing.volces.com/api/v3`

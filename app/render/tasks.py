@@ -20,14 +20,16 @@ from app.storage.output import export_episode_video
 from app.workflow.celery_app import celery_app
 from app.workflow.cancel import TaskCancelled, ensure_not_cancelled
 from app.workflow.db import run_async, task_session
+from app.workflow.memory import release_memory
 
 logger = get_task_logger(__name__)
 
 
-def shot_render_hash(spec: EpisodeSpec, item) -> str:
+def shot_render_hash(spec: EpisodeSpec, item, character_from: dict | None = None) -> str:
     raw = json.dumps(
         {
             "shot": item.shot.model_dump(),
+            "character_from": character_from,
             "width": spec.width,
             "height": spec.height,
             "fps": spec.fps,
@@ -203,8 +205,13 @@ def render_shot_task(
         item = timeline.shots[seq - 1]
         if item.shot.seq != seq:
             raise RuntimeError(f"shot seq mismatch: expected {seq}, got {item.shot.seq}")
+        shot_payload = next(
+            shot for shot in payload["shots"] if shot["shot_id"] == item.shot.shot_id
+        )
 
-        digest = shot_render_hash(episode_spec, item)
+        digest = shot_render_hash(
+            episode_spec, item, shot_payload.get("character_from")
+        )
         shots_dir = Path(out_dir) / "shots"
         segment = shots_dir / f"shot_{seq:04d}.mp4"
         first_frame = Path(out_dir) / "frames" / f"shot_{seq:04d}_first.png"
@@ -265,6 +272,8 @@ def render_shot_task(
             raise self.retry(exc=exc, countdown=5 * (self.request.retries + 1))
         mark_failed(episode_id, node_run_id, f"shot {seq} failed: {exc}")
         raise
+    finally:
+        release_memory()
 
 
 @celery_app.task(name="render.concat")
@@ -307,3 +316,5 @@ def render_concat_task(
         logger.exception("concat failed episode=%s", episode_id)
         mark_failed(episode_id, node_run_id, f"concat failed: {exc}")
         raise
+    finally:
+        release_memory()

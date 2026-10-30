@@ -36,6 +36,20 @@ body {
   mask-image: linear-gradient(to bottom, transparent 0%, #000 18%);
 }
 
+#overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 120px;
+  width: 420px;
+  height: auto;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: none;
+  opacity: 1;
+  object-fit: contain;
+  pointer-events: none;
+}
+
 .character {
   position: absolute;
   left: 210px;

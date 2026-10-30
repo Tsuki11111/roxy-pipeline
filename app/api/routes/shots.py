@@ -57,6 +57,8 @@ async def update_shot(
             card_payload["style"] = DEFAULT_CARD_STYLES.get(shot.card_type, "")
     if "card_style" in fields and payload.card_style is not None:
         card_payload["style"] = payload.card_style
+    if "card_text" in fields and payload.card_text is not None:
+        card_payload["text"] = payload.card_text
     if "motion" in fields and payload.motion is not None:
         if payload.motion not in MOTIONS:
             raise HTTPException(status_code=422, detail="invalid motion")
@@ -88,12 +90,45 @@ async def update_shot(
             raise HTTPException(status_code=422, detail="invalid transition")
         shot.transition = payload.transition
 
+    overlay = dict(card_payload.get("overlay") or {})
+    if "overlay_image" in fields:
+        if payload.overlay_image:
+            candidate = (PROJECT_ROOT / payload.overlay_image).resolve()
+            if not candidate.is_relative_to(PROJECT_ROOT) or not candidate.is_file():
+                raise HTTPException(status_code=422, detail="overlay_image not found")
+            overlay["image"] = payload.overlay_image
+        else:
+            overlay.clear()
+    if overlay.get("image"):
+        if "overlay_position" in fields and payload.overlay_position is not None:
+            if payload.overlay_position not in ("left", "center", "right"):
+                raise HTTPException(status_code=422, detail="invalid overlay_position")
+            overlay["position"] = payload.overlay_position
+        if "overlay_width_px" in fields and payload.overlay_width_px is not None:
+            overlay["width_px"] = payload.overlay_width_px
+        if "overlay_bottom" in fields and payload.overlay_bottom is not None:
+            overlay["bottom"] = payload.overlay_bottom
+        if "overlay_opacity" in fields and payload.overlay_opacity is not None:
+            overlay["opacity"] = payload.overlay_opacity
+        if "overlay_blend" in fields and payload.overlay_blend is not None:
+            if payload.overlay_blend not in ("normal", "multiply"):
+                raise HTTPException(status_code=422, detail="invalid overlay_blend")
+            overlay["blend"] = payload.overlay_blend
+        overlay.setdefault("position", "center")
+        overlay.setdefault("width_px", 420)
+        overlay.setdefault("bottom", 120)
+        overlay.setdefault("opacity", 1.0)
+        overlay.setdefault("blend", "normal")
+        card_payload["overlay"] = overlay
+    else:
+        card_payload.pop("overlay", None)
+
     if not shot.character_image:
         shot.character_position = "none"
     elif shot.character_position == "none":
         shot.character_position = "left"
 
-    card_payload["text"] = line.text
+    card_payload["text"] = str(card_payload.get("text") or line.text)
     shot.card_payload = card_payload
     shot.cache_key = shot_cache_key(
         text=line.text,

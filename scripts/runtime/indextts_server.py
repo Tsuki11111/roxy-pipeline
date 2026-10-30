@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import sys
 import threading
@@ -83,6 +84,15 @@ def main() -> None:
                 self._json(404, {"error": "not found"})
 
         def do_POST(self) -> None:
+            if self.path == "/shutdown":
+                self._json(200, {"status": "shutting down"})
+
+                def _stop() -> None:
+                    with lock:
+                        server.shutdown()
+
+                threading.Thread(target=_stop, daemon=True).start()
+                return
             if self.path != "/synthesize":
                 self._json(404, {"error": "not found"})
                 return
@@ -102,6 +112,9 @@ def main() -> None:
                         output_path=str(out_path),
                         verbose=False,
                     )
+                    gc.collect()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
                 info = sf.info(str(out_path))
                 self._json(
                     200,
@@ -124,6 +137,7 @@ def main() -> None:
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f">> listening on http://{args.host}:{args.port}", flush=True)
     server.serve_forever()
+    server.server_close()
 
 
 if __name__ == "__main__":

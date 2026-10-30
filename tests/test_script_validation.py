@@ -63,26 +63,11 @@ def test_long_line_and_missing_section():
     assert any("缺少章节：结尾" in error for error in result.errors)
 
 
-def test_section_order_and_roxy_ratio():
+def test_section_order():
     lines = make_valid_lines()
     lines[0] = lines[0].model_copy(update={"section": "结尾"})
     result = validate_script(lines, target_duration_s=60, section_labels=LABELS)
     assert any("章节顺序错误" in error for error in result.errors)
-
-    roxy_lines = [
-        ScriptLineData(
-            seq=index + 1,
-            section=LABELS[index % len(LABELS)],
-            speaker="roxy",
-            text="很短的话",
-            char_count=4,
-        )
-        for index in range(24)
-    ]
-    roxy_result = validate_script(
-        roxy_lines, target_duration_s=60, section_labels=LABELS
-    )
-    assert any("占比" in error for error in roxy_result.errors)
 
 
 def test_forbidden_words():

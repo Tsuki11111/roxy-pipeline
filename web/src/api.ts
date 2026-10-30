@@ -148,6 +148,9 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+  rerender: (id: string) => action(id, "rerender"),
+  videoUrl: (id: string, version = 0) =>
+    `${BASE}/api/v1/episodes/${id}/video?v=${version}`,
   resolveReview: (reviewId: string, resolvedBy = "operator") =>
     request(`/api/v1/reviews/${reviewId}/resolve?resolved_by=${resolvedBy}`, {
       method: "POST",
@@ -179,6 +182,32 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  uploadAsset: (payload: {
+    filename: string;
+    data_base64: string;
+    asset_type?: string;
+    name?: string;
+  }) =>
+    request<Asset>("/api/v1/assets/upload", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  generateImagePrompt: (description: string) =>
+    request<{ prompt: string }>("/api/v1/assets/image-prompt", {
+      method: "POST",
+      body: JSON.stringify({ description }),
+    }),
+  generateSeedream: (payload: {
+    prompt: string;
+    size?: string;
+    count?: number;
+  }) =>
+    request<{ prompt: string; size: string; assets: Asset[] }>(
+      "/api/v1/assets/seedream",
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  assetPathUrl: (path: string) =>
+    `${BASE}/api/v1/assets/file?path=${encodeURIComponent(path)}`,
   generateAssetsForEpisode: (episodeId: string, payload: Record<string, unknown>) =>
     request<AssetGenerateResponse>(
       `/api/v1/episodes/${episodeId}/actions/generate-assets`,

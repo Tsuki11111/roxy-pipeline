@@ -208,6 +208,7 @@ async def test_voice_episode_writes_audio_alignment_and_shots(
         assert episode_row.audio_meta["alignment_granularity"] == "sentence"
         assert len(episode_row.audio_meta["lines"]) == 2
         assert episode_row.render_spec is not None
+        assert episode_row.render_spec["alignment_level"] == "sentence"
         assert len(episode_row.render_spec["shots"]) == 2
 
         audios = list(await check.scalars(select(LineAudio)))
@@ -309,6 +310,7 @@ async def test_align_episode_writes_char_timings(
         )
         spec = episode_row.render_spec
         assert spec is not None
+        assert spec["alignment_level"] == "char"
         assert all(shot["char_timings"] for shot in spec["shots"])
 
         align = await check.scalar(

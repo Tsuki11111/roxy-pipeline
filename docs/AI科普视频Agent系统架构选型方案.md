@@ -2,13 +2,13 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | v1.11 |
+| 文档版本 | v1.14 |
 | 文档状态 | 初稿，核心方案已确认 |
 | 日期 | 2026-10-29 |
 | 关联文档 | [需求分析文档](AI科普视频Agent系统需求分析文档.md)；[架构决策记录](decisions-architecture.md) |
 | 已确认约束 | 现有 Ubuntu VM 先跑；LLM 国内为主；TTS 用本地 IndexTTS2，不做付费云 TTS；视觉质检统一用 `deepseek-flash` 多模态；`deepseek-flash` 文本主模型 + 火山方舟备选/图像 |
 | 推荐方案 | 方案 A：Python 模块化单体 + 进程级拆分 + Celery；AI 子图用 LangGraph |
-| 变更说明 | v1.11：移除按主题生成脚本（`script_graph` / topic 模块 / confirm-topic / retry-script / regenerate-script），脚本唯一来源改为文章导入 + 可选润色；新增取消/删除期接口；v1.10：新增文稿生活化润色 Agent 与 Web 控制台；v1.9：新增半身反应镜头与角色滑入、输出时间戳目录与 MinIO 上传；v1.8：新增 Asset Agent（文本→无文字演示素材，reuse_key 复用，暂不引入 RAG）；v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
+| 变更说明 | v1.14：编辑器新增独立贴图层、图片上传与 Seedream 生成（DeepSeek 写提示词）；v1.13：新增分镜时间线编辑器、成片视频流与视觉编辑重渲染接口，`PATCH /shots` 支持卡片文案与逐镜头背景；v1.12：默认改为句级对齐（`ALIGN_LEVEL=sentence`），字幕整句显示，字级 wav2vec2 对齐改为可选；v1.11：移除按主题生成脚本（`script_graph` / topic 模块 / confirm-topic / retry-script / regenerate-script），脚本唯一来源改为文章导入 + 可选润色；新增取消/删除期接口；v1.10：新增文稿生活化润色 Agent 与 Web 控制台；v1.9：新增半身反应镜头与角色滑入、输出时间戳目录与 MinIO 上传；v1.8：新增 Asset Agent（文本→无文字演示素材，reuse_key 复用，暂不引入 RAG）；v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
 
 > 本文档回答“用什么做、怎么拆、怎么部署、接口长什么样”。需求编号（F-xx / N-xx / A-xx）沿用需求分析文档，不重复展开。
 
@@ -137,7 +137,7 @@
 | LLM | 国内 OpenAI-compatible API + 薄适配层 | DeepSeek `deepseek-flash`（文本/代码主模型）+ 火山方舟豆包 Pro（备选/A-B） | 按实际体验 flash 文本能力强；豆包 Pro 不阻塞主流程 | 其他国内厂商（备选） |
 | 结构化输出 | Pydantic + instructor | 最新稳定版 | Schema 校验、失败重试、模型无关 | 手写 JSON 解析 + 重试 |
 | TTS | 本地 IndexTTS2 zero-shot 克隆 | `IndexTeam/IndexTTS-2`（Python 3.11 + torch 2.8 cu128） | 中文吐字清晰、音量大、无按量费用；常驻服务加载一次 | 云 TTS（备选）/ CosyVoice 2 |
-| 强制对齐 | TTS 原生时间戳优先，WhisperX 兜底 | WhisperX 最新稳定版 | 字级时间戳决定字幕节奏 | ctc-forced-aligner |
+| 字级对齐（可选） | TTS 原生句级时间优先，WhisperX 兜底 | WhisperX 最新稳定版 | 需要逐字字幕/卡拉 OK 时使用 | ctc-forced-aligner |
 | 视觉质检 | DOM/几何规则前置 + `deepseek-flash` 多模态 | 图片资产直接读图；视频按镜头/时间点抽帧送模型 | 文字溢出、裁切先用 DOM 规则；语义与画面问题用 DeepSeek 判定 | 纯规则 |
 | 图像生成 | 火山方舟 Seedream（或 OpenAI-compatible 图像 API） | Seedream 5.x | 原创角色/背景/装饰候选；固定参考图/seed；人工筛选后入库 | 其他图像 API |
 | 渲染 | Playwright + Chromium + Jinja2 + ffmpeg | 版本全部钉死 | 文字准确、逐帧可控、可按镜头缓存 | Remotion（评估项） |
@@ -160,7 +160,7 @@
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
 │                         浏览器（局域网/内网）                          │
-│           React + Vite + AntD：文稿导入、脚本编辑、分镜预览、审片          │
+│           React + Vite + AntD：文稿导入、脚本编辑、分镜编辑、审片          │
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │ HTTPS / SSE
 ┌───────────────────────────────▼──────────────────────────────────────┐
@@ -207,8 +207,8 @@
 TTS（逐句合成，IndexTTS2 常驻服务）
   │  line_<id>.wav + duration_ms
   ▼
-强制对齐（中文 wav2vec2 字级对齐）
-  │  alignment.json（字级时间）
+对齐（默认句级；可选字级 wav2vec2）
+  │  alignment.json（句级/字级时间）
   ▼
 卡片渲染（HTML → PNG）
   │  card_<shot>.png
@@ -246,7 +246,7 @@ TTS（逐句合成，IndexTTS2 常驻服务）
 | script | 逐句编辑、字数/句长/章节/禁止词校验 | F-05～F-12 | script_line[]、校验报告 |
 | storyboard | 视觉语法约束、LLM 选镜、节奏规则、分镜编辑 | F-13～F-18 | shot[]、节奏报告 |
 | agent-graph | LangGraph 子图：状态、节点、条件边、checkpointer、interrupt | F-05、F-10、F-13～F-18、F-33 | 图定义、checkpoint、运行 trace |
-| voice | 逐句 TTS、字级时间戳、强制对齐、音轨装配 | F-19～F-24 | wav、alignment、audio.wav |
+| voice | 逐句 TTS、句级对齐、可选字级对齐、音轨装配 | F-19～F-24 | wav、alignment、audio.wav |
 | render | 卡片模板、舞台模板、逐帧渲染、镜头片段、拼接、封面 | F-25～F-32 | card.png、shot.mp4、episode.mp4 |
 | qc | 文案/配音/画面/对齐四类检查，三档结论 | F-33～F-37 | review[]、证据图 |
 | asset | 角色/背景/字体/BGM/模板的入库、校验与来源记录 | F-25～F-27、F-43～F-45、5.1 | asset、checksum、license、prompt/seed |
@@ -715,7 +715,7 @@ window.renderAt = function (tMs) {
 - 录屏的帧率和掉帧不可控，无法保证 25fps。
 - 逐帧可以对任意时间点精确渲染，便于缓存、重跑和测试。
 - 逐帧结果与机器负载无关，满足 N-04 的可复现要求。
-- 角色换姿势用双层交叉淡入（约 180ms）+ 轻微横移，不要在同一层硬换 `src`；参考片实测约 0.2 秒完成过渡。
+- 角色切换从最近侧屏幕外冲入（约 280ms，ease-out-quad，带轻微速度模糊）；旧角色 80ms 模糊让位。两层各自保留锚点/高度，不做缩放、拉伸或旋转。换镜时卡片与字幕直接切换，不做透明淡入。
 
 ### 10.4 帧时间与镜头时长
 
@@ -730,7 +730,7 @@ frame_count = frame_end - frame_start
 
 - 每句音频末尾补/裁不超过 20ms 的静音，使音频时长对齐到帧边界；成片音画同步以累计时间轴为准。
 - 一个镜头默认对应一句台词；数据模型允许 `script_line 1:N shot`，用于长句拆分或纯视觉节拍。MVP 先按 1:1 实现，若要对齐参考片“160 句 / 200 个画面节拍”，再放开 1:N。
-- 字幕条独立于镜头边界：按字级时间戳每 6–8 字推进，一个镜头内可以有多段字幕，单屏不超过 20 字（F-28）。
+- 字幕条默认按整句显示（句级对齐，单句 ≤25 字）；字级模式下才按字级时间戳每 6–8 字推进，一个镜头内可以有多段字幕（F-28）。
 
 ### 10.5 编码与拼接
 
@@ -776,7 +776,8 @@ ffmpeg -i video.mp4 -i audio_norm.wav \
   → audio.wav
 ```
 
-- 旁白与洛琪希使用不同 voice_id，但同一 speaker 全片固定。
+- 全片使用同一 voice_profile（洛琪希音色）；所有台词统一单人口播，不再区分旁白/角色音色。
+- TTS 服务常驻会占用大量系统提交内存；配音结束即停服务（`TTS_UNLOAD_AFTER_VOICE=true`），字级模式对齐前再兜底 `/shutdown`（`ALIGN_STOP_TTS=true`），释放后再加载 wav2vec2，下次配音自动重启服务。每个镜头、对齐、QC、拼接结束后调用 `release_memory()` 做 gc/显存缓存回收。
 - TTS 失败或时长异常（<0.5s 或 >1.5 倍预期）进入 QC，不直接进入音轨。
 - 句间停顿参数放在 `series.voice_profile` 里，保证跨期一致。
 - 局部修改时全片 loudnorm 可能带来整体增益变化；若要求未修改部分音频也逐样本一致，改为逐句/逐镜头归一化到固定目标，再拼接。
@@ -839,8 +840,8 @@ ffmpeg -i video.mp4 -i audio_norm.wav \
 
 **渲染：**
 
-- 复用舞台背景；半身层居中/偏左，高度约 900–1000px；入场 120ms 淡入 + 轻微上移，出场 120ms 淡出。
-- 半身镜头前后仍用 180ms 角色交叉淡入，避免硬切。
+- 复用舞台背景；半身层居中/偏左，高度约 900–1000px；入场沿用统一角色擦除，出场 120ms 淡出。
+- 半身镜头前后仍用屏幕外冲入/让位，避免硬切和叠影。
 - 用半身镜头遮换姿势时：旧全身淡出 → bust 进入 → 新全身淡入，总过渡控制在 0.4–0.6 秒。
 
 > 2026-10-29 实现：bust 资产已进入分镜 catalog，`spec_builder` 通过文件名 `_bust_` 识别并设 `anchor_y=0`、高度 1000px；分镜提示词允许在强调/吐槽句选择 bust。当前尚未强制每 3–5 镜插入，也尚未做 bust 专属淡入曲线。
@@ -854,7 +855,7 @@ ffmpeg -i video.mp4 -i audio_norm.wav \
 - 每个镜头可给角色一个 `move`：`from_x/from_y`、`to_x/to_y`、`scale`、`opacity`、`start_ms`、`duration_ms`、`easing`（ease-out cubic）。
 - 时长 120–300ms；单次位移不超过画幅宽度的 1/3；不加弹跳/回弹。
 - 与角色一起移动的物件（白板、终端、提示牌等）放入同一 `group`，共用位移；不跟随的卡片独立动画。
-- 典型触发：换章节时从侧面滑入；需要给卡片让位时横移；和道具一起进退场；换姿势前先横移，再做 180ms 交叉淡化。
+- 典型触发：换章节时从屏幕外冲入；需要给卡片让位时横移；和道具一起进退场；角色切换用冲入/让位，换位与切换分开做。
 - 默认不移动每个镜头；没有 `move` 时只保留待机呼吸（2–4px）。连续两个镜头不重复同一方向的大幅平移。
 
 **确定性：**
@@ -864,6 +865,8 @@ ffmpeg -i video.mp4 -i audio_norm.wav \
 - 入场/出场时角色和道具必须作为整体移出画面，不允许原地消失。
 
 > 2026-10-29 实现：当前用简化枚举 `CharacterSpec.move`（`slide_in_left/slide_in_right/shift_left/shift_right/none`），240ms ease-out；Storyboard 在每章第一个有角色的镜头自动交替分配 `slide_in_left/right`。`shift_*` 已支持渲染但尚未自动分配；物件/卡片同组移动还未接入。
+> 2026-10-30 修复：逐镜头渲染改为按镜头 `start_ms` 初始化；跨镜头角色切换用 `character_from`，新角色从最近侧屏幕外 280ms 冲入，旧角色 80ms 模糊让位；每镜头只预加载本镜头素材。换镜时卡片/字幕直接切换，不做透明淡入。`renderer_version=m5.6-overlay`。
+> 2026-10-30 贴图层：`ShotSpec.overlay` 支持独立图片层（位置/宽度/底部/不透明度/混合模式），位于背景之上、角色之下；白底素材可用 multiply 融合。编辑器支持上传或 Seedream 生成后应用到镜头。
 
 ---
 
@@ -907,8 +910,8 @@ ffmpeg -i video.mp4 -i audio_norm.wav \
 - 全文字数 = 目标时长 × 327，误差 ≤±10%。
 - 每个章节都有内容；章节顺序与 series 配置一致。
 - 禁止词表命中即阻断。
-- 洛琪希台词单句 ≤15 字；旁白/洛琪希比例在配置范围内。
-- 说话人只能是 `narrator` 或 `roxy`。
+- 所有台词由洛琪希单人口播，单句 ≤25 字；不设旁白，不再校验旁白/洛琪希比例。
+- 说话人字段保留 `narrator` / `roxy` 以兼容旧数据；新导入统一写 `roxy`。
 
 **模型自检：**
 
@@ -961,7 +964,7 @@ F-17 的多模态分镜评审可在 M3 后用“分镜缩略图拼图 + 多模�
 
 > M3 实现：LLM 只输出语义选择，代码做 schema 归一化；连续同卡片、角色连续超限、章节末卡片、时长越界由确定性修复器处理，最多 4 轮，保证 F-15 硬规则。
 
-### 11.4 TTS 与强制对齐
+### 11.4 TTS 与对齐
 
 **Provider 接口：**
 
@@ -985,15 +988,16 @@ class TTSProvider(Protocol):
 **对齐策略：**
 
 1. IndexTTS2 只返回句级音频与时长，不提供字级时间戳。
-2. 用 WhisperX 同款中文 wav2vec2 模型（`jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn`）对每句音频做 CTC 强制对齐，输出字级时间；已知台词直接作为对齐目标，不跑 ASR。
-3. 对齐在独立 Python 进程执行（`scripts/runtime/align_words.py`），模型常驻不可行时按集加载；显存不足自动回退 CPU。
-4. 对齐结果做单调性、边界、字表校验；失败进入 QC，不阻塞人工重试。
+2. **默认句级**（`ALIGN_LEVEL=sentence`）：每个 `script_line` 的音频起止时间直接写入 `audio_meta`，字幕整句显示；不加载对齐模型，也不排队 `align.episode`。
+3. **可选字级**（`ALIGN_LEVEL=char` 且 `voice_auto_align=true`）：用 WhisperX 同款中文 wav2vec2 模型（`jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn`）对每句音频做 CTC 强制对齐，输出字级时间；已知台词直接作为对齐目标，不跑 ASR。
+4. 字级对齐在独立 Python 进程执行（`scripts/runtime/align_words.py`），模型按集加载；显存不足自动回退 CPU。
+5. 对齐结果做单调性、边界、字表校验；失败进入 QC，不阻塞人工重试。
 
 **音色一致性：**
 
 - `series.voice_profile` 固定 provider=indextts2、model、ref_audio checksum、sample_rate；speed/emotion 暂未启用。
 - 换参考音或模型版本意味着音色变化，必须提升 `voice_profile_version` 并重跑全片；不能静默切换。
-- 旁白与洛琪希必须是两个明显可区分的音色（F-21、A-10）；同一 provider 用不同参考音实现。
+- 全片使用洛琪希单一音色（F-21 / A-10 的双音色要求已按单人口播调整）；参考音变化才需要提升 `voice_profile_version`。
 - 参考音只能来自用户本人或明确授权的声音，禁止动画原声/声优本人音频。模型与参考音放 `data/assets/voice/`，不提交公开仓库。
 
 ### 11.5 视觉质检
@@ -1222,20 +1226,26 @@ reuse_key → 查 asset 表
 | POST | `/episodes/{id}/actions/confirm-storyboard` | 确认分镜，进入 VOICING | operator/admin |
 | POST | `/episodes/{id}/actions/voice` | 开始逐句配音，投递 media 队列 | operator/admin |
 | POST | `/episodes/{id}/actions/retry-voice` | 重跑失败的配音 | operator/admin |
-| POST | `/episodes/{id}/actions/align` | 开始字级强制对齐，投递 media 队列 | operator/admin |
+| POST | `/episodes/{id}/actions/align` | 可选：开始字级强制对齐，投递 media 队列 | operator/admin |
 | POST | `/episodes/{id}/actions/retry-align` | 重跑失败的对齐 | operator/admin |
 | GET | `/episodes/{id}/audio` | 逐句音频、句级与字级对齐 | 登录用户 |
 | POST | `/episodes/{id}/actions/qc` | 开始规则 + DeepSeek 多模态质检 | operator/admin |
 | POST | `/episodes/{id}/actions/retry-qc` | 重跑失败的质检 | operator/admin |
 | GET | `/episodes/{id}/qc` | QC 汇总与 review 明细 | 登录用户 |
 | POST | `/episodes/{id}/actions/build-render-spec` | 由 shot 表生成渲染 spec | operator/admin |
-| PATCH | `/shots/{shot_id}` | 编辑单个镜头 | operator/admin |
+| GET | `/episodes/{id}/video` | 成片视频流（支持 Range） | 登录用户 |
+| POST | `/episodes/{id}/actions/rerender` | 视觉编辑后重建 spec 并重新渲染（READY/PUBLISHED/QC） | operator/admin |
+| PATCH | `/shots/{shot_id}` | 编辑单个镜头（含卡片文案与视觉属性） | operator/admin |
 | GET | `/episodes/{id}/rhythm-report` | 节奏规则检查结果 | 登录用户 |
 | GET | `/episodes/{id}/qc` | 质检报告 | 登录用户 |
 | POST | `/reviews/{review_id}/resolve` | 处理人工介入项 | reviewer/admin |
 | GET | `/episodes/{id}/output` | 成片/封面/元数据/字幕的预签名 URL | 登录用户 |
 | GET | `/episodes/{id}/package` | 发布包清单 | 登录用户 |
 | POST | `/assets` | 上传角色/背景/字体 | admin |
+| POST | `/assets/upload` | 上传图片到资产库（base64，入库并镜像 MinIO） | admin |
+| POST | `/assets/image-prompt` | DeepSeek 将素材描述写成 Seedream 提示词 | admin |
+| POST | `/assets/seedream` | 按提示词生成 1–4 张候选素材并入库 | admin |
+| GET | `/assets/file` | 安全读取项目内资产文件（贴图预览） | 登录用户 |
 | POST | `/assets/generate` | 文本生成无文字演示素材；先查 `reuse_key` 复用，缺失才生成候选 | admin |
 | GET | `/assets/candidates` | 候选列表 | 登录用户 |
 | POST | `/assets/{id}/approve` | 候选入库 | admin |
@@ -1722,7 +1732,7 @@ roxy_pipeline/
 │  │  ├─ script/           # 脚本 Agent：graph/validation/service/optimizer/tasks
 │  │  ├─ storyboard/       # 分镜 Agent：graph/rhythm/service/spec
 │  │  └─ asset/            # 文本→无文字演示素材，reuse_key 复用
-│  ├─ voice/               # 逐句 TTS、字级对齐、音轨装配
+│  ├─ voice/               # 逐句 TTS、句级/字级对齐、音轨装配
 │  ├─ qc/                  # 规则 + DeepSeek 多模态质检
 │  ├─ publish/             # 本地发布包
 │  ├─ storage/             # 时间戳输出目录、MinIO 上传

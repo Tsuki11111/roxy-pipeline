@@ -19,7 +19,7 @@
 AI 科普视频自动生成 Agent 系统：文章导入 → AI 结构化脚本/润色 → 分镜 → 逐句 TTS/对齐 → HTML 卡片/逐帧渲染 → ffmpeg 拼接 → 质检。
 
 - **个人自用项目**；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守需求文档第 11 章。
-- **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产持久化/复用 + Asset Agent + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包 + Web 控制台已跑通；按主题自动生成脚本的功能已移除，下一步成本报表与监控。
+- **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产持久化/复用 + Asset Agent + M4.1 逐句配音 + M4.2 句级对齐（字级可选） + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包 + Web 控制台 + 分镜时间线编辑器已跑通；按主题自动生成脚本的功能已移除，下一步成本报表与监控。
 - **GitHub**：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
 - **仓库不包含**：`.env`、洛琪希参考图/立绘、`tmp/`、私有 character pack。
 
@@ -66,6 +66,7 @@ Playwright/Chromium + ffmpeg + LangGraph（仅 AI 子图）；前端 React + Vit
 - 视觉质检：统一用 **DeepSeek `deepseek-flash` 多模态**；图片资产直接传图检查，完整视频按镜头/时间点抽帧 + ffmpeg 流指标一起送模型。不接入豆包 Vision 等第二视觉模型；确定性 DOM/几何规则仍作为前置检查。
 - **TTS：本地 IndexTTS2 zero-shot 声音克隆**（Python 3.11 独立环境 + 常驻 HTTP 服务），不使用付费云 TTS；参考音固定为 `data/assets/voice/indextts2/reference.wav`。
 - **含文字的信息卡片必须用 HTML 渲染**，不得用图像生成模型。
+- **脚本与配音统一为洛琪希单人口播**，不设旁白；`speaker` 字段仅为兼容旧数据保留，新导入统一写 `roxy`。
 
 ### 4. 密钥与素材
 
@@ -83,7 +84,8 @@ Playwright/Chromium + ffmpeg + LangGraph（仅 AI 子图）；前端 React + Vit
 
 - 开发机：Windows 11 + Git Bash；Python 可用；Docker Desktop 已可用。本地 compose 默认只起 Postgres/RabbitMQ/Redis，MinIO 用 `storage` profile。
 - **IndexTTS2 独立环境**：主项目 Python 3.12；IndexTTS2 固定在 `data/tools/indextts-venv`（Python 3.11 + torch 2.8 cu128），由 `scripts/runtime/indextts_server.py` 常驻 `127.0.0.1:8765`；模型在 `data/assets/voice/indextts2/`（gitignore）。8GB 显存下用 fp16，并把 Wav2Vec2-BERT 放 CPU 做一次性音色编码。
-- **字级对齐**：同一 Python 3.11 环境运行 `scripts/runtime/align_words.py`，中文模型在 `data/assets/voice/align/wav2vec2-chinese/`；`align.episode` 与 `voice.episode` 都在 media 队列，TTS 并发固定 1。
+- **对齐**：默认句级对齐（`ALIGN_LEVEL=sentence`），配音本身产出每句起止时间，字幕整句显示，不加载对齐模型。字级对齐为可选（`ALIGN_LEVEL=char`）：同一 Python 3.11 环境运行 `scripts/runtime/align_words.py`，中文模型在 `data/assets/voice/align/wav2vec2-chinese/`；`align.episode` 与 `voice.episode` 都在 media 队列，TTS 并发固定 1。
+- **内存自动回收**：配音结束停掉 IndexTTS2（`TTS_UNLOAD_AFTER_VOICE=true`），对齐前再兜底 `/shutdown`（`ALIGN_STOP_TTS=true`）；每个镜头渲染后、对齐/QC/拼接结束都调用 `release_memory()`。TTS 下次配音自动重启。16GB 本机不要关闭这些行为。
 - **最终视频输出**：渲染完成后写到 `output/YYYYMMDD-HHMMSS_<episode_id8>/episode.mp4`，同目录写 `metadata.json`；`episode.output_path` 指向该文件。`MINIO_UPLOAD_ENABLED=true` 时上传 `MINIO_BUCKET_OUTPUT`；VM 用 `MINIO_REQUIRED=true` 强制成功。
 - 部署目标：Ubuntu 24.04 VM，Docker 29 / Compose 2.40。
 - **本地与 VM 资源隔离**：本地用 `ROXY_ENV=local` / `COMPOSE_PROJECT_NAME=roxy-local`，VM 用 `ROXY_ENV=vm` / `COMPOSE_PROJECT_NAME=roxy-vm`；容器名、网络、数据卷按环境分开，不能共用同一套资源。

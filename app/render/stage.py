@@ -20,6 +20,7 @@ def asset_url(path: str) -> str:
 
 def build_stage_payload(spec: EpisodeSpec, timeline: Timeline) -> dict:
     shots: list[dict] = []
+    previous_character: dict | None = None
     for item in timeline.shots:
         shot = item.shot
         character = None
@@ -34,6 +35,20 @@ def build_stage_payload(spec: EpisodeSpec, timeline: Timeline) -> dict:
                 "anchor_y": shot.character.anchor_y,
                 "scale": shot.character.scale,
             }
+        overlay = None
+        if shot.overlay is not None:
+            overlay = {
+                "src": asset_url(shot.overlay.image),
+                "position": shot.overlay.position,
+                "width_px": shot.overlay.width_px,
+                "bottom": shot.overlay.bottom,
+                "opacity": shot.overlay.opacity,
+                "blend": shot.overlay.blend,
+            }
+        character_from = None
+        if previous_character is not None:
+            character_from = dict(previous_character)
+            character_from["move"] = "none"
         shots.append(
             {
                 "shot_id": shot.shot_id,
@@ -41,6 +56,8 @@ def build_stage_payload(spec: EpisodeSpec, timeline: Timeline) -> dict:
                 "end_ms": item.end_ms,
                 "section_index": item.section_index,
                 "character": character,
+                "character_from": character_from,
+                "overlay": overlay,
                 "card_html": render_card(shot.card),
                 "card_side": (
                     "left"
@@ -55,6 +72,7 @@ def build_stage_payload(spec: EpisodeSpec, timeline: Timeline) -> dict:
                 ],
             }
         )
+        previous_character = character
 
     return {
         "title": spec.title,

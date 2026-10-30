@@ -7,7 +7,7 @@ from app.render.models import EpisodeSpec
 from app.render.timeline import build_timeline, split_subtitle
 
 
-def make_spec(shots: list[dict]) -> EpisodeSpec:
+def make_spec(shots: list[dict], **kwargs) -> EpisodeSpec:
     return EpisodeSpec(
         title="test",
         fps=25,
@@ -17,6 +17,7 @@ def make_spec(shots: list[dict]) -> EpisodeSpec:
         background="tmp/seedream_assets/bg_paper_light_01_1920x1080.png",
         floor="tmp/seedream_assets/bg_wood_floor_02_1920x1080.png",
         shots=shots,
+        **kwargs,
     )
 
 
@@ -52,6 +53,19 @@ def test_timeline_frames_and_chunks() -> None:
         for chunk in item.chunks:
             assert 1 <= len(chunk.text) <= 20
             assert chunk.start_ms < chunk.end_ms
+
+
+def test_sentence_alignment_uses_single_chunk() -> None:
+    spec = make_spec(
+        [shot(1, "问题", "这是一整句字幕。", duration_ms=2000)],
+        alignment_level="sentence",
+    )
+    timeline = build_timeline(spec)
+    chunks = timeline.shots[0].chunks
+    assert len(chunks) == 1
+    assert chunks[0].text == "这是一整句字幕。"
+    assert chunks[0].start_ms == 0
+    assert chunks[0].end_ms == 2000
 
 
 def test_char_timings_drive_subtitle_chunks() -> None:

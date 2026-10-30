@@ -25,6 +25,7 @@ from app.render.models import EpisodeSpec
 from app.workflow.celery_app import celery_app
 from app.workflow.cancel import TaskCancelled, ensure_not_cancelled
 from app.workflow.db import run_async, task_session
+from app.workflow.memory import release_memory
 from app.workflow.state_machine import transition_episode
 
 logger = logging.getLogger(__name__)
@@ -210,3 +211,5 @@ def qc_episode_task(self, episode_id: str, node_run_id: str):
             raise self.retry(exc=exc, countdown=10)
         run_async(_mark_failed(episode_id, node_run_id, str(exc)))
         raise
+    finally:
+        release_memory()

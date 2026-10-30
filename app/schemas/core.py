@@ -247,6 +247,7 @@ class QcReport(BaseModel):
 class ShotUpdate(BaseModel):
     card_type: str | None = None
     card_style: str | None = None
+    card_text: str | None = Field(default=None, max_length=500)
     character_image: str | None = None
     character_position: str | None = None
     duration_ms: int | None = None
@@ -254,6 +255,12 @@ class ShotUpdate(BaseModel):
     transition: str | None = None
     motion: str | None = None
     move: str | None = None
+    overlay_image: str | None = None
+    overlay_position: str | None = None
+    overlay_width_px: int | None = Field(default=None, ge=40, le=1900)
+    overlay_bottom: int | None = Field(default=None, ge=0, le=1080)
+    overlay_opacity: float | None = Field(default=None, ge=0.0, le=1.0)
+    overlay_blend: Literal["normal", "multiply"] | None = None
 
 
 class ShotUpdateResult(BaseModel):
@@ -290,6 +297,33 @@ class AssetQcRead(BaseModel):
     passed: bool
     issues: list
     meta: dict
+
+
+class AssetUploadRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=200)
+    data_base64: str
+    asset_type: AssetType = AssetType.PROP
+    name: str | None = Field(default=None, max_length=200)
+
+
+class ImagePromptRequest(BaseModel):
+    description: str = Field(min_length=1, max_length=2000)
+
+
+class ImagePromptRead(BaseModel):
+    prompt: str
+
+
+class SeedreamGenerateRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=2000)
+    size: str = "1024x1024"
+    count: int = Field(default=1, ge=1, le=4)
+
+
+class SeedreamGenerateResponse(BaseModel):
+    prompt: str
+    size: str
+    assets: list[AssetRead]
 
 
 class AssetGenerateRequest(BaseModel):

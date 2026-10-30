@@ -24,7 +24,13 @@ async def build_episode_render_spec(
     shots = await load_shots(session, episode.id)
     if not shots:
         raise ValueError("episode has no shots")
-    background = await resolve_background(session, "paper")
+    bg_keys = {str(shot.bg or "paper") for shot in shots}
+    background_by_key = {
+        key: await resolve_background(session, key) for key in bg_keys
+    }
+    background = background_by_key.get("paper") or await resolve_background(
+        session, "paper"
+    )
     floor = await resolve_floor(session)
     spec = build_episode_spec(
         episode,
@@ -32,6 +38,7 @@ async def build_episode_render_spec(
         lines,
         shots,
         background=background,
+        background_by_key=background_by_key,
         floor=floor,
         char_timings_by_line=char_timings_by_line,
     )

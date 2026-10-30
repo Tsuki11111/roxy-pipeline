@@ -9,6 +9,7 @@ from app.render.models import (
     CharacterSpec,
     CharTiming,
     EpisodeSpec,
+    OverlaySpec,
     ShotSpec,
 )
 from app.agents.storyboard.grammar import (
@@ -52,6 +53,7 @@ def build_episode_spec(
     shots: list[Shot],
     *,
     background: str | None = None,
+    background_by_key: dict[str, str] | None = None,
     floor: str | None = None,
     char_timings_by_line: dict[str, list[dict]] | None = None,
 ) -> EpisodeSpec:
@@ -97,6 +99,37 @@ def build_episode_spec(
                 anchor_y=0 if bust else None,
             )
 
+        overlay = None
+        overlay_data = payload.get("overlay")
+        if isinstance(overlay_data, dict) and overlay_data.get("image"):
+            overlay_position = overlay_data.get("position")
+            if overlay_position not in {"left", "center", "right"}:
+                overlay_position = "center"
+            try:
+                overlay_width = int(overlay_data.get("width_px", 420))
+            except (TypeError, ValueError):
+                overlay_width = 420
+            try:
+                overlay_bottom = int(overlay_data.get("bottom", 120))
+            except (TypeError, ValueError):
+                overlay_bottom = 120
+            try:
+                overlay_opacity = float(overlay_data.get("opacity", 1.0))
+            except (TypeError, ValueError):
+                overlay_opacity = 1.0
+            overlay_blend = overlay_data.get("blend")
+            if overlay_blend not in {"normal", "multiply"}:
+                overlay_blend = "normal"
+            overlay = OverlaySpec(
+                image=str(overlay_data["image"]),
+                position=overlay_position,
+                width_px=max(40, min(1900, overlay_width)),
+                bottom=max(0, min(1080, overlay_bottom)),
+                opacity=max(0.0, min(1.0, overlay_opacity)),
+                blend=overlay_blend,
+            )
+
+        card_text = str(payload.get("text") or line.text)
         spec_shots.append(
             ShotSpec(
                 shot_id=shot.id,
@@ -105,8 +138,9 @@ def build_episode_spec(
                 narration=line.text,
                 duration_ms=shot.duration_ms,
                 character=character,
-                card=CardSpec(type=card_type, style=style, text=line.text),
-                bg=background,
+                card=CardSpec(type=card_type, style=style, text=card_text),
+                overlay=overlay,
+                bg=(background_by_key or {}).get(shot.bg or "paper", background),
                 floor=floor,
                 template_version=shot.template_version,
                 char_timings=[
@@ -126,6 +160,7 @@ def build_episode_spec(
         width=1920,
         height=1080,
         section_labels=list(series.section_labels),
+        alignment_level="char" if char_timings_by_line else "sentence",
         background=background,
         floor=floor,
         watermark=series.watermark or "",

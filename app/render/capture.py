@@ -46,9 +46,11 @@ def render_still(
                 device_scale_factor=1,
             )
             page.goto(f"{base_url}/templates/stage/stage.html", wait_until="load")
-            page.evaluate("window.initStage", payload)
+            page.evaluate(
+                "({ data, atMs }) => window.initStage(data, atMs, false)",
+                {"data": payload, "atMs": t_ms},
+            )
             page.wait_for_function("window.stageReady === true", timeout=60_000)
-            page.evaluate("window.renderAt", t_ms)
             page.screenshot(
                 path=str(out),
                 type="png",
@@ -77,7 +79,7 @@ def _render_shot_frames(
     proc = start_segment(ffmpeg, segment, fps)
     assert proc.stdin is not None
     for frame in range(item.frame_start, item.frame_end):
-        t_ms = frame * 1000 / fps
+        t_ms = min(max(frame * 1000 / fps, item.start_ms), item.end_ms - 1)
         page.evaluate("window.renderAt", t_ms)
         png = page.screenshot(
             type="png",
@@ -114,7 +116,10 @@ def render_shot(
             )
             try:
                 page.goto(f"{base_url}/templates/stage/stage.html", wait_until="load")
-                page.evaluate("window.initStage", payload)
+                page.evaluate(
+                    "({ data, atMs }) => window.initStage(data, atMs, false)",
+                    {"data": payload, "atMs": item.start_ms},
+                )
                 page.wait_for_function("window.stageReady === true", timeout=60_000)
                 return _render_shot_frames(
                     page, item, out_dir, ffmpeg, width, height, fps

@@ -5,7 +5,6 @@ from collections.abc import Iterable, Sequence
 from pydantic import BaseModel, Field
 
 MAX_LINE_CHARS = 25
-MAX_ROXY_CHARS = 15
 SPEAKERS = {"narrator", "roxy"}
 DEFAULT_SECTION_LABELS = [
     "问题",
@@ -94,9 +93,6 @@ def validate_script(
     target_duration_s: int,
     section_labels: Sequence[str],
     target_chars_per_minute: int = 327,
-    roxy_ratio_min: float = 0.10,
-    roxy_ratio_max: float = 0.30,
-    min_lines_for_ratio: int = 20,
     forbidden_words: Sequence[str] = (),
 ) -> ValidationResult:
     errors: list[str] = []
@@ -122,8 +118,6 @@ def validate_script(
             errors.append(f"第 {line.seq} 句说话人非法：{line.speaker}")
         if len(text) > MAX_LINE_CHARS:
             errors.append(f"第 {line.seq} 句超过 25 字（{len(text)} 字）")
-        if line.speaker == "roxy" and len(text) > MAX_ROXY_CHARS:
-            errors.append(f"第 {line.seq} 句洛琪希台词超过 15 字（{len(text)} 字）")
         if line.section not in label_index:
             errors.append(f"第 {line.seq} 句章节未知：{line.section}")
             continue
@@ -144,14 +138,6 @@ def validate_script(
             errors.append(
                 f"全文字数 {total_chars}，目标 {target_chars}，偏差 {deviation:+.0%}"
             )
-
-    if len(lines) >= min_lines_for_ratio and not (
-        roxy_ratio_min <= roxy_ratio <= roxy_ratio_max
-    ):
-        errors.append(
-            f"洛琪希台词占比 {roxy_ratio:.0%}，应在 "
-            f"{roxy_ratio_min:.0%}–{roxy_ratio_max:.0%}"
-        )
 
     for word in forbidden_words:
         if word and any(word in line.text for line in lines):

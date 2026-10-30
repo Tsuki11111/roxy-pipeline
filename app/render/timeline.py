@@ -86,6 +86,15 @@ def _proportional_chunks(
     return chunks
 
 
+def _sentence_chunks(text: str, start_ms: int, end_ms: int) -> list[SubtitleChunk]:
+    text = " ".join(text.split())
+    if not text:
+        return []
+    if len(text) <= 34:
+        return [SubtitleChunk(text=text, start_ms=start_ms, end_ms=end_ms)]
+    return _proportional_chunks(split_subtitle(text), start_ms, end_ms)
+
+
 def _timed_chunks(
     shot: ShotSpec, labels: list[str], start_ms: int, end_ms: int
 ) -> list[SubtitleChunk] | None:
@@ -127,10 +136,13 @@ def build_timeline(spec: EpisodeSpec) -> Timeline:
         if frame_end <= frame_start:
             frame_end = frame_start + 1
 
-        labels = split_subtitle(shot.narration)
-        chunks = _timed_chunks(shot, labels, start_ms, end_ms)
-        if chunks is None:
-            chunks = _proportional_chunks(labels, start_ms, end_ms)
+        if spec.alignment_level == "sentence":
+            chunks = _sentence_chunks(shot.narration, start_ms, end_ms)
+        else:
+            labels = split_subtitle(shot.narration)
+            chunks = _timed_chunks(shot, labels, start_ms, end_ms)
+            if chunks is None:
+                chunks = _proportional_chunks(labels, start_ms, end_ms)
 
         shots.append(
             ShotTimeline(

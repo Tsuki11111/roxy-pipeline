@@ -37,6 +37,15 @@ class CharTiming(BaseModel):
     end_ms: int = Field(ge=0)
 
 
+class OverlaySpec(BaseModel):
+    image: str
+    position: Literal["left", "center", "right"] = "center"
+    width_px: int = Field(default=420, ge=40, le=1900)
+    bottom: int = Field(default=120, ge=0, le=1080)
+    opacity: float = Field(default=1.0, ge=0.0, le=1.0)
+    blend: Literal["normal", "multiply"] = "normal"
+
+
 class ShotSpec(BaseModel):
     shot_id: str
     seq: int = Field(ge=1)
@@ -45,6 +54,7 @@ class ShotSpec(BaseModel):
     duration_ms: int = Field(ge=500, le=15000)
     character: CharacterSpec | None = None
     card: CardSpec | None = None
+    overlay: OverlaySpec | None = None
     bg: str | None = None
     floor: str | None = None
     template_version: str = "v1"
@@ -58,6 +68,7 @@ class EpisodeSpec(BaseModel):
     width: int = 1920
     height: int = 1080
     section_labels: list[str] = Field(min_length=1)
+    alignment_level: Literal["sentence", "char"] = "char"
     background: str
     floor: str
     watermark: str = "Roxy Pipeline · DEMO"

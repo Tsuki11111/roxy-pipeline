@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import FileResponse
 from jinja2 import TemplateNotFound
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import get_settings
 
 from app.agents.asset.service import (
     AssetAgentError,
@@ -94,6 +99,7 @@ from app.agents.storyboard.service import (
 from app.render.service import (
     RenderConflict,
     RenderRequestError,
+    rerender_episode,
     start_render,
 )
 from app.workflow.revision import (
@@ -179,6 +185,29 @@ async def get_episode(
     return episode
 
 
+@router.get("/{episode_id}/video")
+async def get_episode_video(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> FileResponse:
+    episode = await session.get(Episode, episode_id)
+    if episode is None or not episode.output_path:
+        raise HTTPException(status_code=404, detail="video not found")
+    path = Path(episode.output_path).expanduser()
+    if not path.is_absolute():
+        path = (Path.cwd() / path).resolve()
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="video not found")
+    root = Path(get_settings().output_root).expanduser().resolve()
+    if not path.resolve().is_relative_to(root):
+        raise HTTPException(status_code=404, detail="video not found")
+    return FileResponse(
+        path,
+        media_type="video/mp4",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @router.put("/{episode_id}/render-spec", response_model=EpisodeRead)
 async def put_render_spec(
     episode_id: str,
@@ -211,6 +240,35 @@ async def render_episode_action(
 ) -> EpisodeActionAccepted:
     try:
         episode, node = await start_render(session, episode_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RenderConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except RenderRequestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (FileNotFoundError, ValueError, TemplateNotFound) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    await session.refresh(episode)
+    return EpisodeActionAccepted(
+        episode_id=episode.id,
+        status=episode.status,
+        node_key=node.node_key,
+        operation_id=node.id,
+    )
+
+
+@router.post(
+    "/{episode_id}/actions/rerender",
+    response_model=EpisodeActionAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def rerender_episode_action(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> EpisodeActionAccepted:
+    try:
+        episode, node = await rerender_episode(session, episode_id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RenderConflict as exc:

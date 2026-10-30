@@ -23,7 +23,7 @@
 
 ## 1. 当前状态一句话
 
-**M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产复用/持久化 + M4.1 逐句配音 + M4.2 字级对齐 + M4.3 质检 + M5.1 局部修改/续跑/发布包 + Web 控制台 + 真实音轨成片已跑通（2026-10-29）；按主题自动生成脚本已移除。**
+**M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产复用/持久化 + M4.1 逐句配音 + M4.2 句级对齐（字级可选） + M4.3 质检 + M5.1 局部修改/续跑/发布包 + Web 控制台 + 分镜时间线编辑器 + 真实音轨成片已跑通（2026-10-29）；按主题自动生成脚本已移除。**
 
 - 需求文档 v1.2、架构方案 v1.10、ADR-001～010 已写完。
 - GitHub 仓库已创建：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
@@ -59,7 +59,7 @@
 - M1.2 渲染增强：`CharacterSpec` 增加 `anchor_x/anchor_y/scale`；新增公开 `character_packs/placeholder/` 与 `specs/demo_placeholder.json`；golden frame 回归测试；当前 42 条测试通过（含 M2/M3/资产层）。
 - 本机 Docker 已启动；Postgres 17 + RabbitMQ 4.4 + Redis 7 实机联调通过：API → outbox → Celery → 3 镜头 6.00 秒占位成片 READY。
 - RabbitMQ 4.4 默认禁止 Celery 的临时非独占回复队列，`infra/rabbitmq.conf` 已开启 `deprecated_features.permit.transient_nonexcl_queues`；Celery 升级后复查。
-- 脚本来源已改为文章导入 Agent：DeepSeek 理解长文，按 series 章节标签生成问题式小标题、章节目标和逐句口播，产物写入 `script_line` + `episode.script_meta`；`POST /episodes/{id}/actions/import-script` 支持最多 30000 字，导入后进入 SCRIPT_REVIEW。
+- 脚本来源已改为文章导入 Agent：DeepSeek 理解长文，按 series 章节标签生成问题式小标题、章节目标和逐句口播，产物写入 `script_line` + `episode.script_meta`；`POST /episodes/{id}/actions/import-script` 支持最多 30000 字，导入后进入 SCRIPT_REVIEW。所有台词统一 `speaker=roxy`，洛琪希单人口播。
 - 文稿润色 Agent：`POST /episodes/{id}/actions/optimize-script` 在 SCRIPT_REVIEW 阶段做口语化润色，保持章节/句数/说话人不变，校验通过才写回。
 - 脚本 API：`GET /episodes/{id}/script`、`PATCH /script-lines/{id}`、`POST /episodes/{id}/script/validate`、confirm-script（校验通过才进 STORYBOARDING）。
 - 按主题自动生成脚本（`script_graph`、`script.generate`、confirm-topic、retry/regenerate-script）已于 2026-10-29 移除；历史实现见 §6。
@@ -72,7 +72,7 @@
 - `generate_seedream_image.py` 生成前查 `reuse_key`，命中 APPROVED 直接复用；生成后默认以 CANDIDATE 入库，`/assets/{id}/approve` 后才可复用。`scripts/tools/ingest_assets.py` 可批量索引已有图片。
 - M4 音色已定：本地 **IndexTTS2** zero-shot 克隆，用户试听长文本后确认“效果非常好”。模型 `IndexTeam/IndexTTS-2` 在 `data/assets/voice/indextts2/`，参考音固定为 `data/assets/voice/indextts2/reference.wav`；RVC v3 / MeloTTS / Piper 已停用并清理，旧模型与工具链约 5GB 已删除。
 - M4.1 逐句配音已跑通：`line_audio` 表按 `(script_line, text_hash, voice_key)` 缓存；`voice.episode` 在 media 队列逐句合成，音频按内容寻址存 `data/audio/lines/`，自动回写镜头时长并装配 `audio.wav`（-14 LUFS），句级对齐写入 `episode.audio_meta`；默认自动进入 RENDERING，成片封装真实 AAC 音轨。实测 3 句 / 10.25 秒成片通过。
-- M4.2 字级对齐已跑通：`align.episode` 用中文 wav2vec2（`jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn`）对每句做 CTC 强制对齐；字级时间写入 `audio_meta.lines[].chars` 和 `alignment.json`，字幕块改用字级起止时间；模型在 `data/assets/voice/align/wav2vec2-chinese/`（1.2GB），显存不足自动回退 CPU。
+- M4.2 对齐已跑通：默认句级（`ALIGN_LEVEL=sentence`），`voice.episode` 产出每句 start/end 并写 `audio_meta`，字幕整句显示，不加载对齐模型。字级为可选：`align.episode` 用中文 wav2vec2（`jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn`）对每句做 CTC 强制对齐，字级时间写入 `audio_meta.lines[].chars` 和 `alignment.json`；模型在 `data/assets/voice/align/wav2vec2-chinese/`（1.2GB），显存不足自动回退 CPU。
 - M4.3 质检已跑通：`render.concat` 完成后默认进入 QC；规则检查流参数/时长/响度/对齐/字幕/资产，再按镜头抽首帧+中间帧送 `deepseek-flash` 多模态；结果写 `review` 表与 `episode.qc_meta`。视觉问题默认 warning，`QC_VISION_BLOCKING=true` 才作为 error；图片资产可单独 `POST /assets/{id}/check`。
 - M5.1 已跑通：`POST /episodes/{id}/actions/revise-line` 改单句后重置到 VOICING，只重合成变化句、重对齐并重渲染；镜头片段带 hash 缓存，未变化镜头直接复用；`POST /actions/resume` 按当前状态续跑；`workflow.reconcile_nodes` 清理 stale RUNNING 节点；`POST /actions/package` / `POST /actions/publish` 生成本地发布包（视频、封面、SRT、脚本、metadata、音频）。
 - 最终视频输出：渲染完成后复制到 `output/YYYYMMDD-HHMMSS_<episode_id前8位>/episode.mp4`，同目录写 `metadata.json`；`episode.output_path` 指向该路径，`episode.output_meta` 记录本地路径与 MinIO URI。MinIO 上传由 `MINIO_UPLOAD_ENABLED` 控制，VM 可设 `MINIO_REQUIRED=true` 强制成功。
@@ -302,7 +302,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - DeepSeek Base URL：`https://api.deepseek.com`
 - 火山方舟 Base URL：`https://ark.cn-beijing.volces.com/api/v3`
 - IndexTTS2：独立 Python 3.11 环境 `data/tools/indextts-venv`（torch 2.8 cu128）；`app/providers/tts.py` 自动拉起 `scripts/runtime/indextts_server.py`（`127.0.0.1:8765`，模型常驻）；8GB 显存用 fp16 + Wav2Vec2-BERT 放 CPU；长文本实测 RTF 1.75。
-- 字级对齐：同一 Python 3.11 环境运行 `scripts/runtime/align_words.py`；模型 `data/assets/voice/align/wav2vec2-chinese/`；默认 `ALIGN_DEVICE=cuda`，与常驻 TTS 抢显存时脚本会自动回退 CPU。
+- 对齐：默认 `ALIGN_LEVEL=sentence`，字幕整句显示，不运行 wav2vec2；字级模式设 `ALIGN_LEVEL=char`，同一 Python 3.11 环境运行 `scripts/runtime/align_words.py`；模型 `data/assets/voice/align/wav2vec2-chinese/`；默认 `ALIGN_DEVICE=cuda`，与常驻 TTS 抢显存时脚本会自动回退 CPU。
 - 校验脚本：`python scripts/tools/check_llm.py --live`（DeepSeek 必检，Ark 可选）；`--require-ark` 把 Ark 当必检。
 - 图像生成测试产物在 `tmp/seedream_probe.png`（gitignore）。
 
@@ -351,6 +351,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 
 - 唯一的脚本来源是文章导入：`POST /api/v1/episodes/{id}/actions/import-script`，body 为 `{article, optimize, instructions}`；最多 30000 字（`SCRIPT_ARTICLE_MAX_CHARS`）。
 - 导入同步调用 DeepSeek（不投队列），按 series 章节标签生成问题式小标题、章节目标和逐句台词；写 `script_line`，`episode.script_meta` 记录 summary/outline/article_chars/validation。
+- 所有导入台词统一写 `speaker=roxy`，由洛琪希单人口播；校验不再限制洛琪希 15 字或台词占比，单句统一 ≤25 字。
 - 导入后进入 SCRIPT_REVIEW；校验不通过会保留稿件并标 WARNING，`confirm-script` 仍返回 409。
 - 润色：`POST /api/v1/episodes/{id}/actions/optimize-script`（`{apply, instructions}`），保持章节/句数/说话人不变，校验通过才写回，`script_meta.optimization` 记录修改句数。
 - 查看脚本：`GET /api/v1/episodes/{id}/script`；编辑单句：`PATCH /api/v1/script-lines/{line_id}`；重新校验：`POST /api/v1/episodes/{id}/script/validate`。
@@ -404,6 +405,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 
 - 输出规格：1920×1080、25fps、H.264/AAC 48kHz。
 - 所有动画由 `renderAt(tMs)` 计算，禁用 CSS animation / `Date.now()` / `Math.random()`；随机用固定 seed。
+- 角色切换按镜头自己的 `start_ms` 初始化；`character_from` 提供上一镜角色，新角色从最近侧屏幕外 280ms 冲入，旧角色 80ms 模糊让位；换镜时卡片与字幕直接切换，不做透明淡入。
 - 镜头片段编码参数必须完全一致，最终 `-c copy` 拼接。
 - 含文字卡片用 HTML；Seedream 只做背景/舞台/演示物件（无文字空壳）。
 - 背景/演示物件生成后固定资产化，不每期重生成。
@@ -461,6 +463,7 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 ### 5.5 环境
 
 - 本机 Python 可用；Docker Desktop/WSL2 尚未验证。
+- **IndexTTS2 常驻内存**：本机实测常驻服务私有内存约 17GB，系统提交上限只剩 3–4GB；字级模式下再启动对齐子进程加载 1.2GB wav2vec2 会报 `DefaultCPUAllocator: not enough memory`。`align.episode` 会先 POST IndexTTS2 `/shutdown`（`ALIGN_STOP_TTS=true`）释放内存，再跑对齐；配音结束也会主动停服务（`TTS_UNLOAD_AFTER_VOICE=true`），下次配音自动重启。默认句级模式不加载对齐模型，但保留这些回收逻辑。16GB 本机不要关闭该行为。
 - VM 根分区 18GB 不能放 MinIO 数据；先挂数据盘。
 - 2 期并行需要约 8–16 vCPU / 32GB；资源不足先单期串行。
 
@@ -470,6 +473,7 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 - Playwright 1.64 需要新 Chromium（1248），本机只有 1217；把 `playwright` 钉在 `==1.59.0`，避免重下浏览器。
 - 本机没有系统 ffmpeg；用 `imageio-ffmpeg` 自带二进制，已确认有 libx264/AAC。
 - 单进程渲染约 0.53 秒/帧：300 帧 12 秒片约 160 秒；10 分钟片约 2.3 小时，必须并行化。
+- **不要假设逐镜头渲染从 t=0 开始**：必须用镜头 `start_ms` 初始化，否则会拿第 1 镜角色做过渡，出现空白帧、拉伸和错误平移。
 - `specs/demo_episode.json` 引用本地 `character_packs/roxy/` 和 `tmp/seedream_assets/`；这些不进公开仓库，公开复现需要 placeholder pack。
 - Windows 控制台输出中文可能乱码，不影响文件；需要时设 `PYTHONUTF8=1`。
 - 本机 Docker Desktop 未启动：`compose.infra.yml` 只做了 `docker compose config` 校验，实际容器启动要在 VM 上验证。
@@ -477,6 +481,67 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 ---
 
 ## 6. 历史记录
+
+### 2026-10-30 · 分镜时间线编辑器
+
+- 前端详情页新增「剪辑」tab：成片播放器 + 按镜头时长排布的时间线 + 视觉属性面板。
+- 可编辑卡片类型/文案、角色立绘与位置、背景、动作、入场方向；点击镜头会 seek 到对应成片时间点。镜头时长仍由配音决定，只读。
+- 后端新增 `GET /episodes/{id}/video`（仅允许输出目录内文件，支持 Range）、`POST /actions/rerender`（READY/PUBLISHED/QC 重建 render_spec 并投递渲染）。
+- `PATCH /shots/{id}` 增加 `card_text` 与 `overlay_*`；`shot.bg` 现在会进入逐镜头 render spec，背景键通过资产注册表解析。
+- 新增独立贴图层：`OverlaySpec` + `#overlay`，支持上传/Seedream 图片、位置/宽度/底部/不透明度/`normal|multiply` 混合；`multiply` 用于白底素材融合。
+- 新增 `POST /assets/upload`（base64 图片入库）、`POST /assets/image-prompt`（DeepSeek 写 Seedream 提示词）、`POST /assets/seedream`（生成候选并入库）、`GET /assets/file`（安全预览）。
+- 编辑器预览基于上一次成片；保存并重渲染后自动刷新。实测 11 镜头从 RENDERING → QC → READY，视频版本自动更新。
+- 前端 `npm run build` 通过，后端 78 条测试通过；真实 Seedream 生成 1 张候选成功（MinIO 离线时只记 warning）。
+
+### 2026-10-30 · 角色改为屏幕外冲入
+
+- 角色切换不再用遮罩擦除：新角色从最近侧屏幕外以 280ms ease-out-quad 滑入，入场距离约 0.65 屏，带最多 1.2px 速度模糊；旧角色 80ms 模糊让位。
+- 镜头没有角色时，旧角色沿最近侧滑出屏幕；角色同图连续镜头仍直接保持。
+- 逐镜头渲染按镜头 `start_ms` 初始化，卡片/字幕直接切换；`renderer_version=m5.5-rush-in`。
+- 4 镜头和 11 镜头预览已验证；正式成片需重新渲染。
+
+### 2026-10-30 · 分镜切换平滑度调整
+
+- 逐帧检查成片确认 25fps 稳定、无重复帧；卡顿感来自换镜时角色整体变透明、卡片从 0 透明度淡入、字幕 70ms 淡入叠加造成的“闪一下/发虚”。
+- 换镜时卡片内容直接切换并保持 opacity=1，字幕直接显示/隐藏，不再做每镜入场淡入或位移缩放。
+- 角色退场从整体透明度淡出改为方向遮罩擦除；角色切换时长从 180ms 提到 220ms，柔边从 12% 提到 16%，减少阶跃感。
+- `renderer_version` 升到 `m5.4-smooth-cut`，旧镜头缓存失效。
+
+### 2026-10-30 · 默认改为句级对齐
+
+- 新增 `ALIGN_LEVEL=sentence|char`，默认 `sentence`：配音本身产出每句起止时间，字幕整句显示，跳过 wav2vec2 字级对齐，省掉 1.2GB 模型加载与对齐耗时。
+- `EpisodeSpec` 新增 `alignment_level`（旧 spec 默认 `char` 兼容）；`build_timeline` 在句级模式下每个镜头只生成一个整句字幕块，超过 34 字才回退按标点分块。
+- `voice.episode` 仅在 `align_level=char` 且 `voice_auto_align=true` 时排队 `align.episode`；句级模式下直接进入渲染。
+- 字级对齐仍保留：手动 `/actions/align` 或把 `ALIGN_LEVEL` 设为 `char` 即可恢复；`align.episode` 会把 `alignment_level` 切回 `char`。
+- 测试 71 条通过；新增句级字幕块测试。
+
+### 2026-10-30 · 角色加载与切换动画修复
+
+- 问题：逐镜头渲染时 `initStage` 固定 `renderAt(0)`，每个镜头开头都会从第 1 镜头的角色做起始过渡；旧层复用了新角色的 `height/anchor`，导致空白帧、拉伸和异常平移；新图未 `decode()`，首帧偶尔缺图。
+- 修复：`initStage(data, atMs, preloadAll)` 按镜头起点初始化；`build_stage_payload` 为每镜写 `character_from`（上一镜角色，含同角色连续镜头）；角色切换改为 220ms 双向遮罩擦除，旧/新层各自使用自己的锚点与高度，只保留最多 18px 轻微位移；首镜角色直接显示。换镜时卡片和字幕直接切换，角色退场也走遮罩擦除，不再整体变透明。
+- 性能：逐镜头只预加载本镜头背景/地板/前后角色图，`decode()` 并等待两帧 rAF 后才置 `stageReady`。
+- `renderer_version` 升到 `m5.3-char-transition`，旧镜头缓存自动失效。
+
+### 2026-10-29 · 阶段级内存自动回收
+
+- 新增 `app/workflow/memory.py` 的 `release_memory()`：`gc.collect()`，若进程已加载 torch 再 `empty_cache()` / `ipc_collect()`；不主动 import torch，避免把模型依赖带进 worker。
+- 配音任务结束（成功、失败、取消）统一停掉 IndexTTS2（`TTS_UNLOAD_AFTER_VOICE=true`）并回收内存；下次配音由 provider 自动重启。
+- `render.shot` 每镜头结束、`render.concat`、`align.episode`、`qc.episode` 结束都调用 `release_memory()`。
+- IndexTTS2 每合成一句后执行 `gc.collect()` + `torch.cuda.empty_cache()`，降低长文稿的显存碎片。
+- 当前正在渲染的 115 镜头任务仍由旧 worker 执行；新逻辑在下次重启 worker 后生效。
+
+### 2026-10-29 · 对齐前释放 IndexTTS2 内存
+
+- 115 句的期在 `align.episode` 失败：`DefaultCPUAllocator: not enough memory`，加载 wav2vec2 时连 8MB 都分配失败。
+- 原因：IndexTTS2 常驻服务私有内存约 17GB，系统提交上限只剩 3.7GB；对齐子进程再加载 1.2GB 模型即撞上限。
+- 修复：`scripts/runtime/indextts_server.py` 新增 `POST /shutdown`；`app/providers/tts.py` 新增 `request_tts_shutdown()`；`align.episode` 在启动对齐前调用它，等待健康检查失败后再拉起对齐子进程。
+- 新增 `ALIGN_STOP_TTS=true`；TTS 服务在下次配音时由 provider 自动重启。释放后系统提交空闲从 3.7GB 回到 20.9GB。
+
+### 2026-10-29 · 脚本改为洛琪希单人口播
+
+- 文章导入与润色提示词不再区分旁白/洛琪希，所有台词统一由洛琪希第一人称讲解。
+- 导入时强制 `speaker=roxy`；校验移除洛琪希 15 字上限与 10%–30% 占比，单句统一 ≤25 字。
+- 保留 `narrator` 枚举兼容旧数据；Web 脚本表与音频表移除“说话人”列。
 
 ### 2026-10-29 · 取消/删除 + 移除按主题生成
 

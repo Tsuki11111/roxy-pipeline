@@ -39,6 +39,7 @@ import type {
   StoryboardRead,
 } from "../types";
 import { formatDate, formatDuration, statusMeta } from "../ui";
+import EpisodeEditorTab from "./EpisodeEditorTab";
 
 const CARD_TYPES = ["chat_bubble", "terminal", "browser", "icon", "pure_text"];
 const POSITIONS = ["left", "right", "center", "none"];
@@ -355,6 +356,13 @@ export default function EpisodeDetailPage() {
             ),
           },
           {
+            key: "editor",
+            label: "剪辑",
+            children: (
+              <EpisodeEditorTab episode={episode} refreshKey={refreshKey} onChanged={refresh} />
+            ),
+          },
+          {
             key: "audio",
             label: "配音与对齐",
             children: <AudioTab episode={episode} refreshKey={refreshKey} />,
@@ -551,7 +559,6 @@ function ScriptTab({
           columns={[
             { title: "#", dataIndex: "seq", width: 64 },
             { title: "章节", dataIndex: "section", width: 120 },
-            { title: "说话人", dataIndex: "speaker", width: 110 },
             { title: "台词", dataIndex: "text" },
             { title: "字数", dataIndex: "char_count", width: 80 },
             {
@@ -782,7 +789,6 @@ function AudioTab({ episode, refreshKey }: { episode: Episode; refreshKey: numbe
           pagination={{ pageSize: 30 }}
           columns={[
             { title: "#", dataIndex: "seq", width: 64 },
-            { title: "说话人", dataIndex: "speaker", width: 100 },
             {
               title: "时长",
               dataIndex: "duration_ms",
