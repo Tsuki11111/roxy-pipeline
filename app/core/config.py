@@ -128,7 +128,7 @@ class Settings(BaseSettings):
     remotion_render_timeout_s: float = 600.0
     remotion_fallback_playwright: bool = True
     remotion_version: str = "4.0.539"
-    renderer_version: str = "m5.6-overlay"
+    renderer_version: str = "m6.1-subtitles"
     asset_storage: str = "local"
     asset_root: str = "./data/assets"
 

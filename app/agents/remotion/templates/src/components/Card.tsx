@@ -20,6 +20,8 @@ interface Props {
   full?: boolean;
   lines?: string[];
   reveal?: number;
+  top?: number;
+  width?: number;
 }
 
 const chatTail = (side: 'left' | 'right'): React.CSSProperties =>
@@ -58,6 +60,8 @@ export const Card = ({
   full = true,
   lines,
   reveal,
+  top = 150,
+  width = 820,
 }: Props) => {
   const normalized = kind === 'chat_bubble' ? 'chat' : kind === 'pure_text' ? 'pure' : kind;
   if (normalized === 'pure') {
@@ -67,7 +71,7 @@ export const Card = ({
       <div
         style={{
           position: 'absolute',
-          ...(full ? {left: '50%', top: 250, width: 1400} : {top: 150, width: 820, ...position}),
+          ...(full ? {left: '50%', top: 250, width: 1400} : {top, width, ...position}),
           zIndex,
           opacity,
           transform: full
@@ -131,8 +135,8 @@ export const Card = ({
     <div
       style={{
         position: 'absolute',
-        top: 150,
-        width: 820,
+        top,
+        width,
         zIndex,
         opacity,
         transform: `translateY(${translateY}px) scale(${scale})`,

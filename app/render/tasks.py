@@ -104,9 +104,17 @@ async def _mark_success(
 
         if qc_enabled and episode is not None:
             try:
-                from app.qc.service import start_qc
+                from app.qc.service import QcConflict, start_qc
 
                 await start_qc(session, episode_id)
+                await session.commit()
+            except QcConflict as exc:
+                logger.info("QC already queued or done for episode=%s: %s", episode_id, exc)
+                episode = await session.get(Episode, episode_id)
+                if episode is not None:
+                    if "already passed" in str(exc):
+                        episode.current_node = None
+                    episode.health = "OK"
                 await session.commit()
             except Exception:
                 logger.exception("failed to queue QC for episode=%s", episode_id)

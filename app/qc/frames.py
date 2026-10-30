@@ -13,11 +13,12 @@ def _frame_times(spec: EpisodeSpec, per_shot: int) -> list[dict]:
     for shot in spec.shots:
         duration = shot.duration_ms
         if per_shot <= 1:
-            fractions = [0.25]
+            fractions = [0.3]
         elif per_shot == 2:
-            fractions = [0.12, 0.55]
+            # 避开 0.5–0.7 的卡片退场/演示入场转场区，抽稳定停留帧。
+            fractions = [0.3, 0.8]
         else:
-            fractions = [0.12, 0.5, 0.82][:per_shot]
+            fractions = [0.24, 0.42, 0.8][:per_shot]
         for index, fraction in enumerate(fractions, start=1):
             frames.append(
                 {

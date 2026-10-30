@@ -78,9 +78,10 @@
 - 最终视频输出：渲染完成后复制到 `output/YYYYMMDD-HHMMSS_<episode_id前8位>/episode.mp4`，同目录写 `metadata.json`；`episode.output_path` 指向该路径，`episode.output_meta` 记录本地路径与 MinIO URI。MinIO 上传由 `MINIO_UPLOAD_ENABLED` 控制，VM 可设 `MINIO_REQUIRED=true` 强制成功。
 - M6 Remotion 代码生成 Agent 已跑通（2026-10-30）：`app/agents/remotion/` 每镜头调用一次 DeepSeek 生成自由 TSX，Python 生成 `Root.tsx`/Composition（ID 用 `Shot-0001`，组件名 `Shot_0001`）；代码在 Docker 沙箱 `tsc --noEmit` + `remotion compositions` 校验，失败带编译错误重试一次；全部镜头 READY 才 `remotion_meta.enabled=true`，`POST /actions/rerender` 自动切 Remotion，失败按 `REMOTION_FALLBACK_PLAYWRIGHT` 回退 Playwright。
 - Remotion 沙箱镜像 `roxy-remotion:4.0.539` 由 `infra/remotion/Dockerfile` 构建；运行参数 `--network none --read-only --user 10001 --cpus 2 -m 3g --pids-limit 256`，`/tmp` 与 `/app/node_modules/.cache` 挂 tmpfs。
-- Remotion 实测：11 镜头整期真实 DeepSeek 生成 + Docker 渲染 + ffmpeg `-c copy` 拼接 + QC 全通过（最终 `health=OK`，0 warning）。首版因生成代码“浅底浅字”被 QC 报 4 条对比度 warning；补 Skill 配色约束并重生成后消失。生成代码在 `tmp/remotion/<episode_id>/`，不进仓库。
+- Remotion 实测：11 镜头整期真实 DeepSeek 生成 + Docker 渲染 + ffmpeg `-c copy` 拼接 + QC 全通过（最终 `health=OK`，0 warning）。首版因生成代码“浅底浅字”被 QC 报 4 条对比度 warning；补 Skill 配色约束并重生成后消失。最终改为 TerminalCard 二次元终端/代码块卡 + 纯演示镜头混排。生成代码在 `tmp/remotion/<episode_id>/`，不进仓库。
 - Remotion 生成质量约束：单个镜头代码 ≤7000 字符/180 行；浅色纸纹背景必须用深色字，白字只能放在 alpha ≥0.75 的深色实底上；有 `character` 时必须画 Roxy。早期不写这些约束时会出现“浅底浅字”与整镜头无角色。
 - Remotion 缓存键：`shot_render_hash` 包含 renderer、Remotion 版本、镜像 digest、该镜头 code hash；代码或镜像变化只失效受影响镜头。
+- Remotion 字幕（2026-10-30 补）：Python 生成 Root 时给每个 Composition 包一层 `SubtitleTrack`，按 `build_timeline` 的句级 chunks（转成镜头内相对时间）显示底部字幕；生成代码不画字幕。`renderer_version=m6.1-subtitles`，字幕层变化会让镜头缓存失效。
 - Remotion 前端：编辑器「Remotion 渲染」卡片支持整期/单镜头生成、状态表、代码预览、「用 Remotion 重渲染」；API 为 `POST /actions/generate-remotion`、`GET /episodes/{id}/remotion`、`GET /episodes/{id}/remotion/shots/{shot_id}`。
 - DeepSeek 输出上限：Remotion 单镜头代码用 `max_tokens=16384`（6000/8192 都会截断长镜头）；provider 会检测 `finish_reason=length` 并按失败重试，不再把截断 JSON 当成功。
 - 当前阶段仍以角色立绘为主；背景/舞台/演示物件可按需通过 Asset Agent 生成，不再固定暂停。
@@ -430,6 +431,10 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - Remotion 为默认镜头渲染器；Playwright 保留为回退。Remotion 输出经 ffmpeg 统一为 1920×1080/25fps/H.264/yuv420p/CRF18，保证 `-c copy` 拼接。
 - Remotion 代码只存在于 `tmp/remotion/<episode_id>/`；`remotion_shot` 表记录 code_hash/status/input_hash。
 - 生成代码约束：单镜头 ≤7000 字符；浅底必须深字，白字必须有深色实底；有 `character` 必须出现 Roxy；不能用随机/时间/CSS 动画。
+- 布局约束：Remotion 不做关键词标签；画面文字用 `TerminalCard` 二次元终端/代码块卡（variant：terminal/editor/hud/console/snippet/chat；tone：navy/purple/mint/rose；transition：slide/zoom/flip/drop/reveal/push）。Python 按镜头序号排期：约 1/3 镜头 `card_style=null` 做纯演示，其余给卡并指定样式/动效；切换位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°。
+- 改动 `app/agents/remotion/templates/` 后必须重建镜像 `roxy-remotion:4.0.539`，否则沙箱仍用旧组件。
+- Remotion 字幕由 Root 里的 `SubtitleTrack` 统一叠加（bottom 40，样式同旧 Playwright）；生成代码不画字幕，y 940–1080 的底部区留给字幕。
+- 画面长段文本由生成代码的 `TerminalCard` 组件渲染（终端/代码块风），Python 只负责底部字幕 `SubtitleTrack`。文本长度和分段由模型决定，优先直接用 `narration`/`card.text` 的长段。
 - Docker 不可用或镜像缺失时 Remotion 生成失败，渲染回退 Playwright（`REMOTION_FALLBACK_PLAYWRIGHT=true`）。
 
 ### 4.6 资产生产分工
@@ -510,10 +515,47 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 - `Card` 同时接受流水线类型（`chat_bubble`/`pure_text`）和原型别名（`chat`/`pure`）；chat 气泡渲染 `body` 以支持 `lines`。
 - 部分镜头生成成功时 `remotion_meta.enabled` 必须保持 `false`，否则 Root 缺 Composition 会渲染失败。
 - 模型默认会写浅色字：必须在 Skill 里明确“浅底深字 / 白字必须有深色实底”，否则会出现 QC 报的文字不可读。
+- 旧 `Card` 是绝对定位、`zIndex=4` 的 820px 白块，模型把图表画到同一区域会被整块盖住。现已禁止 Remotion 使用 `Card`/`Label`/`Caption`/`Board`，画面文字统一改用 `TerminalCard`；Skill/Prompt 都写明“任何动画元素不得与文字卡重叠”。
 
 ---
 
 ## 6. 历史记录
+
+### 2026-10-30 · 二次元终端卡与多样切换
+
+- 用户要求：不是每个动画都要卡片；卡片风格和切换动画要多样；改成二次元终端/代码块画风。
+- 新增 `TerminalCard`：6 种 variant（terminal/editor/hud/console/snippet/chat）× 4 种 tone（navy/purple/mint/rose），支持 `translateX/Y`、`scale`、`rotate`、`rotateY`、`reveal`、`cursor`。
+- Python 按镜头序号排期 `card_style`：`CARD_PATTERN=[True,True,False,True,False]` 约 1/3 镜头 `null` 做纯演示；其余轮换 variant/tone/transition。生成服务校验 `card_style=null` 时不得用 TerminalCard，指定 variant/tone 不符则带反馈重试。
+- 切换配方 6 种：slide/zoom/flip/drop/reveal/push；Skill 要求位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°。
+- 禁用 `Card`/`Label`/`Caption`/`Board`；文本仍为长段，优先 `narration`/`card.text`，不得扩写原文。
+- 实测：11 镜头中 4 个纯演示、7 个卡片；覆盖 6 种 variant、4 种 tone；QC `PASS`，后端 87 条测试通过。
+
+### 2026-10-30 · 长段板书卡与分段动效
+
+- 用户要求去掉关键词标签，改为长段文本卡的切换动画 + 演示组合；板书卡要二次元软萌风格，卡片切换动效幅度要大。
+- 新增 `Board` 组件：木框黑板、粉笔字、贴纸/涂鸦、柔和 accent；支持 `text/lines/title`、位置/尺寸、`translateX/Y`、`scale`、`rotate`、`opacity`。
+- Skill/Prompt 改为：每镜头至少「Board 长段文本 + 演示段」两个 `<Sequence>` 场景；文本优先用 `narration`/`card.text` 的长段；切换位移 ≥240px、缩放 0.72–0.82→1、旋转 ±4°–8°、spring 允许过冲；卡内文字逐行 stagger。
+- 生成服务禁用 `Card`/`Label`/`Caption`，检测到即带反馈重试；移除“禁止整句”检查（长段文本现在是主形态）。
+- 实测：11 镜头全部 Board + Sequence，单镜 2 段、文本 20–40 字；QC `PASS`，84 条测试通过。
+
+### 2026-10-30 · 标签位置/框型与内容风格
+
+- 新增 `Label` 组件：任意 `left/top` 定位，`variant` 支持 `pill`/`tag`/`callout`/`note`/`badge`/`stamp`，可 `rotate`。
+- Skill/Prompt 改为：关键词跟着对象走（箭头端点、节点旁、图内空白、角色手势附近），位置和框型随构图轮换；关键词不再用 `Caption`，生成服务检测到 `Caption` 会带反馈重试。
+- 风格约束：Remotion Skill/Prompt 与 Asset Agent 都要求先判断主题再选色调、材质、线条、图形语言；同一期统一，禁止与内容无关的赛博霓虹/故障/机器人装饰。
+- 实测：11 镜头使用 Label，单镜 3–4 个标签、多种位置与框型；QC `PASS`，后端 84 条测试通过。
+
+### 2026-10-30 · 修复 Remotion 卡片遮挡动画
+
+- 问题：旧 `Card` 是固定 820px 宽、绝对定位、`zIndex=4` 的白块；生成代码把光谱/问号/图表画在卡片同一区域时被整块盖住（第 3 镜光谱、第 1 镜问号）。
+- 修复：Remotion 镜头**禁用旧 `Card`**；新增 `Caption` 底部小条；`Card` 增加 `top`/`width` props（仅兼容旧代码）；Skill/Prompt 写明“任何动画元素不得与文字面板重叠”。
+- 生成服务增加确定性检查：代码出现 `import Card`/`<Card` 或 `Caption` 时带错误反馈重试一次；代码里出现 ≥10 字的整句 `narration` 时同样重试，强制画面只放关键词标签。
+- 标签布局：新增 `Label` 组件（6 种框型 + 任意 `left/top` + `rotate`）；Skill 要求标签跟着对象走、位置和框型轮换，不要默认右下角；`Caption` 只保留给旧代码/极少数底部注释。
+- 风格约束：Skill/Prompt/Asset Agent 都要求先判断主题再选色调、材质、线条和图形语言；同一期保持统一，禁止与内容无关的赛博霓虹/故障/机器人装饰。
+- 字幕：此前 Remotion 成片只有卡片/面板文字，没有底部字幕；现由 Python 生成 `Root.tsx` 时给每个 Composition 包一层 `SubtitleTrack`，用 `build_timeline` 的句级 chunks（转为镜头内相对时间）渲染，样式沿用旧 Playwright 字幕条。`renderer_version` 升到 `m6.1-subtitles` 以失效旧缓存。
+- 画面文字：完整句子只交给字幕；生成代码只放关键词/短标签（实测 11 镜头标签均为 1–4 字，如 `蓝光`、`波长短`、`大气层`、`混合光`）。
+- 渲染链路修复：重渲染后 QC 已跑过会抛 `QcConflict`，之前被当成失败并把 health 置 FAILED；现在按幂等成功处理，保留 `health=OK`。
+- 实测：11 镜头全部无 `Card`，画面文字均为 1–4 字关键词标签（如 `蓝光`、`波长短`、`大气层`、`混合光`），完整句子只在底部字幕；重新渲染后 QC `PASS`（health=OK）；后端 83 条测试通过。
 
 ### 2026-10-30 · M6 Remotion 代码生成 Agent（默认渲染器）
 

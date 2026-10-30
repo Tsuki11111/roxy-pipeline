@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from sqlalchemy import select
 
 from app.agents.remotion.service import (
+    RemotionPolicyError,
+    _generate_one,
     generate_remotion_code,
     start_remotion_codegen,
 )
@@ -36,6 +39,198 @@ class FakeRemotionLLM:
             "code": CODE,
             "summary": "test shot",
         }
+
+
+class CardRemotionLLM:
+    async def chat_json(self, system, user, *, temperature=0.7, max_tokens=2000):
+        return {
+            "schema_version": "1",
+            "component_name": "Shot_0001",
+            "code": (
+                "import {Card} from '../components/Card';\n"
+                "export const Shot_0001 = () => <Card kind=\"icon\" lines={['x']} />;\n"
+            ),
+            "summary": "uses legacy card",
+        }
+
+
+class LabelRemotionLLM:
+    async def chat_json(self, system, user, *, temperature=0.7, max_tokens=2000):
+        return {
+            "schema_version": "1",
+            "component_name": "Shot_0001",
+            "code": (
+                "import {Label} from '../components/Label';\n"
+                "export const Shot_0001 = () => <Label left={10} top={10} text=\"蓝光\" />;\n"
+            ),
+            "summary": "uses keyword label",
+        }
+
+
+class CaptionRemotionLLM:
+    async def chat_json(self, system, user, *, temperature=0.7, max_tokens=2000):
+        return {
+            "schema_version": "1",
+            "component_name": "Shot_0001",
+            "code": (
+                "import {Caption} from '../components/Caption';\n"
+                "export const Shot_0001 = () => <Caption lines={['蓝光']} />;\n"
+            ),
+            "summary": "uses caption",
+        }
+
+
+class BoardRemotionLLM:
+    async def chat_json(self, system, user, *, temperature=0.7, max_tokens=2000):
+        return {
+            "schema_version": "1",
+            "component_name": "Shot_0001",
+            "code": (
+                "import {Board} from '../components/Board';\n"
+                "export const Shot_0001 = () => <Board text=\"蓝光\" />;\n"
+            ),
+            "summary": "uses board",
+        }
+
+
+class WrongVariantLLM:
+    async def chat_json(self, system, user, *, temperature=0.7, max_tokens=2000):
+        return {
+            "schema_version": "1",
+            "component_name": "Shot_0001",
+            "code": (
+                "import {TerminalCard} from '../components/TerminalCard';\n"
+                "export const Shot_0001 = () => "
+                "<TerminalCard variant=\"terminal\" tone=\"navy\" text=\"蓝光\" />;\n"
+            ),
+            "summary": "wrong style",
+        }
+
+
+def test_generate_one_rejects_caption():
+    import asyncio
+
+    payload = {
+        "component_name": "Shot_0001",
+        "assets": [],
+        "previous_tail": "",
+        "narration": "蓝光波长短，容易被散射到四面八方。",
+        "card": {"text": "蓝光波长短"},
+    }
+    with pytest.raises(RemotionPolicyError):
+        asyncio.run(
+            _generate_one(
+                CaptionRemotionLLM(),
+                context={"title": "t", "topic": "t", "summary": "", "outline": "[]"},
+                payload=payload,
+                skill="",
+            )
+        )
+
+
+def test_generate_one_rejects_card_when_style_is_null():
+    import asyncio
+
+    payload = {
+        "component_name": "Shot_0001",
+        "assets": [],
+        "previous_tail": "",
+        "narration": "蓝光波长短，容易被散射到四面八方。",
+        "card": {"text": "蓝光波长短"},
+        "card_style": None,
+    }
+    with pytest.raises(RemotionPolicyError):
+        asyncio.run(
+            _generate_one(
+                WrongVariantLLM(),
+                context={"title": "t", "topic": "t", "summary": "", "outline": "[]"},
+                payload=payload,
+                skill="",
+            )
+        )
+
+
+def test_generate_one_rejects_wrong_card_style():
+    import asyncio
+
+    payload = {
+        "component_name": "Shot_0001",
+        "assets": [],
+        "previous_tail": "",
+        "narration": "蓝光波长短，容易被散射到四面八方。",
+        "card": {"text": "蓝光波长短"},
+        "card_style": {"variant": "editor", "tone": "purple", "transition": "zoom"},
+    }
+    with pytest.raises(RemotionPolicyError):
+        asyncio.run(
+            _generate_one(
+                WrongVariantLLM(),
+                context={"title": "t", "topic": "t", "summary": "", "outline": "[]"},
+                payload=payload,
+                skill="",
+            )
+        )
+
+
+def test_generate_one_rejects_board():
+    import asyncio
+
+    payload = {
+        "component_name": "Shot_0001",
+        "assets": [],
+        "previous_tail": "",
+        "narration": "蓝光波长短，容易被散射到四面八方。",
+        "card": {"text": "蓝光波长短"},
+    }
+    with pytest.raises(RemotionPolicyError):
+        asyncio.run(
+            _generate_one(
+                BoardRemotionLLM(),
+                context={"title": "t", "topic": "t", "summary": "", "outline": "[]"},
+                payload=payload,
+                skill="",
+            )
+        )
+
+
+def test_generate_one_rejects_label():
+    import asyncio
+
+    payload = {
+        "component_name": "Shot_0001",
+        "assets": [],
+        "previous_tail": "",
+        "narration": "蓝光波长短，容易被散射到四面八方。",
+        "card": {"text": "蓝光波长短"},
+    }
+    with pytest.raises(RemotionPolicyError):
+        asyncio.run(
+            _generate_one(
+                LabelRemotionLLM(),
+                context={"title": "t", "topic": "t", "summary": "", "outline": "[]"},
+                payload=payload,
+                skill="",
+            )
+        )
+
+
+def test_generate_one_rejects_legacy_card():
+    import asyncio
+
+    payload = {
+        "component_name": "Shot_0001",
+        "assets": [],
+        "previous_tail": "",
+    }
+    with pytest.raises(RemotionPolicyError):
+        asyncio.run(
+            _generate_one(
+                CardRemotionLLM(),
+                context={"title": "t", "topic": "t", "summary": "", "outline": "[]"},
+                payload=payload,
+                skill="",
+            )
+        )
 
 
 async def seed_ready_episode(session, episode_id: str) -> None:
@@ -136,6 +331,9 @@ async def test_generate_remotion_code_persists_component_and_meta(
     assert (workdir / "src" / "Root.tsx").is_file()
     root = (workdir / "src" / "Root.tsx").read_text(encoding="utf-8")
     assert "Shot_0001" in root
+    assert "Shot_0001Frame" in root
+    assert "SubtitleTrack" in root
+    assert "这是用于 Remotion 测试的一句台词" in root
     assert "durationInFrames={50}" in root
 
 

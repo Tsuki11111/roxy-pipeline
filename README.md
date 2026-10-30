@@ -327,6 +327,10 @@ docker build -f infra/remotion/Dockerfile -t roxy-remotion:4.0.539 .
 
 - Docker 必须可用；镜像 tag 与 `REMOTION_IMAGE` 一致（默认 `roxy-remotion:4.0.539`）。
 - 沙箱无网络、只读根文件系统、非 root、限制 CPU/内存/PID；生成代码只写 `tmp/remotion/<episode_id>/`，不进仓库。
+- 生成代码受 Skill 约束：单镜头 ≤9000 字符、浅底深字、有角色必须出现；画面文字用 `TerminalCard` 二次元终端/代码块卡（6 种样式、4 种色调），约 1/3 镜头纯演示不放卡；切换配方在 slide/zoom/flip/drop/reveal/push 中轮换，位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°。
+- 视觉风格必须服务内容：同一期统一色调、材质、线条和图形语言；禁止与主题无关的赛博霓虹/故障/机器人装饰。
+- 字幕由 Python 生成 Root 时统一叠加 `SubtitleTrack`，按句级时间轴显示；生成代码不画字幕。
+- 改动 `app/agents/remotion/templates/` 后需要重新构建镜像，沙箱才会使用新组件。
 - Remotion 许可：个人/非商业项目免费；商用需另行获得 Remotion 授权。
 
 ### 成片输出与 MinIO

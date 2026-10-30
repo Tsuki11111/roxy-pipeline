@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -57,6 +58,33 @@ class RemotionConflict(RemotionError):
 
 class RemotionRequestError(RemotionError):
     pass
+
+
+class RemotionPolicyError(RemotionError):
+    pass
+
+
+_CARD_RE = re.compile(r"from\s+['\"]\.\./components/Card['\"]|<Card\b")
+_CAPTION_RE = re.compile(r"from\s+['\"]\.\./components/Caption['\"]|<Caption\b")
+_LABEL_RE = re.compile(r"from\s+['\"]\.\./components/Label['\"]|<Label\b")
+_BOARD_RE = re.compile(r"from\s+['\"]\.\./components/Board['\"]|<Board\b")
+
+CARD_VARIANTS = ["terminal", "editor", "hud", "console", "snippet", "chat"]
+CARD_TONES = ["navy", "purple", "mint", "rose"]
+CARD_TRANSITIONS = ["slide", "zoom", "flip", "drop", "reveal", "push"]
+# 约 1/3 的镜头做纯演示，不给卡片。
+CARD_PATTERN = [True, True, False, True, False]
+
+
+def _card_style(seq: int) -> dict[str, str] | None:
+    index = max(0, seq - 1)
+    if not CARD_PATTERN[index % len(CARD_PATTERN)]:
+        return None
+    return {
+        "variant": CARD_VARIANTS[index % len(CARD_VARIANTS)],
+        "tone": CARD_TONES[index % len(CARD_TONES)],
+        "transition": CARD_TRANSITIONS[index % len(CARD_TRANSITIONS)],
+    }
 
 
 def _sha_text(value: str) -> str:
@@ -223,6 +251,7 @@ def _shot_payload(
             for chunk in item.chunks
         ],
         "previous_tail": previous_tail,
+        "card_style": _card_style(shot.seq),
         "assets": assets,
     }
 
@@ -232,25 +261,44 @@ def _root_source(
     shot_by_id: dict[str, Shot],
     frame_counts: dict[str, int],
     spec,
+    subtitles_by_shot: dict[str, list[dict]],
 ) -> str:
     imports: list[str] = []
+    wrappers: list[str] = []
     compositions: list[str] = []
+    needs_subtitles = False
     for row in sorted(rows, key=lambda item: shot_by_id[item.shot_id].seq):
         shot = shot_by_id[row.shot_id]
         name = _component_name(shot.seq)
         composition_id = _composition_id(shot.seq)
         imports.append(f"import {{{name}}} from './shots/shot_{shot.seq:04d}';")
+        component = name
+        chunks = subtitles_by_shot.get(row.shot_id) or []
+        if chunks:
+            needs_subtitles = True
+            component = f"{name}Frame"
+            wrappers.append(
+                f"const {component} = () => (\n"
+                f"  <>\n"
+                f"    <{name} />\n"
+                f"    <SubtitleTrack chunks={{{json.dumps(chunks, ensure_ascii=False)}}} />\n"
+                f"  </>\n"
+                f");"
+            )
         frames = max(1, frame_counts.get(row.shot_id, 1))
         compositions.append(
-            f'      <Composition id="{composition_id}" component={{{name}}} '
+            f'      <Composition id="{composition_id}" component={{{component}}} '
             f"durationInFrames={{{frames}}} fps={{{spec.fps}}} "
             f"width={{{spec.width}}} height={{{spec.height}}} />"
         )
+    if needs_subtitles:
+        imports.append("import {SubtitleTrack} from './components/SubtitleTrack';")
     return "\n".join(
         [
             "import {Composition} from 'remotion';",
             *imports,
             "",
+            *wrappers,
             "export const RemotionRoot = () => (",
             "  <>",
             *compositions,
@@ -299,7 +347,55 @@ async def _generate_one(
         code = code.split("\n", 1)[-1]
         if code.rstrip().endswith("```"):
             code = code.rstrip()[: -3]
-    return result.model_copy(update={"code": code.strip()})
+    code = code.strip()
+    if _CARD_RE.search(code):
+        raise RemotionPolicyError(
+            "不要使用 Card 组件：旧的白卡会遮挡动画。"
+            "请改用 Label 或自绘紧凑面板，并确保不覆盖视觉元素。"
+        )
+    if _CAPTION_RE.search(code):
+        raise RemotionPolicyError(
+            "关键词不要用 Caption 放到角落；请改用 Board 长段板书卡，"
+            "并用 Sequence 做文本段与演示段的大幅切换。"
+        )
+    if _LABEL_RE.search(code):
+        raise RemotionPolicyError(
+            "不要再用 Label 做关键词标签；请改用 TerminalCard 长段文本卡，"
+            "保留完整句子/段落，不要缩成短标签。"
+        )
+    if _BOARD_RE.search(code):
+        raise RemotionPolicyError(
+            "不要再用 Board 黑板卡；画面文字统一改用 TerminalCard"
+            "（terminal/editor/hud/console/snippet/chat），并轮换样式和切换动效。"
+        )
+    style = payload.get("card_style")
+    if style is None:
+        if "components/TerminalCard" in code:
+            raise RemotionPolicyError(
+                "本镜头的 card_style 为 null：不要使用 TerminalCard，"
+                "把这一镜做成纯图形/动画演示，不要放卡片。"
+            )
+        return result.model_copy(update={"code": code})
+    if "components/TerminalCard" in code:
+        variants = re.findall(r"variant\s*=\s*['\"]([a-z]+)['\"]", code)
+        tones = re.findall(r"tone\s*=\s*['\"]([a-z]+)['\"]", code)
+        if not variants:
+            variants = ["terminal"]
+        if not tones:
+            tones = ["navy"]
+        required_variant = style.get("variant")
+        required_tone = style.get("tone")
+        if required_variant and required_variant not in variants:
+            raise RemotionPolicyError(
+                f"本镜头卡片必须使用 variant=\"{required_variant}\""
+                f"（可用：{', '.join(variants)}）；请按 card_style 实现。"
+            )
+        if required_tone and required_tone not in tones:
+            raise RemotionPolicyError(
+                f"本镜头卡片必须使用 tone=\"{required_tone}\""
+                f"（当前：{', '.join(tones)}）；请按 card_style 实现。"
+            )
+    return result.model_copy(update={"code": code})
 
 
 async def _upsert_shot_row(
@@ -357,10 +453,12 @@ def _write_root(
     shot_by_id: dict[str, Shot],
     frame_counts: dict[str, int],
     spec,
+    subtitles_by_shot: dict[str, list[dict]],
 ) -> None:
     ready = [row for row in rows if (workdir / row.code_path).is_file()]
     (workdir / "src" / "Root.tsx").write_text(
-        _root_source(ready, shot_by_id, frame_counts, spec), encoding="utf-8"
+        _root_source(ready, shot_by_id, frame_counts, spec, subtitles_by_shot),
+        encoding="utf-8",
     )
 
 
@@ -516,6 +614,18 @@ async def generate_remotion_code(
                     llm, context=context, payload=payload, skill=skill
                 )
                 return payload, result, None
+            except RemotionPolicyError as exc:
+                try:
+                    retry = await _generate_one(
+                        llm,
+                        context=context,
+                        payload=payload,
+                        skill=skill,
+                        error_feedback=str(exc),
+                    )
+                    return payload, retry, None
+                except Exception as retry_exc:
+                    return payload, None, str(retry_exc)[:2000]
             except Exception as exc:
                 return payload, None, str(exc)[:2000]
 
@@ -563,7 +673,23 @@ async def generate_remotion_code(
         )
     )
     frame_counts = {item.shot.shot_id: item.frame_count for item in timeline.shots}
-    _write_root(workdir, all_rows, shot_by_id, frame_counts, spec)
+    subtitles_by_shot: dict[str, list[dict]] = {}
+    for item in timeline.shots:
+        duration_ms = item.end_ms - item.start_ms
+        chunks: list[dict] = []
+        for chunk in item.chunks:
+            local_start = max(0, chunk.start_ms - item.start_ms)
+            local_end = min(duration_ms, chunk.end_ms - item.start_ms)
+            if local_end > local_start:
+                chunks.append(
+                    {
+                        "text": chunk.text,
+                        "start_ms": local_start,
+                        "end_ms": local_end,
+                    }
+                )
+        subtitles_by_shot[item.shot.shot_id] = chunks
+    _write_root(workdir, all_rows, shot_by_id, frame_counts, spec, subtitles_by_shot)
 
     validation_error = None
     for attempt in range(2):
@@ -628,7 +754,9 @@ async def generate_remotion_code(
                     select(RemotionShot).where(RemotionShot.episode_id == episode_id)
                 )
             )
-            _write_root(workdir, all_rows, shot_by_id, frame_counts, spec)
+            _write_root(
+                workdir, all_rows, shot_by_id, frame_counts, spec, subtitles_by_shot
+            )
 
     all_rows = list(
         await session.scalars(
