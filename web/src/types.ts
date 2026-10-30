@@ -41,6 +41,7 @@ export interface Episode {
   audio_meta: Record<string, any> | null;
   qc_meta: Record<string, any> | null;
   output_meta: Record<string, any> | null;
+  remotion_meta: Record<string, any> | null;
   version: number;
   created_at: string;
   updated_at: string;
@@ -207,4 +208,34 @@ export interface EpisodeActionAccepted {
   status: EpisodeStatus;
   node_key: string;
   operation_id: string;
+}
+
+
+export interface RemotionShot {
+  id: string;
+  episode_id: string;
+  shot_id: string;
+  seq: number;
+  composition_id: string;
+  code_hash: string;
+  code_path: string;
+  status: string;
+  error: string | null;
+  attempts: number;
+  prompt_hash: string | null;
+  model: string | null;
+  image_digest: string | null;
+}
+
+export interface RemotionEpisode {
+  episode_id: string;
+  status: EpisodeStatus;
+  health: string;
+  meta: Record<string, any> | null;
+  shots: RemotionShot[];
+}
+
+export interface RemotionCode {
+  shot: RemotionShot;
+  code: string;
 }

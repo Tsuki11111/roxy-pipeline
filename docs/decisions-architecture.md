@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 状态 | 已确认 |
-| 日期 | 2026-10-26 |
+| 日期 | 2026-10-30 |
 | 关联文档 | [需求分析文档](AI科普视频Agent系统需求分析文档.md)、[架构选型方案](AI科普视频Agent系统架构选型方案.md) |
 
 ---
@@ -347,6 +347,48 @@ Asset Agent 需要根据文本复用已有演示素材。可选方案：把所�
 - APPROVED 资产超过约 100 个，或复用命中率明显下降：先加 SQLite FTS/Postgres 全文检索，再评估向量检索。
 - 出现大量同义重复资产：引入规范化 key 或 embedding 去重。
 - 需要跨系列检索大量素材：再评估独立向量库。
+
+---
+
+## ADR-011：Remotion 取代 Playwright 成为默认渲染器，每镜头一个 Composition
+
+### 背景
+
+Playwright 逐帧渲染稳定、可复现，但镜头画面由固定 HTML 模板驱动，动画表现力有限；用户要求“根据文章内容生成对应 Remotion 代码”，并希望角色/物件/图示能按镜头自由编排。可选方案：
+
+1. 继续用 Playwright 模板，只加 CSS/JS 动画。
+2. 每期生成一个完整 Remotion 工程/Composition。
+3. 每个镜头一个 Composition，由 LLM 生成自由 TSX，在 Docker 沙箱内校验和渲染。
+
+### 决策
+
+采用方案 3：
+
+- 每个镜头单独调用一次 DeepSeek，只生成 `src/shots/shot_<seq>.tsx`；Root、Composition、时长、素材映射由 Python 生成。
+- Remotion 4.0.539 + Node 22 固定在 Docker 镜像 `roxy-remotion:4.0.539` 内；生成代码在 `--network none --read-only --user 10001 --cpus 2 -m 3g --pids-limit 256` 沙箱里 `tsc` + `remotion compositions` 校验和渲染。
+- Remotion 为默认 renderer；Playwright 保留回退和旧 spec 兼容。全部镜头代码 READY 才启用，单镜头失败可回退。
+- 镜头缓存键包含 renderer、Remotion 版本、镜像 digest、该镜头 code hash；代码变化只失效受影响镜头。
+
+### 理由
+
+1. 每镜头一个 Composition 把失败隔离在单镜头，重试/局部修改成本最低，也天然适配现有镜头级缓存与并行。
+2. 自由 TSX 让模型能按内容画流程图、粒子、终端、角色动作，而不是套固定卡片模板。
+3. Docker 沙箱把“运行 LLM 生成的代码”限制在无网络、只读、非 root、资源受限的环境内；依赖宇宙固定在镜像里，不污染主仓库。
+4. Remotion 的 `useCurrentFrame()` 是纯帧函数，配合固定 fps/尺寸仍满足确定性要求；输出经 ffmpeg 归一化后继续 `-c copy` 拼接。
+
+### 代价与风险
+
+- 多一个 Node/Chromium 运行时和 Docker 镜像（约 1–2GB），VM 需预留磁盘。
+- 每镜头一次 LLM 调用，长代码可能被 `max_tokens` 截断；当前上限 16384，并通过 Skill 限制代码 ≤7000 字符。
+- 生成代码质量不稳定：可能出现浅底浅字、缺角色、布局空；需要 Skill 约束 + QC + 人工抽查。
+- Remotion 许可：个人/非商业免费；商用需获得 Remotion 授权，本项目保持个人非商业。
+- LLM 生成的代码有安全风险，必须始终在沙箱内执行，不能直接在宿主机 `npm run`。
+
+### 重新评估触发条件
+
+- 单镜头生成失败率长期 >20%，或 QC 文字/布局问题居高不下：考虑代码模板化 + 参数化组件，减少自由 TSX。
+- 商用或分发需求出现：先确认 Remotion 许可，再决定是否替换为自研渲染器。
+- Docker 在目标环境不可用：关闭 `REMOTION_ENABLED`，全量回退 Playwright。
 
 
 

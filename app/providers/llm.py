@@ -155,7 +155,10 @@ class DeepSeekClient:
 
             data = response.json()
             try:
-                content = data["choices"][0]["message"]["content"]
+                choice = data["choices"][0]
+                content = choice["message"]["content"]
+                if choice.get("finish_reason") == "length":
+                    raise ValueError("response truncated by max_tokens")
                 result = extract_json(content)
             except Exception as exc:
                 last_error = exc

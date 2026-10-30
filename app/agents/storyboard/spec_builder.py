@@ -10,6 +10,7 @@ from app.render.models import (
     CharTiming,
     EpisodeSpec,
     OverlaySpec,
+    RemotionRenderSpec,
     ShotSpec,
 )
 from app.agents.storyboard.grammar import (
@@ -56,6 +57,8 @@ def build_episode_spec(
     background_by_key: dict[str, str] | None = None,
     floor: str | None = None,
     char_timings_by_line: dict[str, list[dict]] | None = None,
+    renderer: str = "playwright",
+    remotion: RemotionRenderSpec | None = None,
 ) -> EpisodeSpec:
     background = background or BACKGROUNDS["paper"]
     floor = floor or DEFAULT_FLOOR
@@ -161,6 +164,8 @@ def build_episode_spec(
         height=1080,
         section_labels=list(series.section_labels),
         alignment_level="char" if char_timings_by_line else "sentence",
+        renderer=renderer,
+        remotion=remotion,
         background=background,
         floor=floor,
         watermark=series.watermark or "",

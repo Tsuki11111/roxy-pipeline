@@ -127,6 +127,8 @@ class Episode(Base):
     qc_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # M5.2: final output location and MinIO object metadata.
     output_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Remotion: generated per-shot code, workdir and renderer state.
+    remotion_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -225,6 +227,37 @@ class Shot(Base):
     template_version: Mapped[str] = mapped_column(String(50), default="v1")
 
     episode: Mapped[Episode] = relationship(back_populates="shots")
+
+
+class RemotionShot(Base):
+    __tablename__ = "remotion_shot"
+    __table_args__ = (
+        UniqueConstraint("shot_id", name="uq_remotion_shot_shot"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    episode_id: Mapped[str] = mapped_column(
+        ForeignKey("episode.id", ondelete="CASCADE"), index=True
+    )
+    shot_id: Mapped[str] = mapped_column(
+        ForeignKey("shot.id", ondelete="CASCADE"), index=True
+    )
+    composition_id: Mapped[str] = mapped_column(String(100))
+    code_hash: Mapped[str] = mapped_column(String(64))
+    code_path: Mapped[str] = mapped_column(String(500))
+    input_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(20), default="PENDING")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    prompt_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    image_digest: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
 
 
 class NodeRun(Base):

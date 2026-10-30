@@ -149,6 +149,17 @@ export const api = {
       body: JSON.stringify(patch),
     }),
   rerender: (id: string) => action(id, "rerender"),
+  generateRemotion: (id: string, shotIds?: string[]) =>
+    request<EpisodeActionAccepted>(
+      `/api/v1/episodes/${id}/actions/generate-remotion`,
+      { method: "POST", body: JSON.stringify({ shot_ids: shotIds ?? null }) },
+    ),
+  getRemotion: (id: string) =>
+    request<import("./types").RemotionEpisode>(`/api/v1/episodes/${id}/remotion`),
+  getRemotionCode: (id: string, shotId: string) =>
+    request<import("./types").RemotionCode>(
+      `/api/v1/episodes/${id}/remotion/shots/${shotId}`,
+    ),
   videoUrl: (id: string, version = 0) =>
     `${BASE}/api/v1/episodes/${id}/video?v=${version}`,
   resolveReview: (reviewId: string, resolvedBy = "operator") =>

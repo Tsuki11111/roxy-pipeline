@@ -118,6 +118,16 @@ class Settings(BaseSettings):
     celery_task_always_eager: bool = False
     outbox_poll_interval_s: float = 5.0
     render_dir: str = "./tmp/renders"
+    remotion_enabled: bool = True
+    remotion_docker_bin: str = "docker"
+    remotion_image: str = "roxy-remotion:4.0.539"
+    remotion_work_root: str = "./tmp/remotion"
+    remotion_codegen_concurrency: int = 3
+    remotion_codegen_max_shots: int = 200
+    remotion_validate_timeout_s: float = 300.0
+    remotion_render_timeout_s: float = 600.0
+    remotion_fallback_playwright: bool = True
+    remotion_version: str = "4.0.539"
     renderer_version: str = "m5.6-overlay"
     asset_storage: str = "local"
     asset_root: str = "./data/assets"

@@ -11,6 +11,7 @@ import {
   Modal,
   Select,
   Space,
+  Table,
   Tag,
   Typography,
   Upload,
@@ -23,7 +24,14 @@ import {
   UploadOutlined,
 } from "@ant-design/icons";
 import { api } from "../api";
-import type { Asset, Episode, ScriptRead, Shot, StoryboardRead } from "../types";
+import type {
+  Asset,
+  Episode,
+  RemotionEpisode,
+  ScriptRead,
+  Shot,
+  StoryboardRead,
+} from "../types";
 
 const CARD_LABELS: Record<string, string> = {
   chat_bubble: "对话气泡",
@@ -99,6 +107,11 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
   const [aiCount, setAiCount] = useState(1);
   const [aiBusy, setAiBusy] = useState<"prompt" | "image" | null>(null);
   const [aiCandidates, setAiCandidates] = useState<Asset[]>([]);
+  const [remotion, setRemotion] = useState<RemotionEpisode | null>(null);
+  const [remotionBusy, setRemotionBusy] = useState(false);
+  const [codeModal, setCodeModal] = useState<{ title: string; code: string } | null>(
+    null,
+  );
   const overlayImage = Form.useWatch("overlay_image", form) as string | undefined;
   const characterImage = Form.useWatch("character_image", form) as
     | string
@@ -149,9 +162,35 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
     }
   };
 
+  const loadRemotion = async () => {
+    try {
+      setRemotion(await api.getRemotion(episode.id));
+    } catch {
+      setRemotion(null);
+    }
+  };
+
   useEffect(() => {
     load();
+    void loadRemotion();
   }, [episode.id, refreshKey, episode.status === "READY" ? episode.version : 0]);
+
+  useEffect(() => {
+    if (!remotion?.meta || remotion.meta.status !== "generating") return;
+    const timer = window.setInterval(async () => {
+      try {
+        const next = await api.getRemotion(episode.id);
+        setRemotion(next);
+        if (next.meta?.status !== "generating") {
+          await load();
+          onChanged();
+        }
+      } catch {
+        // Keep polling until the task reaches a terminal state.
+      }
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [remotion?.meta?.status, episode.id]);
 
   useEffect(() => {
     if (!selected) return;
@@ -398,6 +437,49 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
     }
   };
 
+  const generateRemotion = async (shotIds?: string[]) => {
+    setRemotionBusy(true);
+    try {
+      await api.generateRemotion(episode.id, shotIds);
+      message.success(shotIds ? "已提交单镜头重生成" : "已提交 Remotion 代码生成");
+      setRemotion(await api.getRemotion(episode.id));
+      onChanged();
+    } catch (error) {
+      message.error(String(error));
+    } finally {
+      setRemotionBusy(false);
+    }
+  };
+
+  const renderWithRemotion = async () => {
+    if (!remotion?.meta?.enabled) {
+      message.warning("Remotion 代码还没有全部就绪，先用 Playwright 回退渲染");
+      return;
+    }
+    setWaiting(true);
+    setSawRendering(false);
+    try {
+      await api.rerender(episode.id);
+      message.success("已提交 Remotion 重渲染");
+      onChanged();
+    } catch (error) {
+      setWaiting(false);
+      message.error(String(error));
+    }
+  };
+
+  const showRemotionCode = async (shot: { shot_id: string; seq: number; composition_id: string }) => {
+    try {
+      const data = await api.getRemotionCode(episode.id, shot.shot_id);
+      setCodeModal({
+        title: `#${shot.seq} ${shot.composition_id}`,
+        code: data.code || "代码文件不存在",
+      });
+    } catch (error) {
+      message.error(String(error));
+    }
+  };
+
   if (!loading && shots.length === 0) {
     return <Empty description="这一期还没有分镜，先生成分镜再编辑" />;
   }
@@ -457,6 +539,104 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
             </button>
           ))}
         </div>
+      </Card>
+
+      <Card
+        title="Remotion 渲染"
+        extra={
+          remotion?.meta?.enabled ? (
+            <Tag color="green">Remotion 默认</Tag>
+          ) : remotion?.meta?.status === "generating" ? (
+            <Tag color="processing">生成中</Tag>
+          ) : (
+            <Tag color="gold">Playwright 回退</Tag>
+          )
+        }
+      >
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Alert
+            type={remotion?.meta?.enabled ? "success" : "info"}
+            showIcon
+            message={
+              remotion?.meta?.enabled
+                ? "每个镜头已有 Remotion Composition；保存并重渲染会走 Remotion。"
+                : "Remotion 代码需要全部镜头就绪才会默认启用；失败镜头自动回退 Playwright。"
+            }
+          />
+          <Space wrap>
+            <Button
+              type="primary"
+              onClick={() => generateRemotion()}
+              loading={remotionBusy}
+              disabled={!canEdit || waiting || remotion?.meta?.status === "generating"}
+            >
+              生成 Remotion 代码
+            </Button>
+            <Button
+              onClick={renderWithRemotion}
+              disabled={!canEdit || !remotion?.meta?.enabled || waiting}
+              loading={waiting}
+            >
+              用 Remotion 重渲染
+            </Button>
+            <Button onClick={loadRemotion} disabled={remotionBusy}>
+              刷新状态
+            </Button>
+            <Typography.Text type="secondary">
+              每镜头单独调用 DeepSeek；只在 Docker 沙箱中编译和渲染。
+            </Typography.Text>
+          </Space>
+          <Table
+            size="small"
+            rowKey="id"
+            pagination={{ pageSize: 8 }}
+            dataSource={remotion?.shots ?? []}
+            columns={[
+              { title: "#", dataIndex: "seq", width: 56 },
+              { title: "Composition", dataIndex: "composition_id", width: 130 },
+              {
+                title: "状态",
+                dataIndex: "status",
+                width: 100,
+                render: (value) => (
+                  <Tag color={value === "READY" ? "green" : value === "FAILED" ? "red" : "processing"}>
+                    {value}
+                  </Tag>
+                ),
+              },
+              {
+                title: "代码",
+                dataIndex: "code_hash",
+                width: 100,
+                render: (value) => (value ? value.slice(0, 8) : "—"),
+              },
+              {
+                title: "错误",
+                dataIndex: "error",
+                ellipsis: true,
+                render: (value) => value || "—",
+              },
+              {
+                title: "操作",
+                width: 160,
+                render: (_, row) => (
+                  <Space>
+                    <Button size="small" onClick={() => showRemotionCode(row)}>
+                      查看代码
+                    </Button>
+                    <Button
+                      size="small"
+                      onClick={() => generateRemotion([row.shot_id])}
+                      disabled={remotionBusy || waiting}
+                    >
+                      重生成
+                    </Button>
+                  </Space>
+                ),
+              },
+            ]}
+          />
+        </Space>
       </Card>
 
       <Card
@@ -741,6 +921,16 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
             </div>
           )}
         </Space>
+      </Modal>
+
+      <Modal
+        title={codeModal?.title ?? "Remotion 代码"}
+        open={!!codeModal}
+        onCancel={() => setCodeModal(null)}
+        footer={null}
+        width={1000}
+      >
+        <pre className="remotion-code">{codeModal?.code}</pre>
       </Modal>
     </Space>
   );

@@ -2,13 +2,13 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | v1.14 |
+| 文档版本 | v1.15 |
 | 文档状态 | 初稿，核心方案已确认 |
-| 日期 | 2026-10-29 |
+| 日期 | 2026-10-30 |
 | 关联文档 | [需求分析文档](AI科普视频Agent系统需求分析文档.md)；[架构决策记录](decisions-architecture.md) |
 | 已确认约束 | 现有 Ubuntu VM 先跑；LLM 国内为主；TTS 用本地 IndexTTS2，不做付费云 TTS；视觉质检统一用 `deepseek-flash` 多模态；`deepseek-flash` 文本主模型 + 火山方舟备选/图像 |
 | 推荐方案 | 方案 A：Python 模块化单体 + 进程级拆分 + Celery；AI 子图用 LangGraph |
-| 变更说明 | v1.14：编辑器新增独立贴图层、图片上传与 Seedream 生成（DeepSeek 写提示词）；v1.13：新增分镜时间线编辑器、成片视频流与视觉编辑重渲染接口，`PATCH /shots` 支持卡片文案与逐镜头背景；v1.12：默认改为句级对齐（`ALIGN_LEVEL=sentence`），字幕整句显示，字级 wav2vec2 对齐改为可选；v1.11：移除按主题生成脚本（`script_graph` / topic 模块 / confirm-topic / retry-script / regenerate-script），脚本唯一来源改为文章导入 + 可选润色；新增取消/删除期接口；v1.10：新增文稿生活化润色 Agent 与 Web 控制台；v1.9：新增半身反应镜头与角色滑入、输出时间戳目录与 MinIO 上传；v1.8：新增 Asset Agent（文本→无文字演示素材，reuse_key 复用，暂不引入 RAG）；v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
+| 变更说明 | v1.15：新增 M6 Remotion 逐镜头代码生成 Agent，Remotion 取代 Playwright 成为默认镜头渲染器（Playwright 保留回退），新增 Docker 沙箱、镜头级 code hash 与 `remotion_shot` 表；v1.14：编辑器新增独立贴图层、图片上传与 Seedream 生成（DeepSeek 写提示词）；v1.13：新增分镜时间线编辑器、成片视频流与视觉编辑重渲染接口，`PATCH /shots` 支持卡片文案与逐镜头背景；v1.12：默认改为句级对齐（`ALIGN_LEVEL=sentence`），字幕整句显示，字级 wav2vec2 对齐改为可选；v1.11：移除按主题生成脚本（`script_graph` / topic 模块 / confirm-topic / retry-script / regenerate-script），脚本唯一来源改为文章导入 + 可选润色；新增取消/删除期接口；v1.10：新增文稿生活化润色 Agent 与 Web 控制台；v1.9：新增半身反应镜头与角色滑入、输出时间戳目录与 MinIO 上传；v1.8：新增 Asset Agent（文本→无文字演示素材，reuse_key 复用，暂不引入 RAG）；v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
 
 > 本文档回答“用什么做、怎么拆、怎么部署、接口长什么样”。需求编号（F-xx / N-xx / A-xx）沿用需求分析文档，不重复展开。
 
@@ -23,7 +23,7 @@
 | 工作流 | PostgreSQL 状态机 + Celery | 需求的状态机、断点续跑、局部重跑用“数据库状态 + 幂等节点 + 内容寻址缓存”即可；Temporal 作为规模化备选 |
 | AI 子图编排 | LangGraph + PostgreSQL checkpointer | 分镜/QC 的循环、条件分支和局部中断用图表达；脚本导入/润色是单次结构化调用，媒体流水线仍由 DB 状态机 + Celery 负责 |
 | 素材生成 | 火山方舟 Seedream（可替换） | 原创角色/背景/装饰用 AI 生成候选，人工筛选后固定资产化；含文字卡片仍用 HTML |
-| 渲染 | Playwright + 确定性逐帧 + ffmpeg | 信息卡片用 HTML 渲染保证文字 100% 准确；逐帧可控、可按镜头缓存、可复现 |
+| 渲染 | Remotion（每镜头 LLM 生成 TSX，Docker 沙箱）+ Playwright 回退 + ffmpeg | 镜头动画由代码生成，表现力更强；Playwright 保留旧 spec 兼容与失败回退 |
 | 存储 | PostgreSQL + MinIO | 元数据进 DB，大文件走 S3 兼容对象存储；本地文件系统只用于测试 |
 | 前端 | React + Vite + Ant Design | 内部运营/审片后台，表格、表单、编辑器密集，AntD 最省事 |
 | 部署 | Docker Compose 单机 | 现有 VM 可直接跑；渲染 worker 后续可横向加机器 |
@@ -61,7 +61,7 @@
 
 ### 方案 A：Python 模块化单体 + 进程级拆分 + Celery（推荐）
 
-- **技术栈**：Python 3.12 + FastAPI + Pydantic v2 + SQLAlchemy 2.0 + PostgreSQL 17 + RabbitMQ + Redis + Celery + MinIO + Playwright/Chromium + ffmpeg + Jinja2 + LangGraph（仅 AI 子图）；前端 React + Vite + TypeScript + Ant Design；Nginx + Docker Compose。
+- **技术栈**：Python 3.12 + FastAPI + Pydantic v2 + SQLAlchemy 2.0 + PostgreSQL 17 + RabbitMQ + Redis + Celery + MinIO + Remotion（Node 22，Docker 沙箱）+ Playwright/Chromium（回退）+ ffmpeg + Jinja2 + LangGraph（仅 AI 子图）；前端 React + Vite + TypeScript + Ant Design；Nginx + Docker Compose。
 - **为什么适合**：LLM、TTS、对齐、视觉质检、ffmpeg 都在 Python 侧；一套代码库、一套依赖、一套测试；按进程拆成 api / workflow / agent / media / render，哪一段慢就扩哪一段，不需要先做微服务。
 - **开发难度 / 维护成本**：中等。个人或 1–2 人可维护；Docker Compose 一把起；主要成本在渲染调优和状态机纪律，不在基础设施。
 - **目标地区能否顺利使用**：可以。LLM/TTS 全部接国内云服务，渲染和存储本地化，不依赖跨境网络。
@@ -88,7 +88,7 @@
 
 ### 推荐：方案 A
 
-决定性理由：**核心复杂度在媒体与 AI 生态，不在 Web 框架。** 用 Python 一套语言覆盖 LLM、TTS、对齐、视觉质检、Playwright 和 ffmpeg，能把“跨语言”这个长期成本直接消掉；进程级拆分已经足够支撑 2 期并行和后续加渲染机器。等渲染吞吐或工作流复杂度真的成为瓶颈，再引入 Remotion 或 Temporal，而不是一开始就上。
+决定性理由：**核心复杂度在媒体与 AI 生态，不在 Web 框架。** 用 Python 一套语言覆盖 LLM、TTS、对齐、视觉质检、Playwright 和 ffmpeg，能把“跨语言”这个长期成本直接消掉；进程级拆分已经足够支撑 2 期并行和后续加渲染机器。渲染表现力后来成为主要瓶颈，因此 M6 引入 Remotion 作为默认渲染器（Node 22 固定在 Docker 沙箱内，不改变主进程技术栈），Playwright 保留回退；工作流编排仍不引入 Temporal。
 
 **仍会改变推荐的待定问题：**
 
@@ -140,7 +140,7 @@
 | 字级对齐（可选） | TTS 原生句级时间优先，WhisperX 兜底 | WhisperX 最新稳定版 | 需要逐字字幕/卡拉 OK 时使用 | ctc-forced-aligner |
 | 视觉质检 | DOM/几何规则前置 + `deepseek-flash` 多模态 | 图片资产直接读图；视频按镜头/时间点抽帧送模型 | 文字溢出、裁切先用 DOM 规则；语义与画面问题用 DeepSeek 判定 | 纯规则 |
 | 图像生成 | 火山方舟 Seedream（或 OpenAI-compatible 图像 API） | Seedream 5.x | 原创角色/背景/装饰候选；固定参考图/seed；人工筛选后入库 | 其他图像 API |
-| 渲染 | Playwright + Chromium + Jinja2 + ffmpeg | 版本全部钉死 | 文字准确、逐帧可控、可按镜头缓存 | Remotion（评估项） |
+| 渲染 | Remotion + Playwright 回退 + ffmpeg | 版本全部钉死 | 动画表现力强、可按镜头缓存 | 纯 Playwright 模板 |
 | 前端 | React + Vite + TypeScript + Ant Design 5 | 最新稳定版 | 后台表格/表单密集，AntD 组件全 | Next.js（不需要 SSR） |
 | 反向代理 | Nginx | 1.27+ | 静态资源、API 代理、SSE 关闭缓冲 | Caddy |
 | 容器 | Docker + Compose | Docker 29 / Compose 2.40 | 与现有 VM 环境一致 | Podman |
@@ -187,8 +187,8 @@
                 └─────────────┘ └─────────────┘ └────────────────────┘
                                                 ┌────────────────────┐
                                                 │ render worker ×N    │
-                                                │ Playwright/Chromium │
-                                                │ 卡片/镜头/拼接       │
+                                                │ Remotion（Docker）  │
+                                                │ Playwright 回退     │
                                                 └────────────────────┘
                                 ┌──────────────────────────────────────┐
                                 │ 外部服务：国内 LLM / Seedream / 视觉模型 │
@@ -676,6 +676,7 @@ templates/
 
 ### 10.2 信息卡片渲染
 
+- Remotion 镜头优先使用模板 `Card` 组件（文字由 React 渲染，仍保证 100% 准确）；Playwright 回退链路继续用 Jinja2 渲染 HTML。
 - 用 Jinja2 渲染 HTML，Playwright 打开本地 `file://` 或临时 HTTP 页面，截图保存 PNG。
 - 卡片按 2 倍像素密度渲染，再缩放到舞台中的目标尺寸，保证文字边缘清晰。
 - 卡片内文字设硬上限和自动缩放：先按字号阶梯缩小，低于最小字号仍溢出则判定失败，交回分镜/QC。
@@ -716,6 +717,38 @@ window.renderAt = function (tMs) {
 - 逐帧可以对任意时间点精确渲染，便于缓存、重跑和测试。
 - 逐帧结果与机器负载无关，满足 N-04 的可复现要求。
 - 角色切换从最近侧屏幕外冲入（约 280ms，ease-out-quad，带轻微速度模糊）；旧角色 80ms 模糊让位。两层各自保留锚点/高度，不做缩放、拉伸或旋转。换镜时卡片与字幕直接切换，不做透明淡入。
+
+### 10.3.1 Remotion 渲染（默认）与代码生成 Agent
+
+M6 起，镜头画面默认由 Remotion 渲染；§10.3 的 Playwright 逐帧链路保留为回退和旧 spec 兼容。
+
+**代码生成：**
+
+- `app/agents/remotion/` 每镜头调用一次 DeepSeek `deepseek-flash`，使用 `prompts/remotion/` + `skills/remotion_shot/SKILL.md`；LLM 只输出 `src/shots/shot_<seq>.tsx`，不写 Root/配置/依赖。
+- Python 生成 `Root.tsx`，为每个镜头注册 Composition：ID `Shot-0001`（不允许下划线），组件名 `Shot_0001`，时长/尺寸/fps 由 `EpisodeSpec` 注入。
+- 素材由 Python 复制为 `public/assets/<checksum>.<ext>`；生成代码只能引用输入 `assets[].static_file`。
+- `input_hash = shot 数据 + 素材 checksum + prompt/skill hash + model + Remotion 版本 + 镜像 digest`；hash 未变的镜头复用已有代码。
+- 代码先 `tsc --noEmit` + `remotion compositions` 校验；失败带编译器错误重试一次。全部镜头 READY 才写 `remotion_meta.enabled=true`，部分成功保持 `partial`。
+
+**Docker 沙箱：**
+
+- 镜像 `infra/remotion/Dockerfile`（Node 22 + Remotion 4.0.539 + Chromium + Noto CJK），tag `roxy-remotion:4.0.539`。
+- 运行参数：`--network none --read-only --tmpfs /tmp --tmpfs /app/node_modules/.cache --user 10001 --cpus 2 -m 3g --pids-limit 256`；只挂载临时工程和输出目录。
+- 生成代码不落主仓库，只写 `tmp/remotion/<episode_id>/`；`remotion_shot` 表记录 code_hash/status/input_hash/attempts。
+
+**渲染接入：**
+
+- `EpisodeSpec.renderer: "remotion" | "playwright"`；`remotion_meta.enabled` 且每镜头 READY 时用 Remotion，否则 Playwright。
+- `shot_render_hash` 包含 renderer、Remotion 版本、镜像 digest、该镜头 code hash；单个镜头代码变化只失效该镜头。
+- Remotion 输出经 ffmpeg 归一化为 1920×1080/25fps/H.264/yuv420p/CRF18，帧数与时间线一致，保证 `-c copy` 拼接。
+- 单镜头失败且 `REMOTION_FALLBACK_PLAYWRIGHT=true` 时回退 Playwright；`REMOTION_ENABLED=false` 时整条链路保持旧渲染器。
+
+**质量约束（写进 Skill）：**
+
+- 单镜头代码 ≤7000 字符/180 行，避免 `max_tokens` 截断。
+- 浅色纸纹背景必须深色字；白字只能放在 alpha ≥0.75 的深色实底上。
+- 输入有 `character` 时必须出现 Roxy。
+- 禁止随机、时间、CSS 动画与外部资源，保证确定性。
 
 ### 10.4 帧时间与镜头时长
 
@@ -1731,7 +1764,8 @@ roxy_pipeline/
 │  ├─ agents/              # 所有智能体
 │  │  ├─ script/           # 脚本 Agent：graph/validation/service/optimizer/tasks
 │  │  ├─ storyboard/       # 分镜 Agent：graph/rhythm/service/spec
-│  │  └─ asset/            # 文本→无文字演示素材，reuse_key 复用
+│  │  ├─ asset/            # 文本→无文字演示素材，reuse_key 复用
+│  │  └─ remotion/         # 每镜头 Remotion TSX 生成 + Docker 沙箱 + Skill
 │  ├─ voice/               # 逐句 TTS、句级/字级对齐、音轨装配
 │  ├─ qc/                  # 规则 + DeepSeek 多模态质检
 │  ├─ publish/             # 本地发布包
@@ -1744,8 +1778,9 @@ roxy_pipeline/
 │  ├─ schemas/             # Pydantic API schema
 │  ├─ db/                  # Base + async session
 │  └─ core/                # settings
-├─ templates/              # stage / cards / partials
-├─ prompts/                # 版本化 Prompt
+├─ templates/              # stage / cards / partials（Playwright 回退）
+├─ infra/remotion/         # Remotion 沙箱 Dockerfile
+├─ prompts/                # 版本化 Prompt（script / storyboard / remotion）
 ├─ assets/                 # 角色/背景/字体/BGM（或放 MinIO）
 ├─ character_packs/        # 角色包：canonical 设定图、表情/姿势、manifest
 ├─ migrations/             # Alembic

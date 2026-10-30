@@ -10,6 +10,8 @@ from app.models.core import OutboxEvent, OutboxStatus
 
 
 def queue_for(event_type: str) -> str:
+    if event_type.startswith("remotion."):
+        return "agent"
     if event_type.startswith("render."):
         return "render"
     if event_type.startswith("storyboard."):

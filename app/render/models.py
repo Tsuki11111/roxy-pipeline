@@ -62,6 +62,18 @@ class ShotSpec(BaseModel):
     char_timings: list[CharTiming] = Field(default_factory=list)
 
 
+class RemotionShotSpec(BaseModel):
+    composition_id: str
+    code_hash: str
+
+
+class RemotionRenderSpec(BaseModel):
+    work_dir: str
+    version: str
+    image_digest: str | None = None
+    shots: dict[str, RemotionShotSpec] = Field(default_factory=dict)
+
+
 class EpisodeSpec(BaseModel):
     title: str
     fps: int = Field(default=25, ge=1, le=60)
@@ -69,6 +81,8 @@ class EpisodeSpec(BaseModel):
     height: int = 1080
     section_labels: list[str] = Field(min_length=1)
     alignment_level: Literal["sentence", "char"] = "char"
+    renderer: Literal["playwright", "remotion"] = "playwright"
+    remotion: RemotionRenderSpec | None = None
     background: str
     floor: str
     watermark: str = "Roxy Pipeline · DEMO"

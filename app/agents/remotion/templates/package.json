@@ -1,0 +1,17 @@
+{
+  "name": "roxy-remotion-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.539"
+  },
+  "devDependencies": {
+    "@remotion/cli": "4.0.539",
+    "@types/react": "18.3.0",
+    "@types/react-dom": "18.3.0",
+    "typescript": "5.6.3"
+  }
+}

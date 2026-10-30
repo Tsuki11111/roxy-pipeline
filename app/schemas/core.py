@@ -268,6 +268,39 @@ class ShotUpdateResult(BaseModel):
     rhythm: RhythmReport
 
 
+class RemotionGenerateRequest(BaseModel):
+    shot_ids: list[str] | None = None
+
+
+class RemotionShotRead(BaseModel):
+    id: str
+    episode_id: str
+    shot_id: str
+    seq: int
+    composition_id: str
+    code_hash: str
+    code_path: str
+    status: str
+    error: str | None
+    attempts: int
+    prompt_hash: str | None
+    model: str | None
+    image_digest: str | None
+
+
+class RemotionEpisodeRead(BaseModel):
+    episode_id: str
+    status: EpisodeStatus
+    health: str
+    meta: dict | None
+    shots: list[RemotionShotRead]
+
+
+class RemotionCodeRead(BaseModel):
+    shot: RemotionShotRead
+    code: str
+
+
 class AssetRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

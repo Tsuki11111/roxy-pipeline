@@ -12,6 +12,7 @@ from celery.utils.log import get_task_logger
 from app.core.config import get_settings
 from app.models.core import Episode, EpisodeStatus, NodeRun, NodeStatus
 from app.render.capture import render_shot
+from app.render.remotion import render_shot_remotion
 from app.render.encode import concat_and_mux, get_ffmpeg
 from app.render.models import EpisodeSpec
 from app.render.stage import build_stage_payload
@@ -26,6 +27,11 @@ logger = get_task_logger(__name__)
 
 
 def shot_render_hash(spec: EpisodeSpec, item, character_from: dict | None = None) -> str:
+    remotion_entry = (
+        spec.remotion.shots.get(item.shot.shot_id)
+        if spec.remotion is not None
+        else None
+    )
     raw = json.dumps(
         {
             "shot": item.shot.model_dump(),
@@ -36,7 +42,11 @@ def shot_render_hash(spec: EpisodeSpec, item, character_from: dict | None = None
             "background": spec.background,
             "floor": spec.floor,
             "watermark": spec.watermark,
+            "renderer": spec.renderer,
             "renderer_version": get_settings().renderer_version,
+            "remotion_version": spec.remotion.version if spec.remotion else None,
+            "remotion_image_digest": spec.remotion.image_digest if spec.remotion else None,
+            "remotion_code_hash": remotion_entry.code_hash if remotion_entry else None,
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -231,15 +241,48 @@ def render_shot_task(
                     "cached": True,
                 }
 
-        segment, first_frame = render_shot(
-            payload,
-            item,
-            Path(out_dir),
-            get_ffmpeg(),
-            episode_spec.width,
-            episode_spec.height,
-            episode_spec.fps,
+        settings = get_settings()
+        remotion_entry = (
+            episode_spec.remotion.shots.get(item.shot.shot_id)
+            if episode_spec.remotion is not None
+            else None
         )
+        if episode_spec.renderer == "remotion" and remotion_entry is not None:
+            try:
+                segment, first_frame = render_shot_remotion(
+                    episode_spec,
+                    shot_id=item.shot.shot_id,
+                    segment=segment,
+                    first_frame=first_frame,
+                    frame_count=item.frame_count,
+                )
+            except Exception:
+                if not settings.remotion_fallback_playwright:
+                    raise
+                logger.exception(
+                    "remotion shot failed, falling back to playwright episode=%s seq=%d",
+                    episode_id,
+                    seq,
+                )
+                segment, first_frame = render_shot(
+                    payload,
+                    item,
+                    Path(out_dir),
+                    get_ffmpeg(),
+                    episode_spec.width,
+                    episode_spec.height,
+                    episode_spec.fps,
+                )
+        else:
+            segment, first_frame = render_shot(
+                payload,
+                item,
+                Path(out_dir),
+                get_ffmpeg(),
+                episode_spec.width,
+                episode_spec.height,
+                episode_spec.fps,
+            )
         shots_dir.mkdir(parents=True, exist_ok=True)
         meta_path.write_text(
             json.dumps(

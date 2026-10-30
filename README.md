@@ -14,7 +14,7 @@
 **AI 科普视频自动生成 Agent 系统**：从文章导入、AI 拆解润色、分镜，到逐句 TTS、卡片/逐帧渲染、ffmpeg 拼接和质检的全自动流水线。
 
 **定位**：个人自用项目；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守[需求文档第 11 章](docs/AI科普视频Agent系统需求分析文档.md)。
-**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产持久化/复用 + Asset Agent + M4.1 逐句配音 + M4.2 句级对齐（字级可选） + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包 + Web 控制台 + 分镜时间线编辑器已跑通；按主题自动生成脚本的功能已移除，下一步成本报表与监控。
+**当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产持久化/复用 + Asset Agent + M4.1 逐句配音 + M4.2 句级对齐（字级可选） + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包 + Web 控制台 + 分镜时间线编辑器 + Remotion 逐镜头代码生成 Agent（默认渲染器，Playwright 回退）已跑通；按主题自动生成脚本的功能已移除，下一步成本报表与监控。
 
 ---
 
@@ -29,7 +29,7 @@
 | 缓存/锁 | Redis 7 —— 缓存、分布式锁、限流、SSE 广播 |
 | 对象存储 | MinIO —— 角色/背景/音频/片段/成片 |
 | AI 子图 | LangGraph + PostgreSQL checkpointer —— 只做脚本/分镜/QC |
-| 渲染 | Playwright + Chromium + Jinja2 + ffmpeg |
+| 渲染 | Remotion（每镜头 LLM 生成 TSX，Docker 沙箱）+ Playwright/Chromium 回退 + ffmpeg |
 | 文本模型 | DeepSeek `deepseek-flash`（主）；火山方舟豆包 Pro（备选/A-B） |
 | TTS | 本地 IndexTTS2 zero-shot（Python 3.11 + torch 2.8 cu128，常驻服务） |
 | 图像生成 | 火山方舟 Seedream 5.0 Pro（背景/舞台/演示物件；角色立绘由用户提供） |
@@ -52,7 +52,7 @@
         ┌─────────────┬───────────┼─────────────┬─────────────┐
         ▼             ▼           ▼             ▼             ▼
    workflow       agent        media         asset         render
-   状态机      LangGraph      TTS/对齐      Seedream     Playwright
+   状态机      LangGraph      TTS/对齐      Seedream    Remotion/Playwright
    重试/补偿   脚本/分镜/QC   音频装配      素材候选      + ffmpeg
 ```
 
@@ -83,7 +83,8 @@
 | M4.2 对齐 | ✅ 默认句级，字幕整句显示；字级 wav2vec2 强制对齐可选 |
 | M4.3 质检与报告 | ✅ 规则前置 + DeepSeek 抽帧质检；review 表与 QC API |
 | M5.1 局部修改/续跑/发布包 | ✅ 单句修订、镜头缓存、通用续跑、stale reconciler、本地发布包、时间戳输出目录 + MinIO |
-| Web 控制台 | ✅ 总览、视频期流程动作、脚本/分镜/音频/QC/发布包、资产生成与审批 |
+| Web 控制台 | ✅ 总览、视频期流程动作、脚本/分镜/音频/QC/发布包、资产生成与审批、分镜时间线编辑器 |
+| M6 Remotion 代码生成 Agent | ✅ 每镜头 DeepSeek 生成自由 TSX + Docker 沙箱校验/渲染 + 镜头级缓存 + Playwright 回退 |
 | M5.2 成本与监控 | ⏳ token/TTS 成本报表、告警与运维面板 |
 
 ## 环境隔离
@@ -307,6 +308,26 @@ npm run dev
 - 预览基于上一次成片，重渲染完成后自动刷新视频。
 - 相关 API：`GET /api/v1/episodes/{id}/video`、`POST /api/v1/episodes/{id}/actions/rerender`、`PATCH /api/v1/shots/{id}`（`card_text` / `overlay_*`）、`POST /api/v1/assets/upload`、`POST /api/v1/assets/image-prompt`、`POST /api/v1/assets/seedream`、`GET /api/v1/assets/file`。
 - Seedream 生成的素材默认 `CANDIDATE`，可直接应用到镜头，后续在资产库审批；不可生成洛琪希等已有版权角色。
+
+### Remotion 渲染（默认）
+
+镜头画面默认由 Remotion 渲染；Playwright 保留为回退和旧 spec 兼容。
+
+- 编辑器「Remotion 渲染」卡片点「生成 Remotion 代码」，或 `POST /api/v1/episodes/{id}/actions/generate-remotion`。
+- 每个镜头单独调用一次 DeepSeek，生成自由 TSX；Python 负责 `Root.tsx`、时长、素材映射和 Composition 注册。
+- 代码在 Docker 沙箱里 `tsc` + `remotion compositions` 校验，失败自动带编译错误重试一次。
+- 全部镜头 READY 后 `remotion_meta.enabled=true`，后续 `POST /actions/rerender` 自动走 Remotion；缺代码或沙箱失败时按 `REMOTION_FALLBACK_PLAYWRIGHT` 回退 Playwright。
+- 渲染缓存键包含 renderer、Remotion 版本、镜像 digest 和该镜头 code hash，只失效受影响的镜头。
+
+构建沙箱镜像（仓库根目录）：
+
+```bash
+docker build -f infra/remotion/Dockerfile -t roxy-remotion:4.0.539 .
+```
+
+- Docker 必须可用；镜像 tag 与 `REMOTION_IMAGE` 一致（默认 `roxy-remotion:4.0.539`）。
+- 沙箱无网络、只读根文件系统、非 root、限制 CPU/内存/PID；生成代码只写 `tmp/remotion/<episode_id>/`，不进仓库。
+- Remotion 许可：个人/非商业项目免费；商用需另行获得 Remotion 授权。
 
 ### 成片输出与 MinIO
 

@@ -328,3 +328,17 @@ a {
   color: #6d5dfc;
   text-align: center;
 }
+
+.remotion-code {
+  max-height: 620px;
+  overflow: auto;
+  margin: 0;
+  padding: 18px;
+  border-radius: 10px;
+  background: #1e1e2e;
+  color: #cdd6f4;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre;
+}

@@ -17,6 +17,7 @@ celery_app.conf.update(
         "app.workflow.tasks",
         "app.render.tasks",
         "app.agents.storyboard.tasks",
+        "app.agents.remotion.tasks",
         "app.voice.tasks",
         "app.voice.align_tasks",
         "app.qc.tasks",
@@ -26,6 +27,7 @@ celery_app.conf.update(
         "workflow.dispatch_outbox": {"queue": "workflow"},
         "workflow.reconcile_nodes": {"queue": "workflow"},
         "storyboard.generate": {"queue": "agent"},
+        "remotion.generate": {"queue": "agent"},
         "voice.episode": {"queue": "media"},
         "align.episode": {"queue": "media"},
         "qc.episode": {"queue": "agent"},
@@ -48,6 +50,7 @@ celery_app.conf.update(
         "workflow.dispatch_outbox": {"soft_time_limit": 60, "time_limit": 120},
         "workflow.reconcile_nodes": {"soft_time_limit": 60, "time_limit": 120},
         "storyboard.generate": {"soft_time_limit": 300, "time_limit": 330},
+        "remotion.generate": {"soft_time_limit": 3600, "time_limit": 3900},
         "voice.episode": {"soft_time_limit": 3600, "time_limit": 3900},
         "align.episode": {"soft_time_limit": 1800, "time_limit": 2100},
         "qc.episode": {"soft_time_limit": 1200, "time_limit": 1500},
@@ -71,6 +74,7 @@ celery_app.conf.update(
 from app.qc import tasks as _qc_tasks  # noqa: E402,F401
 from app.render import tasks as _render_tasks  # noqa: E402,F401
 from app.agents.storyboard import tasks as _storyboard_tasks  # noqa: E402,F401
+from app.agents.remotion import tasks as _remotion_tasks  # noqa: E402,F401
 from app.voice import align_tasks as _align_tasks  # noqa: E402,F401
 from app.voice import tasks as _voice_tasks  # noqa: E402,F401
 from app.workflow import tasks as _tasks  # noqa: E402,F401

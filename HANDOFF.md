@@ -23,7 +23,7 @@
 
 ## 1. 当前状态一句话
 
-**M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产复用/持久化 + M4.1 逐句配音 + M4.2 句级对齐（字级可选） + M4.3 质检 + M5.1 局部修改/续跑/发布包 + Web 控制台 + 分镜时间线编辑器 + 真实音轨成片已跑通（2026-10-29）；按主题自动生成脚本已移除。**
+**M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产复用/持久化 + M4.1 逐句配音 + M4.2 句级对齐（字级可选） + M4.3 质检 + M5.1 局部修改/续跑/发布包 + Web 控制台 + 分镜时间线编辑器 + Remotion 逐镜头代码生成 Agent（默认渲染器）+ 真实音轨成片已跑通（2026-10-30）；按主题自动生成脚本已移除。**
 
 - 需求文档 v1.2、架构方案 v1.10、ADR-001～010 已写完。
 - GitHub 仓库已创建：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
@@ -76,7 +76,13 @@
 - M4.3 质检已跑通：`render.concat` 完成后默认进入 QC；规则检查流参数/时长/响度/对齐/字幕/资产，再按镜头抽首帧+中间帧送 `deepseek-flash` 多模态；结果写 `review` 表与 `episode.qc_meta`。视觉问题默认 warning，`QC_VISION_BLOCKING=true` 才作为 error；图片资产可单独 `POST /assets/{id}/check`。
 - M5.1 已跑通：`POST /episodes/{id}/actions/revise-line` 改单句后重置到 VOICING，只重合成变化句、重对齐并重渲染；镜头片段带 hash 缓存，未变化镜头直接复用；`POST /actions/resume` 按当前状态续跑；`workflow.reconcile_nodes` 清理 stale RUNNING 节点；`POST /actions/package` / `POST /actions/publish` 生成本地发布包（视频、封面、SRT、脚本、metadata、音频）。
 - 最终视频输出：渲染完成后复制到 `output/YYYYMMDD-HHMMSS_<episode_id前8位>/episode.mp4`，同目录写 `metadata.json`；`episode.output_path` 指向该路径，`episode.output_meta` 记录本地路径与 MinIO URI。MinIO 上传由 `MINIO_UPLOAD_ENABLED` 控制，VM 可设 `MINIO_REQUIRED=true` 强制成功。
-- 资产分工（2026-10-27）：角色立绘由用户用 ChatGPT/豆包/自绘提供；背景、舞台层、演示物件由 Seedream 生成；含文字卡片仍用 HTML。
+- M6 Remotion 代码生成 Agent 已跑通（2026-10-30）：`app/agents/remotion/` 每镜头调用一次 DeepSeek 生成自由 TSX，Python 生成 `Root.tsx`/Composition（ID 用 `Shot-0001`，组件名 `Shot_0001`）；代码在 Docker 沙箱 `tsc --noEmit` + `remotion compositions` 校验，失败带编译错误重试一次；全部镜头 READY 才 `remotion_meta.enabled=true`，`POST /actions/rerender` 自动切 Remotion，失败按 `REMOTION_FALLBACK_PLAYWRIGHT` 回退 Playwright。
+- Remotion 沙箱镜像 `roxy-remotion:4.0.539` 由 `infra/remotion/Dockerfile` 构建；运行参数 `--network none --read-only --user 10001 --cpus 2 -m 3g --pids-limit 256`，`/tmp` 与 `/app/node_modules/.cache` 挂 tmpfs。
+- Remotion 实测：11 镜头整期真实 DeepSeek 生成 + Docker 渲染 + ffmpeg `-c copy` 拼接 + QC 全通过（最终 `health=OK`，0 warning）。首版因生成代码“浅底浅字”被 QC 报 4 条对比度 warning；补 Skill 配色约束并重生成后消失。生成代码在 `tmp/remotion/<episode_id>/`，不进仓库。
+- Remotion 生成质量约束：单个镜头代码 ≤7000 字符/180 行；浅色纸纹背景必须用深色字，白字只能放在 alpha ≥0.75 的深色实底上；有 `character` 时必须画 Roxy。早期不写这些约束时会出现“浅底浅字”与整镜头无角色。
+- Remotion 缓存键：`shot_render_hash` 包含 renderer、Remotion 版本、镜像 digest、该镜头 code hash；代码或镜像变化只失效受影响镜头。
+- Remotion 前端：编辑器「Remotion 渲染」卡片支持整期/单镜头生成、状态表、代码预览、「用 Remotion 重渲染」；API 为 `POST /actions/generate-remotion`、`GET /episodes/{id}/remotion`、`GET /episodes/{id}/remotion/shots/{shot_id}`。
+- DeepSeek 输出上限：Remotion 单镜头代码用 `max_tokens=16384`（6000/8192 都会截断长镜头）；provider 会检测 `finish_reason=length` 并按失败重试，不再把截断 JSON 当成功。
 - 当前阶段仍以角色立绘为主；背景/舞台/演示物件可按需通过 Asset Agent 生成，不再固定暂停。
 - AI 主题扩展：需求新增 R-17～R-28（讲解指向/白板/敲键盘/调试翻车/灵光一现/怀疑审视等），核心 6 个提示词在 `character_packs/roxy/ai_pose_prompts.md`（本地）。背景已出纸纹 + 木地板；道具在生成中。
 - 代码：`app/agents`、`app/voice`、`app/qc`、`app/render`、`app/workflow`、`web/` 均已落地；SSE 与登录权限未接。
@@ -87,9 +93,9 @@
 
 ### 2.1 立即
 
-1. **验证取消/删除**：在运行中的期点「取消」，确认状态转 CANCELLED、后续 media/render 任务不再重试；再删除一期，确认关联行清理且 `output/` 成片保留。
-2. **重启本机服务**：API / Celery worker / beat 需要加载新代码（已移除 `script.generate`，新增 cancel/delete 路由）。
-3. **进入 M5.2 成本与监控**：M5.1 已闭环局部修改/续跑/发布包；下一步补 token/TTS 成本报表、告警和运维面板。
+1. **Remotion 整期验收**：用 11 镜头真实成片抽查字幕/标注对比度与角色出现率；单镜头不满意可在编辑器里只重新生成该镜头，再「用 Remotion 重渲染」。VM 部署前先预构建 `roxy-remotion:4.0.539` 镜像。
+2. **进入 M5.2 成本与监控**：M5.1 已闭环局部修改/续跑/发布包；下一步补 token/TTS 成本报表、告警和运维面板。
+3. **M6 二阶段（可选）**：Remotion 代码在线编辑/候选对比、失败自动修复、按镜头类型路由模型、成本统计。
 4. **M3 P1 待补**：多模态分镜评审、物件/卡片同组位移。
 5. **VM 部署**：数据盘 ≥200GB，按 §4.4 起 `roxy-vm` 栈。
 
@@ -205,10 +211,18 @@ roxy_pipline/
 │  │  │  ├─ utils.py               # 分镜校验/保存
 │  │  │  ├─ spec_builder.py        # shot → EpisodeSpec
 │  │  │  └─ render_spec.py         # 从 DB/资产构建渲染 spec
-│  │  └─ asset/                    # 文本→无文字演示素材，reuse_key 复用
-│  │     ├─ models.py
+│  │  ├─ asset/                    # 文本→无文字演示素材，reuse_key 复用
+│  │  │  ├─ models.py
+│  │  │  ├─ prompts.py
+│  │  │  └─ service.py
+│  │  └─ remotion/                 # M6 每镜头 Remotion 代码生成
+│  │     ├─ models.py              # ShotCodeOutput / Remotion*Meta
+│  │     ├─ service.py             # 生成、校验、持久化、Root 生成
+│  │     ├─ tasks.py               # remotion.generate
+│  │     ├─ docker.py              # 沙箱校验/渲染
 │  │     ├─ prompts.py
-│  │     └─ service.py
+│  │     ├─ skills/remotion_shot/SKILL.md
+│  │     └─ templates/             # 固定工程骨架 + 共享组件
 │  ├─ voice/                       # M4 配音与对齐
 │  │  ├─ service.py                # voice.episode 启动
 │  │  ├─ tasks.py
@@ -225,6 +239,7 @@ roxy_pipline/
 │  ├─ storage/                     # 最终输出目录 + MinIO 上传
 │  ├─ render/                      # 渲染、镜头缓存与拼接
 │  │  ├─ models.py / timeline.py / cards.py / stage.py / capture.py / encode.py
+│  │  ├─ remotion.py               # Docker 渲染 + ffmpeg 归一化
 │  │  ├─ service.py                # start_render
 │  │  └─ tasks.py                  # render.episode/shot/concat
 │  ├─ assets/                      # 资产持久化/复用
@@ -234,12 +249,14 @@ roxy_pipline/
 │  ├─ db/                          # Base + async session
 │  ├─ models/core.py
 │  └─ schemas/core.py
-├─ migrations/                     # Alembic
+├─ migrations/                     # Alembic（含 c3d4e5f6a7b8 M6 Remotion）
 ├─ alembic.ini
 ├─ compose.infra.yml               # Postgres/RabbitMQ/Redis/MinIO
+├─ infra/remotion/Dockerfile       # Remotion 沙箱镜像
 ├─ prompts/
 │  ├─ script/                      # system/article/optimize
-│  └─ storyboard/                  # system/generate
+│  ├─ storyboard/                  # system/generate
+│  └─ remotion/                    # system + generate_shot
 ├─ templates/
 │  ├─ stage/                       # stage.html/css/renderer.js
 │  └─ cards/                       # 5 类卡片 HTML
@@ -268,6 +285,7 @@ roxy_pipline/
 │  ├─ test_storyboard_spec.py
 │  ├─ test_storyboard_api.py
 │  ├─ test_llm_json.py
+│  ├─ test_remotion_agent.py
 │  └─ golden/placeholder_still.png
 ├─ data/assets/                    # 持久化资产，gitignore
 ├─ pyproject.toml
@@ -409,6 +427,10 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - 镜头片段编码参数必须完全一致，最终 `-c copy` 拼接。
 - 含文字卡片用 HTML；Seedream 只做背景/舞台/演示物件（无文字空壳）。
 - 背景/演示物件生成后固定资产化，不每期重生成。
+- Remotion 为默认镜头渲染器；Playwright 保留为回退。Remotion 输出经 ffmpeg 统一为 1920×1080/25fps/H.264/yuv420p/CRF18，保证 `-c copy` 拼接。
+- Remotion 代码只存在于 `tmp/remotion/<episode_id>/`；`remotion_shot` 表记录 code_hash/status/input_hash。
+- 生成代码约束：单镜头 ≤7000 字符；浅底必须深字，白字必须有深色实底；有 `character` 必须出现 Roxy；不能用随机/时间/CSS 动画。
+- Docker 不可用或镜像缺失时 Remotion 生成失败，渲染回退 Playwright（`REMOTION_FALLBACK_PLAYWRIGHT=true`）。
 
 ### 4.6 资产生产分工
 
@@ -478,9 +500,38 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 - Windows 控制台输出中文可能乱码，不影响文件；需要时设 `PYTHONUTF8=1`。
 - 本机 Docker Desktop 未启动：`compose.infra.yml` 只做了 `docker compose config` 校验，实际容器启动要在 VM 上验证。
 
+### 5.7 Remotion 沙箱与生成
+
+- Composition ID 不能含下划线，用 `Shot-0001`；组件导出名仍是 `Shot_0001`。
+- `--read-only` 下 Remotion/Chromium 会写 `/app/node_modules/.cache`，必须挂 tmpfs，否则 `EROFS`。
+- Windows Git Bash 下 Docker `--mount` 路径要做 `MSYS_NO_PATHCONV=1`，否则盘符被改写。
+- DeepSeek 单镜头代码很长：`max_tokens=6000/8192` 都会截断长镜头（表现为空 content 或半截 JSON）；现用 16384，并检测 `finish_reason=length`。
+- 生成代码不能用 `staticFile()` 二次包裹 `Stage` 的 `bg/floor`；模板用 `assetSrc()` 兼容“资产名或已解析 URL”。
+- `Card` 同时接受流水线类型（`chat_bubble`/`pure_text`）和原型别名（`chat`/`pure`）；chat 气泡渲染 `body` 以支持 `lines`。
+- 部分镜头生成成功时 `remotion_meta.enabled` 必须保持 `false`，否则 Root 缺 Composition 会渲染失败。
+- 模型默认会写浅色字：必须在 Skill 里明确“浅底深字 / 白字必须有深色实底”，否则会出现 QC 报的文字不可读。
+
 ---
 
 ## 6. 历史记录
+
+### 2026-10-30 · M6 Remotion 代码生成 Agent（默认渲染器）
+
+- 用户决定：Remotion 取代 Playwright 成为默认渲染器；每镜头一个 Composition；LLM 生成自由 TSX；运行时 Skill 放 `app/agents/remotion/skills/`；Docker 沙箱；每镜头单独生成。记录为 ADR-011。
+- 新增 `app/agents/remotion/`（models/service/tasks/docker/prompts/templates/skill）、`prompts/remotion/`、`infra/remotion/Dockerfile`、`app/render/remotion.py`、迁移 `c3d4e5f6a7b8`（`episode.remotion_meta` + `remotion_shot`）。
+- 生成流程：素材复制为 `public/assets/<checksum>` → 每镜头一次 DeepSeek（并发 3）→ 写 `src/shots/shot_XXXX.tsx` → Python 生成 Root → Docker `tsc + remotion compositions` 校验 → 失败带错误重试一次 → 全 READY 才启用。
+- 渲染流程：`build_episode_render_spec` 读 meta → `renderer=remotion`；`render_shot_task` 调 Docker 渲染，失败按开关回退 Playwright；ffmpeg 归一化后继续 `-c copy` 拼接。
+- API/前端：`POST /actions/generate-remotion`、`GET /episodes/{id}/remotion`、`GET /episodes/{id}/remotion/shots/{shot_id}`；编辑器新增「Remotion 渲染」卡片（生成、状态、代码预览、单镜头重生成、重渲染）。
+- 实测：`roxy-remotion:4.0.539` 镜像构建成功；11 镜头整期真实生成/渲染/QC 通过（health OK）；单镜头 Docker 渲染约 18–21 秒；后端 81 条测试通过，前端构建通过。
+- 生成期间遇到的问题与修复：max_tokens 截断（6000→8192→16384 + `finish_reason=length` 检测）、Composition ID 下划线、`EROFS` cache、`staticFile` 二次包裹、`Card` kind 别名、partial meta 误启用、浅底浅字。
+- 注意：旧的原型评估结论（“暂不整体替换”）已被本条取代。
+
+### 2026-10-30 · Remotion 渲染原型评估
+
+- 在 `tmp/remotion_prototype/` 建了 3 个 1080p25 的“什么是 AI Agent”视觉原型：`ShotRush`（屏幕外冲入/让位 + 任务循环图 + 终端执行）、`ShotSpring`（spring 半身角色切换 + 工具 chips + 机器人）、`ShotCards`（目标终端 → 循环图 → 浏览器结果）；不再使用纯文字卡。复用本地 AI 主题立绘，未接主链路、未提交。
+- 同机 5 秒/125 帧对比：Remotion 约 23 秒（含 bundle/启动），现有 Playwright 渲染器约 17 秒（简单镜头）；Remotion 没有速度收益，瓶颈仍是 Chromium 逐帧 + 编码。
+- 观感：spring 缓动和组件化卡片更自然，但需要 Node 第二运行时、重写现有舞台/卡片/缓存，并处理 Remotion 许可与版本固定。
+- 结论（已被 2026-10-30 M6 决策取代）：当时暂不整体替换；保持 Playwright + ffmpeg。用户后来要求按主题生成 Remotion 代码并替换默认渲染器，见上方 M6 记录。
 
 ### 2026-10-30 · 分镜时间线编辑器
 
