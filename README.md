@@ -87,6 +87,20 @@
 | M6 Remotion 代码生成 Agent | ✅ 每镜头 DeepSeek 生成自由 TSX + Docker 沙箱校验/渲染 + 镜头级缓存；Playwright 仅测试/历史 |
 | M5.2 成本与监控 | ⏳ token/TTS 成本报表、告警与运维面板 |
 
+## 界面预览
+
+### 总览控制台
+
+<p align="center">
+  <img src="docs/assets/showcase-dashboard.webp" alt="Roxy Pipeline 总览控制台" width="100%" />
+</p>
+
+### 分镜时间线编辑器
+
+<p align="center">
+  <img src="docs/assets/showcase-editor.webp" alt="Roxy Pipeline 分镜时间线编辑器" width="100%" />
+</p>
+
 ## 环境隔离
 
 - 本地：`ROXY_ENV=local`、`COMPOSE_PROJECT_NAME=roxy-local`，配置模板 `.env.example`（localhost + 映射端口）。
