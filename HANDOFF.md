@@ -123,7 +123,7 @@
 - `uv run pytest` 7 条通过；demo 视频 1920×1080 / 25fps / H.264 / AAC 48kHz。
 - `compose.infra.yml`：Postgres / RabbitMQ / Redis / MinIO + minio-init，端口避开现有栈（5433/5673/15673/6380/9100/9101）。
 - FastAPI：`app/api`、`app/models`、`app/schemas`、`app/core`；`/health`、`/api/v1/series`、`/api/v1/episodes`。
-- Alembic 初始迁移：`series` / `episode` / `script_line` / `shot` / `node_run`；本地默认 SQLite，Postgres 通过 `DATABASE_URL` 切换。
+- Alembic 初始迁移：`series` / `episode` / `script_line` / `shot` / `node_run`；本地默认 SQLite，路径 `data/db/roxy.db`（`tmp/` 只放可清理产物），Postgres 通过 `DATABASE_URL` 切换。
 
 **还没做：**
 
@@ -360,6 +360,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - `-c` 是同时渲染的 Chromium 数量：2 vCPU/2GB 先 `-c 1`，4 核以上再 `-c 2`。
 - media worker 常驻 IndexTTS2（GPU），并发必须为 1；Windows 调试同样加 `--pool=solo`。
 - Windows 本机 Celery 默认 prefork 不可用：调试加 `--pool=solo`（单并发）；并行渲染在 Ubuntu VM 上用默认 prefork `-c N`。
+- Windows 一键启动：双击仓库根目录 `start-dev.bat`（内部 `scripts/dev/start_all.ps1`），会启动 Docker、依赖容器、MinIO buckets、API、两个 worker、beat 和前端；已运行的服务会跳过。
 - 队列：`workflow`（状态推进/outbox 补投）、`agent`（`storyboard.generate` / `qc.episode`）、`media`（`voice.episode` / `align.episode`）、`render`（`render.episode` / `render.shot` / `render.concat`）。
 - 触发真实队列渲染：`uv run python scripts/demo/queue_demo_render.py --base-url http://localhost:8000`。
 - beat 每 5 秒执行 `workflow.dispatch_outbox`，把 PENDING 事件投到 RabbitMQ；失败按指数退避，5 次后置 FAILED。

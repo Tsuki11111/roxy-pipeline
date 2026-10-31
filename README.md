@@ -295,6 +295,16 @@ curl -X POST http://localhost:8000/api/v1/assets/generate \
 - `IMAGE_PROVIDER=mock` 可本地跑通流程，不调用 Seedream。
 - 按整期文稿生成时用 `POST /episodes/{id}/actions/generate-assets`：Agent 读取 `script_line` 的章节和台词，生成结果记录 `episode_id`，不是脱离文稿的自由生成。
 
+### Windows 一键启动
+
+双击仓库根目录的 `start-dev.bat`，或从 PowerShell 运行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/start_all.ps1
+```
+
+脚本会依次启动 Docker（含本机 socket 清理）、Postgres/RabbitMQ/Redis/MinIO、MinIO buckets、FastAPI、两个 Celery worker、beat 和 Vite 前端；已运行的服务会跳过。每个服务在独立 PowerShell 窗口，关闭窗口即停止对应服务。
+
 ### Web 控制台
 
 ```bash
