@@ -524,6 +524,13 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 
 ## 6. 历史记录
 
+### 2026-10-31 · 可取消 Remotion codegen
+
+- 问题：点击「生成 Remotion 代码」后按钮禁用，没有取消入口。
+- 新增 `POST /episodes/{id}/actions/cancel-remotion`：把 `remotion.codegen` 节点标为 `INTERRUPTED`、设置 `remotion_meta.cancel_requested=true`，恢复上一版 ready 状态；任务 watcher 每 3 秒检查一次，取消在途 LLM 调用并保留已生成的代码。
+- 编辑器在 `remotion_meta.status=generating` 时显示「取消生成」。
+- 后端 91 条测试通过，前端构建通过。
+
 ### 2026-10-31 · Remotion-only
 
 - 用户要求新期只用 Remotion；新增 `REMOTION_ONLY=true`（默认），Playwright 仅保留测试/历史，不参与新期渲染。

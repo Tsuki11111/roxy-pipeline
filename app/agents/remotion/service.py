@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -41,6 +42,8 @@ from app.models.core import (
 from app.providers.llm import build_llm
 from app.render.service import _char_timings_from_audio
 from app.render.timeline import build_timeline
+from app.workflow.cancel import TaskCancelled
+from app.workflow.db import task_session
 from app.workflow.outbox import enqueue_outbox
 
 logger = logging.getLogger(__name__)
@@ -124,6 +127,25 @@ def _sha_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+async def _codegen_cancelled(episode_id: str) -> bool:
+    async with task_session() as session:
+        episode = await session.get(Episode, episode_id)
+        if episode is None:
+            return True
+        meta = episode.remotion_meta or {}
+        return bool(
+            episode.status == EpisodeStatus.CANCELLED
+            or meta.get("cancel_requested")
+        )
+
+
+async def _wait_cancel(episode_id: str, cancel_check) -> None:
+    while True:
+        if await cancel_check():
+            return
+        await asyncio.sleep(3)
 
 
 def _project_path(value: str) -> Path:
@@ -537,6 +559,7 @@ async def generate_remotion_code(
     node_run_id: str,
     *,
     shot_ids: list[str] | None = None,
+    cancel_check=None,
 ) -> dict:
     settings = get_settings()
     episode = await session.get(Episode, episode_id, with_for_update=True)
@@ -658,7 +681,33 @@ async def generate_remotion_code(
             except Exception as exc:
                 return payload, None, str(exc)[:2000]
 
-    results = await asyncio.gather(*(generate(payload) for payload in payloads))
+    async def cancelled() -> bool:
+        return bool(cancel_check and await cancel_check())
+
+    gather_task = asyncio.gather(*(generate(payload) for payload in payloads))
+    watcher = (
+        asyncio.create_task(_wait_cancel(episode_id, cancel_check))
+        if cancel_check is not None
+        else None
+    )
+    try:
+        if watcher is not None:
+            done, _ = await asyncio.wait(
+                {gather_task, watcher}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if watcher in done:
+                gather_task.cancel()
+                await asyncio.gather(gather_task, return_exceptions=True)
+                raise TaskCancelled("remotion codegen cancelled by user")
+        results = await gather_task
+    finally:
+        if watcher is not None:
+            watcher.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watcher
+
+    if await cancelled():
+        raise TaskCancelled("remotion codegen cancelled by user")
     failures: dict[str, str] = {}
     for payload, result, error in results:
         item = timeline_by_id[payload["shot_id"]]
@@ -718,10 +767,14 @@ async def generate_remotion_code(
                     }
                 )
         subtitles_by_shot[item.shot.shot_id] = chunks
+    if await cancelled():
+        raise TaskCancelled("remotion codegen cancelled by user")
     _write_root(workdir, all_rows, shot_by_id, frame_counts, spec, subtitles_by_shot)
 
     validation_error = None
     for attempt in range(2):
+        if await cancelled():
+            raise TaskCancelled("remotion codegen cancelled by user")
         try:
             docker.validate_workdir(workdir)
             validation_error = None
@@ -739,9 +792,13 @@ async def generate_remotion_code(
             retry_payloads = [
                 payload for payload in payloads if payload["shot_id"] in affected
             ]
+            if await cancelled():
+                raise TaskCancelled("remotion codegen cancelled by user")
             retry_results = await asyncio.gather(
                 *(generate(payload) for payload in retry_payloads)
             )
+            if await cancelled():
+                raise TaskCancelled("remotion codegen cancelled by user")
             for payload, result, error in retry_results:
                 item = timeline_by_id[payload["shot_id"]]
                 if error or result is None:
@@ -792,6 +849,8 @@ async def generate_remotion_code(
             select(RemotionShot).where(RemotionShot.episode_id == episode_id)
         )
     )
+    if await cancelled():
+        raise TaskCancelled("remotion codegen cancelled by user")
     for row in all_rows:
         if row.status in {"PENDING", "GENERATED"}:
             row.status = "READY" if validation_error is None else "FAILED"
@@ -822,6 +881,39 @@ async def generate_remotion_code(
     if validation_error and not any(row.status == "READY" for row in all_rows):
         raise RemotionError(f"Remotion validation failed: {validation_error}")
     return {"meta": meta.model_dump(), "failures": failures}
+
+
+async def cancel_remotion_codegen(
+    session: AsyncSession, episode_id: str
+) -> tuple[Episode, NodeRun]:
+    episode = await session.get(Episode, episode_id, with_for_update=True)
+    if episode is None:
+        raise LookupError(f"episode not found: {episode_id}")
+    node = await session.scalar(
+        select(NodeRun)
+        .where(
+            NodeRun.episode_id == episode_id,
+            NodeRun.node_key == "remotion.codegen",
+            NodeRun.status.in_([NodeStatus.PENDING, NodeStatus.RUNNING]),
+        )
+        .with_for_update()
+    )
+    if node is None:
+        raise RemotionConflict("no running remotion codegen")
+    now = datetime.now(timezone.utc)
+    node.status = NodeStatus.INTERRUPTED
+    node.error = "cancelled by user"
+    node.finished_at = now
+    node.heartbeat_at = now
+    meta = dict(episode.remotion_meta or {})
+    meta["cancel_requested"] = True
+    meta["status"] = "ready" if meta.get("enabled") else "cancelled"
+    meta["error"] = "cancelled by user"
+    episode.remotion_meta = meta
+    episode.current_node = None
+    episode.health = "OK" if meta.get("enabled") else "WARNING"
+    await session.flush()
+    return episode, node
 
 
 async def start_remotion_codegen(

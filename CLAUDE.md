@@ -72,7 +72,7 @@ Remotion（Node 22，Docker 沙箱，唯一生产渲染器）+ Playwright/Chromi
 ### 3.1 Remotion 渲染边界
 
 - **Remotion 是唯一生产渲染器**；`REMOTION_ONLY=true` 时 Playwright 只保留给测试/历史，不参与新期渲染。
-- **新期自动 codegen**：配音/对齐完成后 `start_auto_render` 先排队 `remotion.generate`（`REMOTION_AUTO_CODEGEN=true`），成功后自动进入渲染；codegen 失败或未全部 READY 时标记失败，不回退 Playwright。不要只在编辑器手动点生成。
+- **新期自动 codegen**：配音/对齐完成后 `start_auto_render` 先排队 `remotion.generate`（`REMOTION_AUTO_CODEGEN=true`），成功后自动进入渲染；codegen 失败或未全部 READY 时标记失败，不回退 Playwright。不要只在编辑器手动点生成。生成中可调用 `POST /actions/cancel-remotion` 取消，已就绪的旧代码保留。
 - **每镜头一个 Composition**：LLM 只生成 `src/shots/shot_<seq>.tsx`；Root、Composition ID、时长、尺寸、素材映射由 Python 生成，LLM 不得改。
 - 生成代码只能在 **Docker 沙箱**执行（`--network none --read-only --user 10001 --cpus 2 -m 3g --pids-limit 256`），禁止在宿主机直接 `npm run`。
 - 生成代码只写 `tmp/remotion/<episode_id>/`，不进主仓库；固定依赖宇宙（react/remotion/@remotion/*/模板组件），不得新增 npm 依赖、外链或 Node 内置模块。

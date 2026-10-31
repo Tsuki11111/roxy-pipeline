@@ -315,6 +315,29 @@ async def seed_ready_episode(session, episode_id: str) -> None:
     await session.commit()
 
 
+async def test_cancel_remotion_codegen(client, episode, session):
+    _, ep = episode
+    await seed_ready_episode(session, ep["id"])
+    start = await client.post(
+        f"/api/v1/episodes/{ep['id']}/actions/generate-remotion", json={}
+    )
+    assert start.status_code == 202, start.text
+    node_id = start.json()["operation_id"]
+
+    response = await client.post(
+        f"/api/v1/episodes/{ep['id']}/actions/cancel-remotion"
+    )
+    assert response.status_code == 202, response.text
+    node = await session.get(NodeRun, node_id)
+    await session.refresh(node)
+    assert node.status == "INTERRUPTED"
+    episode_row = await session.get(Episode, ep["id"])
+    await session.refresh(episode_row)
+    assert episode_row.current_node is None
+    assert episode_row.remotion_meta["status"] == "cancelled"
+    assert episode_row.health == "WARNING"
+
+
 async def test_start_auto_render_queues_codegen(episode, session):
     _, ep = episode
     await seed_ready_episode(session, ep["id"])

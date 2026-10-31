@@ -3,7 +3,11 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from app.agents.remotion.service import RemotionError, generate_remotion_code
+from app.agents.remotion.service import (
+    RemotionError,
+    _codegen_cancelled,
+    generate_remotion_code,
+)
 from app.core.config import get_settings
 from app.models.core import Episode, NodeRun, NodeStatus
 from app.workflow.cancel import TaskCancelled, ensure_not_cancelled
@@ -11,6 +15,27 @@ from app.workflow.celery_app import celery_app
 from app.workflow.db import run_async, task_session
 
 logger = logging.getLogger(__name__)
+
+
+async def _mark_interrupted(episode_id: str, node_run_id: str) -> None:
+    async with task_session() as session:
+        episode = await session.get(Episode, episode_id)
+        node = await session.get(NodeRun, node_run_id)
+        now = datetime.now(timezone.utc)
+        if node is not None:
+            node.status = NodeStatus.INTERRUPTED
+            node.error = "cancelled by user"
+            node.finished_at = now
+            node.heartbeat_at = now
+        if episode is not None:
+            episode.current_node = None
+            meta = dict(episode.remotion_meta or {})
+            meta.pop("cancel_requested", None)
+            meta["status"] = "ready" if meta.get("enabled") else "cancelled"
+            meta["error"] = "cancelled by user"
+            episode.remotion_meta = meta
+            episode.health = "OK" if meta.get("enabled") else "WARNING"
+        await session.commit()
 
 
 async def _mark_no_render(episode_id: str, reason: str) -> None:
@@ -59,6 +84,10 @@ async def _run(
         if episode is None or node is None:
             raise RemotionError("episode/node not found")
         await ensure_not_cancelled(session, episode_id)
+        if await _codegen_cancelled(episode_id):
+            await session.rollback()
+            await _mark_interrupted(episode_id, node_run_id)
+            return
         node.status = NodeStatus.RUNNING
         node.started_at = node.started_at or datetime.now(timezone.utc)
         node.heartbeat_at = datetime.now(timezone.utc)
@@ -69,8 +98,16 @@ async def _run(
 
         try:
             result = await generate_remotion_code(
-                session, episode_id, node_run_id, shot_ids=shot_ids
+                session,
+                episode_id,
+                node_run_id,
+                shot_ids=shot_ids,
+                cancel_check=lambda: _codegen_cancelled(episode_id),
             )
+        except TaskCancelled:
+            await session.rollback()
+            await _mark_interrupted(episode_id, node_run_id)
+            raise
         except Exception as exc:
             await session.rollback()
             async with task_session() as failed:

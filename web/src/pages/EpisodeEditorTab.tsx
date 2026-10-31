@@ -468,6 +468,20 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
     }
   };
 
+  const cancelRemotion = async () => {
+    setRemotionBusy(true);
+    try {
+      await api.cancelRemotion(episode.id);
+      message.success("已请求取消 Remotion 代码生成");
+      setRemotion(await api.getRemotion(episode.id));
+      onChanged();
+    } catch (error) {
+      message.error(String(error));
+    } finally {
+      setRemotionBusy(false);
+    }
+  };
+
   const showRemotionCode = async (shot: { shot_id: string; seq: number; composition_id: string }) => {
     try {
       const data = await api.getRemotionCode(episode.id, shot.shot_id);
@@ -572,6 +586,11 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
             >
               生成 Remotion 代码
             </Button>
+            {remotion?.meta?.status === "generating" && (
+              <Button danger onClick={cancelRemotion} loading={remotionBusy}>
+                取消生成
+              </Button>
+            )}
             <Button
               onClick={renderWithRemotion}
               disabled={!canEdit || !remotion?.meta?.enabled || waiting}

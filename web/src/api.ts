@@ -154,6 +154,11 @@ export const api = {
       `/api/v1/episodes/${id}/actions/generate-remotion`,
       { method: "POST", body: JSON.stringify({ shot_ids: shotIds ?? null }) },
     ),
+  cancelRemotion: (id: string) =>
+    request<EpisodeActionAccepted>(
+      `/api/v1/episodes/${id}/actions/cancel-remotion`,
+      { method: "POST" },
+    ),
   getRemotion: (id: string) =>
     request<import("./types").RemotionEpisode>(`/api/v1/episodes/${id}/remotion`),
   getRemotionCode: (id: string, shotId: string) =>

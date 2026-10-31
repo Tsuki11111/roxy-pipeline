@@ -29,6 +29,7 @@ from app.agents.remotion.docker import workdir_for as remotion_workdir
 from app.agents.remotion.service import (
     RemotionConflict,
     RemotionRequestError,
+    cancel_remotion_codegen,
     start_remotion_codegen,
 )
 from app.agents.script.validation import ValidationResult
@@ -326,6 +327,31 @@ async def generate_remotion_action(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RemotionRequestError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await session.commit()
+    await session.refresh(episode)
+    return EpisodeActionAccepted(
+        episode_id=episode.id,
+        status=episode.status,
+        node_key=node.node_key,
+        operation_id=node.id,
+    )
+
+
+@router.post(
+    "/{episode_id}/actions/cancel-remotion",
+    response_model=EpisodeActionAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def cancel_remotion_action(
+    episode_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> EpisodeActionAccepted:
+    try:
+        episode, node = await cancel_remotion_codegen(session, episode_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RemotionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     await session.commit()
     await session.refresh(episode)
     return EpisodeActionAccepted(

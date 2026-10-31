@@ -317,6 +317,7 @@ npm run dev
 - 每个镜头单独调用一次 DeepSeek，生成自由 TSX；Python 负责 `Root.tsx`、时长、素材映射和 Composition 注册。
 - 代码在 Docker 沙箱里 `tsc` + `remotion compositions` 校验，失败自动带编译错误重试一次。
 - 全部镜头 READY 后 `remotion_meta.enabled=true`，后续 `POST /actions/rerender` 自动走 Remotion；新期在配音/对齐完成后会**自动排队 Remotion codegen 再渲染**（`REMOTION_AUTO_CODEGEN=true`），失败或未全部 READY 时标记失败、不渲染（Playwright 已禁用）。
+- 生成过程中可在编辑器点「取消生成」，或调用 `POST /api/v1/episodes/{id}/actions/cancel-remotion`；已就绪的旧代码会保留。
 - 渲染缓存键包含 renderer、Remotion 版本、镜像 digest 和该镜头 code hash，只失效受影响的镜头。
 
 构建沙箱镜像（仓库根目录）：
