@@ -11,6 +11,8 @@ interface Props {
   offsetX?: number;
   opacity?: number;
   blur?: number;
+  scale?: number;
+  rotate?: number;
   zIndex?: number;
 }
 
@@ -22,6 +24,8 @@ export const Character = ({
   offsetX = 0,
   opacity = 1,
   blur = 0,
+  scale = 1,
+  rotate = 0,
   zIndex = 3,
 }: Props) => (
   <Img
@@ -34,7 +38,8 @@ export const Character = ({
       width: 'auto',
       zIndex,
       opacity,
-      transform: `translateX(${offsetX}px)`,
+      transform: `translateX(${offsetX}px) scale(${scale}) rotate(${rotate}deg)`,
+      transformOrigin: 'bottom center',
       filter: `drop-shadow(0 10px 10px rgba(43, 43, 43, 0.22)) blur(${Math.max(
         0,
         blur,

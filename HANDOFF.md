@@ -432,6 +432,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - Remotion 代码只存在于 `tmp/remotion/<episode_id>/`；`remotion_shot` 表记录 code_hash/status/input_hash。
 - 生成代码约束：单镜头 ≤7000 字符；浅底必须深字，白字必须有深色实底；有 `character` 必须出现 Roxy；不能用随机/时间/CSS 动画。
 - 布局约束：Remotion 不做关键词标签；画面文字用 `PaperCard` Claude 暖纸卡（variant：note/quote/index/letter/sticky/specimen；tone：cream/sand/peach/sage；transition：slide/zoom/flip/drop/reveal/push）。Python 按镜头序号排期：约 1/3 镜头 `card_style=null` 做纯演示，其余给卡并指定样式/动效；切换位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°。
+- 角色动效：有 `character` 的镜头必须有入场（offsetX ±400–600、opacity 0→1、scale 0.94→1、rotate ±2°）、呼吸轻摆和至少一次手势/让位；生成检查会拒绝只有 `src/side/height` 的静态 `<Character>`。
 - 背景与字幕：`Stage` 统一渲染 Claude 暖纸背景（纸纹 + 底部浅阴影 + 手绘星），不再使用旧纸纹/木地板资产；`SubtitleTrack` 改为暖纸底 + 墨字 + 陶土短线。
 - 改动 `app/agents/remotion/templates/` 后必须重建镜像 `roxy-remotion:4.0.539`，否则沙箱仍用旧组件。
 - Remotion 字幕由 Root 里的 `SubtitleTrack` 统一叠加（bottom 40，样式同旧 Playwright）；生成代码不画字幕，y 940–1080 的底部区留给字幕。
@@ -521,6 +522,14 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 ---
 
 ## 6. 历史记录
+
+### 2026-10-31 · 恢复角色动效
+
+- 问题：Claude 纸卡重生成后，多数有角色的镜头只剩 `<Character src side height />`，人物完全静止。
+- `Character` 增加 `scale`/`rotate` props（transform-origin 底部中心）。
+- Skill/Prompt 增加角色硬规则：入场 offsetX ±400–600、opacity 0→1、scale 0.94→1、rotate ±2°，停留呼吸轻摆，卡片/关键图形出现时做手势/让位。
+- 生成服务新增检查：有 `character` 却没画 Character、或 Character 只有静态数值属性时，带反馈重试。
+- 实测：7 个有角色镜头全部有 ±520px 冲入 + `Math.sin` 呼吸 + gesture/lean；QC `PASS`，后端 88 条测试通过。
 
 ### 2026-10-31 · Claude 纸卡与暖纸舞台
 

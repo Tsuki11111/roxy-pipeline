@@ -749,6 +749,7 @@ M6 起，镜头画面默认由 Remotion 渲染；§10.3 的 Playwright 逐帧链
 - 浅色纸纹背景必须深色字；白字只能放在 alpha ≥0.75 的深色实底上。
 - Remotion 不做关键词标签；画面文字用 `PaperCard` Claude 暖纸卡（6 variant × 4 tone），Python 按镜头排期约 1/3 纯演示、其余指定 variant/tone/transition；切换配方 slide/zoom/flip/drop/reveal/push 轮换。
 - 背景由 `Stage` 统一渲染暖纸底色 + 纸纹 + 底部浅阴影 + 手绘星；字幕由 `SubtitleTrack` 渲染暖纸底、墨字、陶土短线。
+- 角色必须有动效：入场冲入（offsetX ±400–600、opacity/scale/rotate）、呼吸轻摆、至少一次手势/让位；静态 `<Character>` 会被生成检查拒绝。
 - 卡片切换用大幅运动：位移 ≥240px、缩放 0.72–0.82→1、旋转 ±4°–8°，spring 允许过冲；文本卡与演示段错开 3–8 帧。
 - 视觉风格必须服务内容：先判断主题再选色调、材质、线条和图形语言；同一期保持统一，禁止与内容无关的赛博霓虹/故障/机器人装饰。
 - 字幕由 Python 生成 `Root.tsx` 时统一叠加 `SubtitleTrack`：句级 chunks 转为镜头内相对时间，样式沿用旧 Playwright 字幕条；生成代码不画字幕。

@@ -90,6 +90,30 @@ def _card_style(seq: int) -> dict[str, str] | None:
     }
 
 
+def _check_character_motion(code: str, payload: dict) -> None:
+    if not payload.get("character"):
+        return
+    if "components/Character" not in code:
+        raise RemotionPolicyError(
+            "输入有 character，必须画出 Roxy，并使用带动效的 Character 组件。"
+        )
+    block = re.search(r"<Character\b[\s\S]*?/>", code)
+    if block is None:
+        raise RemotionPolicyError("Character 必须是自闭合组件 <Character ... />。")
+    attrs = block.group(0)
+    for attr in ("offsetX", "opacity", "scale", "rotate"):
+        match = re.search(rf"{attr}=\{{([^}}]*)\}}", attrs)
+        if match and not re.fullmatch(
+            r"\s*-?\d+(\.\d+)?\s*", match.group(1)
+        ):
+            return
+    raise RemotionPolicyError(
+        "角色不能静止：Character 必须加入场/呼吸/手势动效，"
+        "offsetX/opacity/scale/rotate 使用 spring、interpolate 或 Math.sin 计算，"
+        "不能只写 src/side/height。"
+    )
+
+
 def _sha_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -372,6 +396,7 @@ async def _generate_one(
             "不要使用 TerminalCard；画面文字统一改用 PaperCard"
             "（note/quote/index/letter/sticky/specimen，Claude 纸卡风格）。"
         )
+    _check_character_motion(code, payload)
     style = payload.get("card_style")
     if style is None:
         if "components/PaperCard" in code:

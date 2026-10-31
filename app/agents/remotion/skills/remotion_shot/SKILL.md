@@ -32,7 +32,7 @@ description: 为单个分镜生成可编译的 Remotion/React 镜头组件（自
 - 可用依赖：`react`、`remotion`、`@remotion/*`、`../components/*`、`../theme`。
 - 固定组件库（可选）：
   - `Stage`：Claude 暖纸背景（纸纹、底部浅阴影、手绘星）；直接包 children，不要传 `bg`/`floor`。
-  - `Character`：立绘；`src` 用资产清单里的 `staticFile` 名，支持 side/height/bottom/offsetX/opacity/blur。
+  - `Character`：立绘；`src` 用资产清单里的 `staticFile` 名，支持 `side`/`height`/`bottom`/`offsetX`/`opacity`/`blur`/`scale`/`rotate`。
   - `PaperCard`：**Claude 纸卡**；`variant` 支持 `note`/`quote`/`index`/`letter`/`sticky`/`specimen`，`tone` 支持 `cream`/`sand`/`peach`/`sage`；支持 `text`/`lines`/`title`/`meta`/`mark`、`left`/`top`/`width`/`minHeight`、`opacity`/`scale`/`translateX`/`translateY`/`rotate`/`rotateY`/`reveal`、`accent`。
   - `Overlay`、`Progress`、`AgentLoop`、`ToolChips`、`RobotIcon`。
 - **卡片不是每个镜头都必须有**：纯图形/演示镜头可以完全不放卡；按内容需要决定。
@@ -119,10 +119,31 @@ description: 为单个分镜生成可编译的 Remotion/React 镜头组件（自
 - 卡片文字、坐标轴、注释同样适用：纸底墨字，保持足够对比度。
 - 解释性文字优先放进 `PaperCard`，不要手写大段浅色文字。
 
-## 角色
+## 角色与动效（强约束）
 
-- 输入 JSON 有 `character` 时必须画出 Roxy（`Character` 组件，可用 `src`/`side`/`height`/`offsetX`）；可以小幅位移或缩放，但不要让整个镜头没有角色。
+- 输入 JSON 有 `character` 时必须画出 Roxy，并且**整镜不能静止**；`<Character>` 不能只写 `src/side/height`。
+- 入场：从角色所在侧屏幕外冲入，280–360ms；`offsetX` 从 ±(400–600) 回到 0，`opacity` 0→1，`scale` 0.94→1，`rotate` ±2°→0；用 spring（damping 12–16）。
+- 停留：保留呼吸/轻摆，`offsetX` 用 `Math.sin(frame / 18) * (4–10)`，`scale` 1±0.008；不要整镜定死。
+- 动作节点：卡片或关键图形出现时，至少做一次手势/前倾/让位，例如 `offsetX` 再偏 ±(20–60) 或 `scale` 1.01–1.04，持续 8–16 帧。
+- 角色默认 zIndex 3，卡片 zIndex 8；角色可以被卡片局部遮挡，但不能盖住卡片文字，也不要和卡片抢同一侧。
+- 同一镜头只用一张角色图；换姿势靠不同镜头的 asset，不要在同一镜里切换 src。
 - 只有输入 `character` 为 `null` 时才允许纯图形镜头。
+
+```tsx
+const enter = spring({frame, fps, config: {damping: 14, stiffness: 110}});
+const idle = Math.sin(frame / 18) * 8;
+const gesture = spring({frame: frame - 24, fps, config: {damping: 12, stiffness: 90}});
+
+<Character
+  src="assets/xxx.png"
+  side="left"
+  height={1000}
+  offsetX={(1 - enter) * -440 + idle + gesture * 26}
+  opacity={Math.min(1, enter * 1.6)}
+  scale={0.94 + enter * 0.06 + gesture * 0.02}
+  rotate={(1 - enter) * -2}
+/>
+```
 
 ## 视觉要求
 

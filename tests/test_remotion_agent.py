@@ -22,11 +22,24 @@ from app.models.core import (
     Shot,
 )
 
-CODE = """import {AbsoluteFill, useCurrentFrame} from 'remotion';
+CODE = """import {AbsoluteFill, spring, useCurrentFrame, useVideoConfig} from 'remotion';
+import {Character} from '../components/Character';
 
 export const Shot_0001 = () => {
   const frame = useCurrentFrame();
-  return <AbsoluteFill style={{backgroundColor: '#1e1e2e', opacity: Math.min(1, frame / 25)}} />;
+  const {fps} = useVideoConfig();
+  const enter = spring({frame, fps, config: {damping: 14, stiffness: 110}});
+  return (
+    <AbsoluteFill style={{backgroundColor: '#f3eee3'}}>
+      <Character
+        src="assets/character.png"
+        side="left"
+        offsetX={(1 - enter) * 320}
+        opacity={enter}
+        scale={0.94 + enter * 0.06}
+      />
+    </AbsoluteFill>
+  );
 };
 """
 
@@ -121,6 +134,41 @@ def test_generate_one_rejects_caption():
         asyncio.run(
             _generate_one(
                 CaptionRemotionLLM(),
+                context={"title": "t", "topic": "t", "summary": "", "outline": "[]"},
+                payload=payload,
+                skill="",
+            )
+        )
+
+
+class StaticCharacterLLM:
+    async def chat_json(self, system, user, *, temperature=0.7, max_tokens=2000):
+        return {
+            "schema_version": "1",
+            "component_name": "Shot_0001",
+            "code": (
+                "import {Character} from '../components/Character';\n"
+                "export const Shot_0001 = () => "
+                "<Character src=\"assets/x.png\" side=\"left\" height={1000} />;\n"
+            ),
+            "summary": "static character",
+        }
+
+
+def test_generate_one_rejects_static_character():
+    import asyncio
+
+    payload = {
+        "component_name": "Shot_0001",
+        "assets": [],
+        "previous_tail": "",
+        "character": {"static_file": "assets/x.png", "position": "left"},
+        "card_style": None,
+    }
+    with pytest.raises(RemotionPolicyError):
+        asyncio.run(
+            _generate_one(
+                StaticCharacterLLM(),
                 context={"title": "t", "topic": "t", "summary": "", "outline": "[]"},
                 payload=payload,
                 skill="",
