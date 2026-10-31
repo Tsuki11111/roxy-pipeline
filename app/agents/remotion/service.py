@@ -68,9 +68,12 @@ _CARD_RE = re.compile(r"from\s+['\"]\.\./components/Card['\"]|<Card\b")
 _CAPTION_RE = re.compile(r"from\s+['\"]\.\./components/Caption['\"]|<Caption\b")
 _LABEL_RE = re.compile(r"from\s+['\"]\.\./components/Label['\"]|<Label\b")
 _BOARD_RE = re.compile(r"from\s+['\"]\.\./components/Board['\"]|<Board\b")
+_TERMINAL_RE = re.compile(
+    r"from\s+['\"]\.\./components/TerminalCard['\"]|<TerminalCard\b"
+)
 
-CARD_VARIANTS = ["terminal", "editor", "hud", "console", "snippet", "chat"]
-CARD_TONES = ["navy", "purple", "mint", "rose"]
+CARD_VARIANTS = ["note", "quote", "index", "letter", "sticky", "specimen"]
+CARD_TONES = ["cream", "sand", "peach", "sage"]
 CARD_TRANSITIONS = ["slide", "zoom", "flip", "drop", "reveal", "push"]
 # 约 1/3 的镜头做纯演示，不给卡片。
 CARD_PATTERN = [True, True, False, True, False]
@@ -350,39 +353,40 @@ async def _generate_one(
     code = code.strip()
     if _CARD_RE.search(code):
         raise RemotionPolicyError(
-            "不要使用 Card 组件：旧的白卡会遮挡动画。"
-            "请改用 Label 或自绘紧凑面板，并确保不覆盖视觉元素。"
+            "不要使用 Card 组件；画面文字统一改用 PaperCard（Claude 纸卡风格）。"
         )
     if _CAPTION_RE.search(code):
         raise RemotionPolicyError(
-            "关键词不要用 Caption 放到角落；请改用 Board 长段板书卡，"
-            "并用 Sequence 做文本段与演示段的大幅切换。"
+            "不要使用 Caption；画面文字统一改用 PaperCard（Claude 纸卡风格）。"
         )
     if _LABEL_RE.search(code):
         raise RemotionPolicyError(
-            "不要再用 Label 做关键词标签；请改用 TerminalCard 长段文本卡，"
-            "保留完整句子/段落，不要缩成短标签。"
+            "不要使用 Label 关键词标签；画面文字统一改用 PaperCard 长段纸卡。"
         )
     if _BOARD_RE.search(code):
         raise RemotionPolicyError(
-            "不要再用 Board 黑板卡；画面文字统一改用 TerminalCard"
-            "（terminal/editor/hud/console/snippet/chat），并轮换样式和切换动效。"
+            "不要使用 Board 黑板卡；画面文字统一改用 PaperCard（暖纸/墨字/陶土）。"
+        )
+    if _TERMINAL_RE.search(code):
+        raise RemotionPolicyError(
+            "不要使用 TerminalCard；画面文字统一改用 PaperCard"
+            "（note/quote/index/letter/sticky/specimen，Claude 纸卡风格）。"
         )
     style = payload.get("card_style")
     if style is None:
-        if "components/TerminalCard" in code:
+        if "components/PaperCard" in code:
             raise RemotionPolicyError(
-                "本镜头的 card_style 为 null：不要使用 TerminalCard，"
+                "本镜头的 card_style 为 null：不要使用 PaperCard，"
                 "把这一镜做成纯图形/动画演示，不要放卡片。"
             )
         return result.model_copy(update={"code": code})
-    if "components/TerminalCard" in code:
+    if "components/PaperCard" in code:
         variants = re.findall(r"variant\s*=\s*['\"]([a-z]+)['\"]", code)
         tones = re.findall(r"tone\s*=\s*['\"]([a-z]+)['\"]", code)
         if not variants:
-            variants = ["terminal"]
+            variants = ["note"]
         if not tones:
-            tones = ["navy"]
+            tones = ["cream"]
         required_variant = style.get("variant")
         required_tone = style.get("tone")
         if required_variant and required_variant not in variants:

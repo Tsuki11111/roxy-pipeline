@@ -78,10 +78,11 @@ Remotion（Node 22，Docker 沙箱，默认渲染器）+ Playwright/Chromium（�
 - 全部镜头代码 READY 才启用 Remotion；单镜头失败按 `REMOTION_FALLBACK_PLAYWRIGHT` 回退。缓存键必须包含 renderer、Remotion 版本、镜像 digest 和该镜头 code hash。
 - Remotion 输出必须经 ffmpeg 归一化为 1920×1080/25fps/H.264/yuv420p，帧数与时间线一致，保证 `-c copy` 拼接。
 - 生成质量约束：单镜头代码 ≤7000 字符/180 行；浅底深字、白字必须有深色实底；有 `character` 必须出现 Roxy；禁止随机/时间/CSS 动画。
-- 布局约束：Remotion 不做关键词标签；画面文字用 `TerminalCard` 二次元终端/代码块卡（variant：terminal/editor/hud/console/snippet/chat；tone：navy/purple/mint/rose；transition：slide/zoom/flip/drop/reveal/push）。Python 按镜头排期：约 1/3 镜头 `card_style=null` 做纯演示，其余给卡并指定样式/动效；切换位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°。
+- 布局约束：Remotion 不做关键词标签；画面文字用 `PaperCard` Claude 暖纸卡（variant：note/quote/index/letter/sticky/specimen；tone：cream/sand/peach/sage；transition：slide/zoom/flip/drop/reveal/push）。Python 按镜头排期：约 1/3 镜头 `card_style=null` 做纯演示，其余给卡并指定样式/动效；切换位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°。
+- 背景与字幕：`Stage` 统一渲染 Claude 暖纸背景（纸纹 + 底部浅阴影 + 手绘星），不要再用旧纸纹/木地板资产；`SubtitleTrack` 为暖纸底 + 墨字 + 陶土短线。
 - 风格约束：视觉风格必须服务内容；先判断主题再选色调/材质/线条/图形语言，同一期保持统一；禁止与内容无关的赛博霓虹、故障扫描线、机器人装饰。
 - 字幕：由 Python 生成 Root 时统一叠加 `SubtitleTrack`（句级 chunks、镜头内相对时间），生成代码不画字幕；字幕层变化要提升 `renderer_version` 失效镜头缓存。
-- 画面长段文本由生成代码的 `TerminalCard` 组件渲染（终端/代码块风），Python 只叠加底部字幕；文本长度和分段由模型决定，优先直接用 `narration`/`card.text` 的长段。`Card`/`Label`/`Caption`/`Board` 禁止用于新镜头。
+- 画面长段文本由生成代码的 `PaperCard` 组件渲染（Claude 暖纸/墨字/陶土），Python 只叠加底部字幕；文本长度和分段由模型决定，优先直接用 `narration`/`card.text` 的长段。`TerminalCard`/`Card`/`Label`/`Caption`/`Board` 禁止用于新镜头。
 - 改动 `app/agents/remotion/templates/` 后必须重建镜像，否则沙箱仍用旧组件。
 - 许可：个人/非商业免费；商用需 Remotion 授权，本项目保持个人非商业。镜像 `roxy-remotion:4.0.539` 由 `infra/remotion/Dockerfile` 构建。
 

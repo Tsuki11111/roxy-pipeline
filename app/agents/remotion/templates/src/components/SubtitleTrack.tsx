@@ -1,5 +1,5 @@
 import {useCurrentFrame, useVideoConfig} from 'remotion';
-import {FONT_FAMILY} from '../theme';
+import {CLAY, FONT_FAMILY, INK, PAPER_LIGHT} from '../theme';
 
 export interface SubtitleChunk {
   text: string;
@@ -31,12 +31,15 @@ export const SubtitleTrack = ({chunks, bottom = 40}: Props) => {
         bottom,
         transform: 'translateX(-50%)',
         maxWidth: 1500,
-        padding: '14px 30px',
-        background: 'rgba(30,30,35,0.88)',
-        color: '#ffffff',
-        borderRadius: 14,
-        fontSize: 38,
-        lineHeight: 1.4,
+        padding: '13px 28px 13px 30px',
+        background: 'rgba(250,246,237,0.94)',
+        color: INK,
+        border: '1px solid rgba(35,32,27,0.24)',
+        borderLeft: `4px solid ${CLAY}`,
+        borderRadius: '5px 13px 7px 11px',
+        boxShadow: '5px 7px 0 rgba(35,32,27,0.06)',
+        fontSize: 34,
+        lineHeight: 1.45,
         textAlign: 'center',
         whiteSpace: 'nowrap',
         fontFamily: FONT_FAMILY,

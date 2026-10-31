@@ -99,9 +99,9 @@ class WrongVariantLLM:
             "schema_version": "1",
             "component_name": "Shot_0001",
             "code": (
-                "import {TerminalCard} from '../components/TerminalCard';\n"
+                "import {PaperCard} from '../components/PaperCard';\n"
                 "export const Shot_0001 = () => "
-                "<TerminalCard variant=\"terminal\" tone=\"navy\" text=\"蓝光\" />;\n"
+                "<PaperCard variant=\"note\" tone=\"cream\" text=\"蓝光\" />;\n"
             ),
             "summary": "wrong style",
         }
@@ -159,7 +159,7 @@ def test_generate_one_rejects_wrong_card_style():
         "previous_tail": "",
         "narration": "蓝光波长短，容易被散射到四面八方。",
         "card": {"text": "蓝光波长短"},
-        "card_style": {"variant": "editor", "tone": "purple", "transition": "zoom"},
+        "card_style": {"variant": "quote", "tone": "sand", "transition": "zoom"},
     }
     with pytest.raises(RemotionPolicyError):
         asyncio.run(

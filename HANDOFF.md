@@ -78,7 +78,7 @@
 - 最终视频输出：渲染完成后复制到 `output/YYYYMMDD-HHMMSS_<episode_id前8位>/episode.mp4`，同目录写 `metadata.json`；`episode.output_path` 指向该路径，`episode.output_meta` 记录本地路径与 MinIO URI。MinIO 上传由 `MINIO_UPLOAD_ENABLED` 控制，VM 可设 `MINIO_REQUIRED=true` 强制成功。
 - M6 Remotion 代码生成 Agent 已跑通（2026-10-30）：`app/agents/remotion/` 每镜头调用一次 DeepSeek 生成自由 TSX，Python 生成 `Root.tsx`/Composition（ID 用 `Shot-0001`，组件名 `Shot_0001`）；代码在 Docker 沙箱 `tsc --noEmit` + `remotion compositions` 校验，失败带编译错误重试一次；全部镜头 READY 才 `remotion_meta.enabled=true`，`POST /actions/rerender` 自动切 Remotion，失败按 `REMOTION_FALLBACK_PLAYWRIGHT` 回退 Playwright。
 - Remotion 沙箱镜像 `roxy-remotion:4.0.539` 由 `infra/remotion/Dockerfile` 构建；运行参数 `--network none --read-only --user 10001 --cpus 2 -m 3g --pids-limit 256`，`/tmp` 与 `/app/node_modules/.cache` 挂 tmpfs。
-- Remotion 实测：11 镜头整期真实 DeepSeek 生成 + Docker 渲染 + ffmpeg `-c copy` 拼接 + QC 全通过（最终 `health=OK`，0 warning）。首版因生成代码“浅底浅字”被 QC 报 4 条对比度 warning；补 Skill 配色约束并重生成后消失。最终改为 TerminalCard 二次元终端/代码块卡 + 纯演示镜头混排。生成代码在 `tmp/remotion/<episode_id>/`，不进仓库。
+- Remotion 实测：11 镜头整期真实 DeepSeek 生成 + Docker 渲染 + ffmpeg `-c copy` 拼接 + QC 全通过（最终 `health=OK`，0 warning）。首版因生成代码“浅底浅字”被 QC 报 4 条对比度 warning；补 Skill 配色约束并重生成后消失。最终改为 Claude 暖纸 `PaperCard` + 纯演示镜头混排。生成代码在 `tmp/remotion/<episode_id>/`，不进仓库。
 - Remotion 生成质量约束：单个镜头代码 ≤7000 字符/180 行；浅色纸纹背景必须用深色字，白字只能放在 alpha ≥0.75 的深色实底上；有 `character` 时必须画 Roxy。早期不写这些约束时会出现“浅底浅字”与整镜头无角色。
 - Remotion 缓存键：`shot_render_hash` 包含 renderer、Remotion 版本、镜像 digest、该镜头 code hash；代码或镜像变化只失效受影响镜头。
 - Remotion 字幕（2026-10-30 补）：Python 生成 Root 时给每个 Composition 包一层 `SubtitleTrack`，按 `build_timeline` 的句级 chunks（转成镜头内相对时间）显示底部字幕；生成代码不画字幕。`renderer_version=m6.1-subtitles`，字幕层变化会让镜头缓存失效。
@@ -431,10 +431,11 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - Remotion 为默认镜头渲染器；Playwright 保留为回退。Remotion 输出经 ffmpeg 统一为 1920×1080/25fps/H.264/yuv420p/CRF18，保证 `-c copy` 拼接。
 - Remotion 代码只存在于 `tmp/remotion/<episode_id>/`；`remotion_shot` 表记录 code_hash/status/input_hash。
 - 生成代码约束：单镜头 ≤7000 字符；浅底必须深字，白字必须有深色实底；有 `character` 必须出现 Roxy；不能用随机/时间/CSS 动画。
-- 布局约束：Remotion 不做关键词标签；画面文字用 `TerminalCard` 二次元终端/代码块卡（variant：terminal/editor/hud/console/snippet/chat；tone：navy/purple/mint/rose；transition：slide/zoom/flip/drop/reveal/push）。Python 按镜头序号排期：约 1/3 镜头 `card_style=null` 做纯演示，其余给卡并指定样式/动效；切换位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°。
+- 布局约束：Remotion 不做关键词标签；画面文字用 `PaperCard` Claude 暖纸卡（variant：note/quote/index/letter/sticky/specimen；tone：cream/sand/peach/sage；transition：slide/zoom/flip/drop/reveal/push）。Python 按镜头序号排期：约 1/3 镜头 `card_style=null` 做纯演示，其余给卡并指定样式/动效；切换位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°。
+- 背景与字幕：`Stage` 统一渲染 Claude 暖纸背景（纸纹 + 底部浅阴影 + 手绘星），不再使用旧纸纹/木地板资产；`SubtitleTrack` 改为暖纸底 + 墨字 + 陶土短线。
 - 改动 `app/agents/remotion/templates/` 后必须重建镜像 `roxy-remotion:4.0.539`，否则沙箱仍用旧组件。
 - Remotion 字幕由 Root 里的 `SubtitleTrack` 统一叠加（bottom 40，样式同旧 Playwright）；生成代码不画字幕，y 940–1080 的底部区留给字幕。
-- 画面长段文本由生成代码的 `TerminalCard` 组件渲染（终端/代码块风），Python 只负责底部字幕 `SubtitleTrack`。文本长度和分段由模型决定，优先直接用 `narration`/`card.text` 的长段。
+- 画面长段文本由生成代码的 `PaperCard` 组件渲染（Claude 暖纸/墨字/陶土），Python 只负责底部字幕 `SubtitleTrack`。文本长度和分段由模型决定，优先直接用 `narration`/`card.text` 的长段。
 - Docker 不可用或镜像缺失时 Remotion 生成失败，渲染回退 Playwright（`REMOTION_FALLBACK_PLAYWRIGHT=true`）。
 
 ### 4.6 资产生产分工
@@ -515,11 +516,20 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 - `Card` 同时接受流水线类型（`chat_bubble`/`pure_text`）和原型别名（`chat`/`pure`）；chat 气泡渲染 `body` 以支持 `lines`。
 - 部分镜头生成成功时 `remotion_meta.enabled` 必须保持 `false`，否则 Root 缺 Composition 会渲染失败。
 - 模型默认会写浅色字：必须在 Skill 里明确“浅底深字 / 白字必须有深色实底”，否则会出现 QC 报的文字不可读。
-- 旧 `Card` 是绝对定位、`zIndex=4` 的 820px 白块，模型把图表画到同一区域会被整块盖住。现已禁止 Remotion 使用 `Card`/`Label`/`Caption`/`Board`，画面文字统一改用 `TerminalCard`；Skill/Prompt 都写明“任何动画元素不得与文字卡重叠”。
+- 旧 `Card` 是绝对定位、`zIndex=4` 的 820px 白块，模型把图表画到同一区域会被整块盖住。现已禁止 Remotion 使用 `TerminalCard`/`Card`/`Label`/`Caption`/`Board`，画面文字统一改用 `PaperCard`；Skill/Prompt 都写明“任何动画元素不得与文字卡重叠”。
 
 ---
 
 ## 6. 历史记录
+
+### 2026-10-31 · Claude 纸卡与暖纸舞台
+
+- 用户确认 Claude 暖纸风格，要求除动画外全部替换：卡片、背景、字幕都改成暖纸/墨字/陶土，删掉终端风。
+- 新增 `PaperCard`：6 种 variant（note/quote/index/letter/sticky/specimen）× 4 种 tone（cream/sand/peach/sage）；暖纸、墨字、宋体、陶土/鼠尾草少量强调、手绘星/下划线。
+- `Stage` 改为 Claude 暖纸背景（纸纹 + 底部浅阴影 + 手绘星），不再使用纸纹/木地板资产；`SubtitleTrack` 改为暖纸底 + 墨字 + 陶土短线。
+- 删除 `TerminalCard`/`Card`/`Label`/`Caption`/`Board` 模板；生成服务检测到旧组件或 `card_style` 不符会带反馈重试。
+- Python 卡片排期保持不变：`CARD_PATTERN=[True,True,False,True,False]` 约 1/3 镜头纯演示；variant/tone/transition 轮换。
+- 实测：7 个纸卡镜头 + 4 个纯演示，覆盖 6 种 variant、4 种 tone；QC `PASS`，后端 87 条测试通过。
 
 ### 2026-10-30 · 二次元终端卡与多样切换
 

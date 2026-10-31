@@ -2,13 +2,13 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | v1.17 |
+| 文档版本 | v1.18 |
 | 文档状态 | 初稿，核心方案已确认 |
 | 日期 | 2026-10-30 |
 | 关联文档 | [需求分析文档](AI科普视频Agent系统需求分析文档.md)；[架构决策记录](decisions-architecture.md) |
 | 已确认约束 | 现有 Ubuntu VM 先跑；LLM 国内为主；TTS 用本地 IndexTTS2，不做付费云 TTS；视觉质检统一用 `deepseek-flash` 多模态；`deepseek-flash` 文本主模型 + 火山方舟备选/图像 |
 | 推荐方案 | 方案 A：Python 模块化单体 + 进程级拆分 + Celery；AI 子图用 LangGraph |
-| 变更说明 | v1.17：Remotion 卡片改为 `TerminalCard` 二次元终端/代码块（terminal/editor/hud/console/snippet/chat × navy/purple/mint/rose），Python 按镜头排期约 1/3 纯演示、其余指定样式与切换配方（slide/zoom/flip/drop/reveal/push）；v1.16：Remotion 改为长段 `Board` 板书卡 + `<Sequence>` 演示分段，卡片切换使用大幅位移/缩放/旋转；禁用 `Card`/`Label`/`Caption` 作为画面文字；v1.15：新增 M6 Remotion 逐镜头代码生成 Agent，Remotion 取代 Playwright 成为默认镜头渲染器（Playwright 保留回退），新增 Docker 沙箱、镜头级 code hash 与 `remotion_shot` 表；v1.14：编辑器新增独立贴图层、图片上传与 Seedream 生成（DeepSeek 写提示词）；v1.13：新增分镜时间线编辑器、成片视频流与视觉编辑重渲染接口，`PATCH /shots` 支持卡片文案与逐镜头背景；v1.12：默认改为句级对齐（`ALIGN_LEVEL=sentence`），字幕整句显示，字级 wav2vec2 对齐改为可选；v1.11：移除按主题生成脚本（`script_graph` / topic 模块 / confirm-topic / retry-script / regenerate-script），脚本唯一来源改为文章导入 + 可选润色；新增取消/删除期接口；v1.10：新增文稿生活化润色 Agent 与 Web 控制台；v1.9：新增半身反应镜头与角色滑入、输出时间戳目录与 MinIO 上传；v1.8：新增 Asset Agent（文本→无文字演示素材，reuse_key 复用，暂不引入 RAG）；v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
+| 变更说明 | v1.18：Remotion 卡片、背景、字幕统一改为 Claude 暖纸风格（`PaperCard` 六种纸卡 × 四种纸色，暖纸舞台，纸墨字幕），删除终端卡/旧卡片组件；v1.17：Remotion 卡片改为 `TerminalCard` 二次元终端/代码块（terminal/editor/hud/console/snippet/chat × navy/purple/mint/rose），Python 按镜头排期约 1/3 纯演示、其余指定样式与切换配方（slide/zoom/flip/drop/reveal/push）；v1.16：Remotion 改为长段 `Board` 板书卡 + `<Sequence>` 演示分段，卡片切换使用大幅位移/缩放/旋转；禁用 `Card`/`Label`/`Caption` 作为画面文字；v1.15：新增 M6 Remotion 逐镜头代码生成 Agent，Remotion 取代 Playwright 成为默认镜头渲染器（Playwright 保留回退），新增 Docker 沙箱、镜头级 code hash 与 `remotion_shot` 表；v1.14：编辑器新增独立贴图层、图片上传与 Seedream 生成（DeepSeek 写提示词）；v1.13：新增分镜时间线编辑器、成片视频流与视觉编辑重渲染接口，`PATCH /shots` 支持卡片文案与逐镜头背景；v1.12：默认改为句级对齐（`ALIGN_LEVEL=sentence`），字幕整句显示，字级 wav2vec2 对齐改为可选；v1.11：移除按主题生成脚本（`script_graph` / topic 模块 / confirm-topic / retry-script / regenerate-script），脚本唯一来源改为文章导入 + 可选润色；新增取消/删除期接口；v1.10：新增文稿生活化润色 Agent 与 Web 控制台；v1.9：新增半身反应镜头与角色滑入、输出时间戳目录与 MinIO 上传；v1.8：新增 Asset Agent（文本→无文字演示素材，reuse_key 复用，暂不引入 RAG）；v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
 
 > 本文档回答“用什么做、怎么拆、怎么部署、接口长什么样”。需求编号（F-xx / N-xx / A-xx）沿用需求分析文档，不重复展开。
 
@@ -747,11 +747,12 @@ M6 起，镜头画面默认由 Remotion 渲染；§10.3 的 Playwright 逐帧链
 
 - 单镜头代码 ≤7000 字符/180 行，避免 `max_tokens` 截断。
 - 浅色纸纹背景必须深色字；白字只能放在 alpha ≥0.75 的深色实底上。
-- Remotion 不做关键词标签；画面文字用 `TerminalCard` 二次元终端/代码块卡（6 variant × 4 tone），Python 按镜头排期约 1/3 纯演示、其余指定 variant/tone/transition；切换配方 slide/zoom/flip/drop/reveal/push 轮换。
+- Remotion 不做关键词标签；画面文字用 `PaperCard` Claude 暖纸卡（6 variant × 4 tone），Python 按镜头排期约 1/3 纯演示、其余指定 variant/tone/transition；切换配方 slide/zoom/flip/drop/reveal/push 轮换。
+- 背景由 `Stage` 统一渲染暖纸底色 + 纸纹 + 底部浅阴影 + 手绘星；字幕由 `SubtitleTrack` 渲染暖纸底、墨字、陶土短线。
 - 卡片切换用大幅运动：位移 ≥240px、缩放 0.72–0.82→1、旋转 ±4°–8°，spring 允许过冲；文本卡与演示段错开 3–8 帧。
 - 视觉风格必须服务内容：先判断主题再选色调、材质、线条和图形语言；同一期保持统一，禁止与内容无关的赛博霓虹/故障/机器人装饰。
 - 字幕由 Python 生成 `Root.tsx` 时统一叠加 `SubtitleTrack`：句级 chunks 转为镜头内相对时间，样式沿用旧 Playwright 字幕条；生成代码不画字幕。
-- 画面长段文本由生成代码的 `TerminalCard` 组件渲染，Python 只加载底部字幕；文本长度和分段由模型决定，优先直接用 `narration`/`card.text` 的长段。
+- 画面长段文本由生成代码的 `PaperCard` 组件渲染，Python 只加载底部字幕；文本长度和分段由模型决定，优先直接用 `narration`/`card.text` 的长段。
 - 输入有 `character` 时必须出现 Roxy。
 - 禁止随机、时间、CSS 动画与外部资源，保证确定性。
 

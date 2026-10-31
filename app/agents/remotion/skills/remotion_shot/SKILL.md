@@ -31,12 +31,12 @@ description: 为单个分镜生成可编译的 Remotion/React 镜头组件（自
 - 1920×1080、25fps；`durationInFrames` 已由 Python 注入 Composition，组件只按 `useCurrentFrame()` 渲染。
 - 可用依赖：`react`、`remotion`、`@remotion/*`、`../components/*`、`../theme`。
 - 固定组件库（可选）：
-  - `Stage`：背景、地板、children；支持 `bg`/`floor` props。
+  - `Stage`：Claude 暖纸背景（纸纹、底部浅阴影、手绘星）；直接包 children，不要传 `bg`/`floor`。
   - `Character`：立绘；`src` 用资产清单里的 `staticFile` 名，支持 side/height/bottom/offsetX/opacity/blur。
-  - `TerminalCard`：**二次元终端/代码块卡**；`variant` 支持 `terminal`/`editor`/`hud`/`console`/`snippet`/`chat`，`tone` 支持 `navy`/`purple`/`mint`/`rose`；支持 `text`/`lines`/`title`/`filename`、`left`/`top`/`width`/`minHeight`、`opacity`/`scale`/`translateX`/`translateY`/`rotate`/`rotateY`/`reveal`、`accent`、`cursor`。
+  - `PaperCard`：**Claude 纸卡**；`variant` 支持 `note`/`quote`/`index`/`letter`/`sticky`/`specimen`，`tone` 支持 `cream`/`sand`/`peach`/`sage`；支持 `text`/`lines`/`title`/`meta`/`mark`、`left`/`top`/`width`/`minHeight`、`opacity`/`scale`/`translateX`/`translateY`/`rotate`/`rotateY`/`reveal`、`accent`。
   - `Overlay`、`Progress`、`AgentLoop`、`ToolChips`、`RobotIcon`。
 - **卡片不是每个镜头都必须有**：纯图形/演示镜头可以完全不放卡；按内容需要决定。
-- **不要使用 `Label`/`Caption`/`Card`/`Board`**：画面文字统一用 `TerminalCard`，不要再用旧白卡、关键词标签或黑板卡。
+- **不要使用 `TerminalCard`/`Label`/`Caption`/`Card`/`Board`**：画面文字统一用 `PaperCard`；终端卡、旧白卡、关键词标签、黑板卡全部删掉。
 - **不要自己画底部字幕**：Python 会在 Root 里统一叠加 `SubtitleTrack`（bottom 40）。生成代码不要 import `Subtitle`，也不要在 y > 940 放文字或图表。
 - 资产只能使用输入 JSON 的 `assets` 列表中的 `static_file`，写法：`staticFile("assets/xxx.png")`。不要引用 `public/` 以外的路径，不要外链 URL。
 - 不能新增 npm 依赖；不能使用 `node:*`、`fs`、`child_process`、`http`、`https`、`net`、`eval`、`Function`、动态 `import()` 或 `process`。
@@ -59,19 +59,24 @@ description: 为单个分镜生成可编译的 Remotion/React 镜头组件（自
 
 ## 卡片风格（强约束）
 
-`TerminalCard` 有 6 种样式，按内容轮换，不要整期只用一种：
+`PaperCard` 有 6 种纸卡样式，按内容轮换，不要整期只用一种：
 
-- `terminal`：mac 三色圆点 + `roxy@terminal` 标题 + 命令行/输出；适合“执行、运行、结论”。
-- `editor`：文件名 tab + 行号 + TSX 标签；适合“代码、步骤、配置”。
-- `hud`：二次元全息面板，切角边框 + 状态字 + 星形装饰；适合“扫描、分析、数据”。
-- `console`：`›` 前缀 + LIVE 标记 + 日志流；适合“过程、事件、连续输出”。
-- `snippet`：紧凑代码块 + 文件名 + copy 标签；适合“短结论、关键一行”。
-- `chat`：AI 头像 + 输出行；适合“对话、解释、自问自答”。
+- `note`：暖纸解释卡，细墨线边框 + 手绘星；适合一段完整解释。
+- `quote`：稍深的纸色 + 大号宋体引号；适合一句结论、引用或自问自答。
+- `index`：顶部陶土短线 + 横向行线；适合步骤、清单、两三条要点。
+- `letter`：信纸版式，左侧陶土边线和宽留白；适合叙述、回忆、较长段落。
+- `sticky`：浅桃色便签，轻阴影；适合一句提醒或旁注。
+- `specimen`：样本卡，上下细线与标题/字数；适合“概念样本、定义、对照”。
 
-- 输入 JSON 的 `card_style` 由 Python 轮换指定：为 `null` 时**禁止使用 TerminalCard**，这一镜必须做纯演示；非 null 时给出 `variant`/`tone`/`transition`，用卡就必须严格遵守，不用卡也可以。
-- 同一期至少用 **3 种 variant**、**2 种 tone**（`navy`/`purple`/`mint`/`rose`）；卡片分布由 Python 排期，不要给每个镜头都塞卡。
-- 二次元终端画风：深色半透明玻璃、发光细边、圆角、细网格/扫描线、少量星星/贴纸；不要纯黑硬边或写实 UI。
-- 卡片色调服务内容：天空/光学科普用蓝紫/薄荷，计算机主题用紫/青，避免整期只有一种颜色。
+- 输入 JSON 的 `card_style` 由 Python 轮换指定：为 `null` 时**禁止使用 PaperCard**，这一镜必须做纯演示；非 null 时给出 `variant`/`tone`/`transition`，用卡就必须严格遵守，不用卡也可以。
+- 同一期至少用 **3 种 variant**、**2 种 tone**（`cream`/`sand`/`peach`/`sage`）；卡片分布由 Python 排期，不要给每个镜头都塞卡。
+- Claude 纸卡语言：暖纸、墨字、陶土强调、宋体标题、细线、手绘星/下划线；不要深色玻璃、霓虹、终端 UI、故障扫描线。
+- 纸卡可以轻微旋转（-1.5°–1.5°）和错位投影，但不要每张都贴同一种胶带或贴纸。
+
+## 背景与字幕
+
+- 背景由 `Stage` 统一渲染：暖纸底色 + 细纸纹 + 底部一条浅阴影和手绘星；不要传 `bg`/`floor`，不要再用木地板或深色舞台。
+- 底部字幕由 `SubtitleTrack` 统一叠加：暖纸底、墨字、左侧陶土短线；生成代码不画字幕。
 
 ## 切换动效（强约束）
 
@@ -95,26 +100,24 @@ description: 为单个分镜生成可编译的 Remotion/React 镜头组件（自
 - 超过 90 字拆成两张卡或两段场景；同一时刻仍只显示一张卡。
 - **不得扩写原文**：可以拆句、换行、调序，但不要新增原文没有的事实、数字或结论；原句短就保持短。
 - 卡片是文字的唯一载体；不要再加 `Label`/`Caption`/自绘关键词标签。
-- `editor` 用行号，`console` 用 `›`，`chat` 用 `#`，`hud` 用状态标题；让文字看起来像终端输出而不是海报文案。
-
-
+- `note`/`letter` 用长段落；`index` 用 2–3 条短行；`quote` 用一句结论；`specimen` 用“定义 + 一句解释”；语气像笔记，不是海报文案。
 
 ## 风格与内容（强约束）
 
 - **先读标题、主题、摘要和大纲，再决定演示画面的视觉语言**：色调、材质、线条、图形风格都要服务内容。
-- 卡片统一使用二次元终端/代码块语言（`TerminalCard`），但演示图形仍要内容准确：讲天空就画天空/光谱，讲 Agent 就画节点/终端/流程。
-- 同一期保持同一套“终端 UI 家族”：同一组圆角、发光边、网格/扫描线、字体；variant/tone 可以变化，但不要突然变成写实照片或手绘黑板。
-- 终端卡的霓虹/发光只用于卡片与状态装饰；不要把演示主体做成与内容无关的赛博城市、故障条纹或机器人。
-- 背景、贴图、角色必须与当期主题匹配；资产清单里有多个背景时选语义最合适的那张，不要只按颜色挑。
+- 卡片统一使用 Claude 纸卡语言（`PaperCard`：暖纸、墨字、陶土强调、宋体标题、细线、手绘星）；演示图形仍要内容准确：讲天空就画天空/光谱，讲 Agent 就画节点/流程。
+- 同一期保持同一套“纸 / 墨 / 陶土”家族：同一组纸色、边框、圆角、字体；variant/tone 可以变化，但不要突然变成深色终端、霓虹或写实照片。
+- 手绘星、下划线、箭头只做少量点缀，不要堆满画面。
+- 背景由 `Stage` 统一提供暖纸底色；不要再用 Wood/暗色舞台/终端网格。
 - 图形优先做“抽象示意”（箭头、节点、光谱、几何），不要伪造照片级细节或与内容不符的真实场景。
 
 ## 配色与对比度（强约束）
 
-- 背景默认是浅色纸纹（`PAPER` 约 `#f7f3ea`），正文色必须用 `INK`（深灰）或 `rgba(42,42,51,0.85)`。
-- 白字/浅色字只能放在 **alpha ≥ 0.75 的深色实底**上（如 `#141824`、`rgba(20,24,36,0.88)`）；禁止把浅色文字直接铺在浅色背景或浅蓝半透明面板上。
-- 卡片文字、坐标轴、注释同样适用：深色卡上用浅色字，浅色底上用深色字；浅底 + 浅字一律视为错误。
-- 自绘面板二选一：浅色实底 + 深色字，或深色实底 + 浅色字；不要用低透明度面板托浅色字。
-- 解释性文字优先放进 `TerminalCard`，不要手写大段浅色文字。
+- 背景是暖纸（`PAPER` 约 `#f3eee3`），正文用墨色 `INK`（`#23201b`）或 `INK_SOFT`（`#5f574b`）。
+- 浅色纸卡上用深墨字；禁止在浅纸上用白字/浅色字。深色仅用于少量文字和线条，不做大块深色面板。
+- 强调色只用陶土 `#bf5b3b` 和鼠尾草 `#77856f`，面积要小：下划线、短线、星形、单个词。
+- 卡片文字、坐标轴、注释同样适用：纸底墨字，保持足够对比度。
+- 解释性文字优先放进 `PaperCard`，不要手写大段浅色文字。
 
 ## 角色
 
@@ -125,8 +128,8 @@ description: 为单个分镜生成可编译的 Remotion/React 镜头组件（自
 
 1. 这是竖屏短视频里的一个镜头，所有元素必须在 1920×1080 安全区内；底部 y 940–1080 是字幕区，不要放内容。
 2. 优先用画面表达输入里的概念：时间线、流程图、终端输出、浏览器步骤、工具 chip、角色动作，不要只堆文字。
-3. 角色图、贴图和背景必须来自 `assets`；没有合适素材时用 React/SVG 画图形，不要引用外部图片。
-4. 画面文字用 `TerminalCard` 承载长段文本；卡片按需，不是每个镜头都要有。
+3. 角色图和贴图必须来自 `assets`；背景由 `Stage` 统一提供，不要传 bg/floor；没有合适素材时用 React/SVG 画图形，不要引用外部图片。
+4. 画面文字用 `PaperCard` 承载长段文本；卡片按需，不是每个镜头都要有。
 5. 使用 `spring`/`interpolate` 做自然入场；卡片切换幅度要大（位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°），并轮换不同切换配方。
 6. 单镜头没有音频，不要尝试播放音频。
 
@@ -136,7 +139,7 @@ description: 为单个分镜生成可编译的 Remotion/React 镜头组件（自
 import {Sequence, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
 import {Stage} from '../components/Stage';
 import {Character} from '../components/Character';
-import {TerminalCard} from '../components/TerminalCard';
+import {PaperCard} from '../components/PaperCard';
 
 const CardScene = ({duration}: {duration: number}) => {
   const frame = useCurrentFrame();
@@ -148,19 +151,19 @@ const CardScene = ({duration}: {duration: number}) => {
     extrapolateRight: 'clamp',
   });
   return (
-    <TerminalCard
-      variant="editor"
-      tone="purple"
-      filename="why-blue.tsx"
+    <PaperCard
+      variant="note"
+      tone="cream"
+      title="为什么是蓝的？"
       left={140}
       top={150}
       width={1180}
-      lines={['太阳光看着是白的，', '其实是由七种颜色的光混合而成的。']}
+      text="太阳光看着是白的，其实是由七种颜色的光混合而成的。"
+      mark="七种颜色"
       opacity={1 - exit}
       translateY={(1 - drop) * -520 - exit * 160}
       scale={0.7 + drop * 0.3}
       rotate={(1 - drop) * -5}
-      cursor={false}
     />
   );
 };
@@ -185,7 +188,7 @@ export const Shot_0001 = () => {
 };
 ```
 
-其他卡片镜头换用 `terminal`/`hud`/`console`/`snippet`/`chat`，并换一种切换配方；不要让整期都用同一种卡和同一种滑入。
+其他卡片镜头换用 `note`/`quote`/`index`/`letter`/`sticky`/`specimen`，并换一种切换配方；不要让整期都用同一种纸卡和同一种滑入。
 
 ## 常见错误
 
@@ -193,11 +196,12 @@ export const Shot_0001 = () => {
 - 导出了错误的组件名 → Root 找不到组件。
 - 使用 CSS 动画/`Date.now`/随机数 → 渲染不可复现。
 - 每个镜头都放卡片 → 纯演示镜头可以没有卡；一期至少 1/3 镜头不放卡。
-- 整期只用 `terminal` 一种卡 → 至少 3 种 variant、2 种 tone，连续卡片不重复。
+- 整期只用 `note` 一种纸卡 → 至少 3 种 variant、2 种 tone，连续卡片不重复。
+- 使用深色终端/霓虹/玻璃卡 → 这一版统一 Claude 暖纸卡，用 `PaperCard`。
 - 所有卡片都用同一种横向滑入 → 至少 3 种切换配方（冲入/缩放/翻转/坠落/揭示/上推）。
 - 卡片切换位移 <300px、缩放变化 <0.3、没有旋转 → 动效幅度太小。
-- 把长段台词缩成关键词 → 保留长段，用 `TerminalCard` 承载。
+- 把长段台词缩成关键词 → 保留长段，用 `PaperCard` 承载。
 - 卡片遮挡角色脸/手或压到 y 940–1080 字幕区 → 调整位置或分段。
-- 使用 `Card`/`Label`/`Caption`/`Board` 做画面文字 → 统一改用 `TerminalCard`；旧组件会被生成检查拦下。
+- 使用 `TerminalCard`/`Card`/`Label`/`Caption`/`Board` 做画面文字 → 统一改用 `PaperCard`；旧组件会被生成检查拦下。
 - 把整段台词塞进一张卡导致溢出 → 拆成 2–3 行或两张卡，不要删成关键词。
 - 引入未安装的包 → 编译失败。
