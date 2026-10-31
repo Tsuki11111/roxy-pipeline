@@ -139,6 +139,7 @@ async def test_voice_episode_auto_queues_render(
     monkeypatch.setattr(settings, "voice_pause_ms", 100)
     monkeypatch.setattr(settings, "voice_auto_align", False)
     monkeypatch.setattr(settings, "voice_auto_render", True)
+    monkeypatch.setattr(settings, "remotion_auto_codegen", False)
 
     @asynccontextmanager
     async def fake_task_session():
@@ -242,6 +243,7 @@ async def test_align_episode_writes_char_timings(
     monkeypatch.setattr(settings, "voice_pause_ms", 100)
     monkeypatch.setattr(settings, "voice_auto_align", False)
     monkeypatch.setattr(settings, "voice_auto_render", False)
+    monkeypatch.setattr(settings, "remotion_auto_codegen", False)
 
     @asynccontextmanager
     async def fake_task_session():

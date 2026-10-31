@@ -2,13 +2,13 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | v1.18 |
+| 文档版本 | v1.20 |
 | 文档状态 | 初稿，核心方案已确认 |
-| 日期 | 2026-10-30 |
+| 日期 | 2026-10-31 |
 | 关联文档 | [需求分析文档](AI科普视频Agent系统需求分析文档.md)；[架构决策记录](decisions-architecture.md) |
 | 已确认约束 | 现有 Ubuntu VM 先跑；LLM 国内为主；TTS 用本地 IndexTTS2，不做付费云 TTS；视觉质检统一用 `deepseek-flash` 多模态；`deepseek-flash` 文本主模型 + 火山方舟备选/图像 |
 | 推荐方案 | 方案 A：Python 模块化单体 + 进程级拆分 + Celery；AI 子图用 LangGraph |
-| 变更说明 | v1.18：Remotion 卡片、背景、字幕统一改为 Claude 暖纸风格（`PaperCard` 六种纸卡 × 四种纸色，暖纸舞台，纸墨字幕），删除终端卡/旧卡片组件；v1.17：Remotion 卡片改为 `TerminalCard` 二次元终端/代码块（terminal/editor/hud/console/snippet/chat × navy/purple/mint/rose），Python 按镜头排期约 1/3 纯演示、其余指定样式与切换配方（slide/zoom/flip/drop/reveal/push）；v1.16：Remotion 改为长段 `Board` 板书卡 + `<Sequence>` 演示分段，卡片切换使用大幅位移/缩放/旋转；禁用 `Card`/`Label`/`Caption` 作为画面文字；v1.15：新增 M6 Remotion 逐镜头代码生成 Agent，Remotion 取代 Playwright 成为默认镜头渲染器（Playwright 保留回退），新增 Docker 沙箱、镜头级 code hash 与 `remotion_shot` 表；v1.14：编辑器新增独立贴图层、图片上传与 Seedream 生成（DeepSeek 写提示词）；v1.13：新增分镜时间线编辑器、成片视频流与视觉编辑重渲染接口，`PATCH /shots` 支持卡片文案与逐镜头背景；v1.12：默认改为句级对齐（`ALIGN_LEVEL=sentence`），字幕整句显示，字级 wav2vec2 对齐改为可选；v1.11：移除按主题生成脚本（`script_graph` / topic 模块 / confirm-topic / retry-script / regenerate-script），脚本唯一来源改为文章导入 + 可选润色；新增取消/删除期接口；v1.10：新增文稿生活化润色 Agent 与 Web 控制台；v1.9：新增半身反应镜头与角色滑入、输出时间戳目录与 MinIO 上传；v1.8：新增 Asset Agent（文本→无文字演示素材，reuse_key 复用，暂不引入 RAG）；v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
+| 变更说明 | v1.20：Remotion 成为唯一生产渲染器（`REMOTION_ONLY=true`），Playwright 仅保留测试/历史；新期配音/对齐后自动 codegen 再渲染，codegen 失败不再回退；v1.19：新期在配音/对齐完成后自动触发 Remotion codegen 再渲染（`REMOTION_AUTO_CODEGEN`），失败回退 Playwright；脚本单句上限 25→50 字；v1.18：Remotion 卡片、背景、字幕统一改为 Claude 暖纸风格（`PaperCard` 六种纸卡 × 四种纸色，暖纸舞台，纸墨字幕），删除终端卡/旧卡片组件；v1.17：Remotion 卡片改为 `TerminalCard` 二次元终端/代码块（terminal/editor/hud/console/snippet/chat × navy/purple/mint/rose），Python 按镜头排期约 1/3 纯演示、其余指定样式与切换配方（slide/zoom/flip/drop/reveal/push）；v1.16：Remotion 改为长段 `Board` 板书卡 + `<Sequence>` 演示分段，卡片切换使用大幅位移/缩放/旋转；禁用 `Card`/`Label`/`Caption` 作为画面文字；v1.15：新增 M6 Remotion 逐镜头代码生成 Agent，Remotion 取代 Playwright 成为默认镜头渲染器（Playwright 保留回退），新增 Docker 沙箱、镜头级 code hash 与 `remotion_shot` 表；v1.14：编辑器新增独立贴图层、图片上传与 Seedream 生成（DeepSeek 写提示词）；v1.13：新增分镜时间线编辑器、成片视频流与视觉编辑重渲染接口，`PATCH /shots` 支持卡片文案与逐镜头背景；v1.12：默认改为句级对齐（`ALIGN_LEVEL=sentence`），字幕整句显示，字级 wav2vec2 对齐改为可选；v1.11：移除按主题生成脚本（`script_graph` / topic 模块 / confirm-topic / retry-script / regenerate-script），脚本唯一来源改为文章导入 + 可选润色；新增取消/删除期接口；v1.10：新增文稿生活化润色 Agent 与 Web 控制台；v1.9：新增半身反应镜头与角色滑入、输出时间戳目录与 MinIO 上传；v1.8：新增 Asset Agent（文本→无文字演示素材，reuse_key 复用，暂不引入 RAG）；v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
 
 > 本文档回答“用什么做、怎么拆、怎么部署、接口长什么样”。需求编号（F-xx / N-xx / A-xx）沿用需求分析文档，不重复展开。
 
@@ -23,7 +23,7 @@
 | 工作流 | PostgreSQL 状态机 + Celery | 需求的状态机、断点续跑、局部重跑用“数据库状态 + 幂等节点 + 内容寻址缓存”即可；Temporal 作为规模化备选 |
 | AI 子图编排 | LangGraph + PostgreSQL checkpointer | 分镜/QC 的循环、条件分支和局部中断用图表达；脚本导入/润色是单次结构化调用，媒体流水线仍由 DB 状态机 + Celery 负责 |
 | 素材生成 | 火山方舟 Seedream（可替换） | 原创角色/背景/装饰用 AI 生成候选，人工筛选后固定资产化；含文字卡片仍用 HTML |
-| 渲染 | Remotion（每镜头 LLM 生成 TSX，Docker 沙箱）+ Playwright 回退 + ffmpeg | 镜头动画由代码生成，表现力更强；Playwright 保留旧 spec 兼容与失败回退 |
+| 渲染 | Remotion（每镜头 LLM 生成 TSX，Docker 沙箱）+ ffmpeg | 唯一生产渲染器；Playwright 仅保留测试/历史 |
 | 存储 | PostgreSQL + MinIO | 元数据进 DB，大文件走 S3 兼容对象存储；本地文件系统只用于测试 |
 | 前端 | React + Vite + Ant Design | 内部运营/审片后台，表格、表单、编辑器密集，AntD 最省事 |
 | 部署 | Docker Compose 单机 | 现有 VM 可直接跑；渲染 worker 后续可横向加机器 |
@@ -43,7 +43,7 @@
 | 需求事实 | 架构含义 |
 |---|---|
 | 单期 8–10 分钟、约 200 个画面节拍、平均 3 秒一个镜头 | 镜头（shot）必须是一等公民：独立渲染、独立缓存、独立重跑 |
-| 约 3000–3500 字口播、327 字/分钟、单句 ≤25 字 | 脚本校验必须是确定性代码，不能交给 LLM 自检；字数是硬闸口 |
+| 约 3000–3500 字口播、327 字/分钟、单句 ≤50 字 | 脚本校验必须是确定性代码，不能交给 LLM 自检；字数是硬闸口 |
 | 1920×1080、25fps、H.264/AAC | 渲染分辨率、帧率、编码参数在模板和 ffmpeg 层固定；不允许每个镜头用不同参数 |
 | 端到端 ≤60 分钟，局部修改 ≤5 分钟 | 必须并行渲染 + 镜头级缓存 + 局部重渲染；不能每次从头渲染全片 |
 | 任一阶段失败可续跑，任一句可局部修改 | 状态机 + 幂等节点 + 内容寻址产物；任务重复执行不能产生副作用 |
@@ -140,7 +140,7 @@
 | 字级对齐（可选） | TTS 原生句级时间优先，WhisperX 兜底 | WhisperX 最新稳定版 | 需要逐字字幕/卡拉 OK 时使用 | ctc-forced-aligner |
 | 视觉质检 | DOM/几何规则前置 + `deepseek-flash` 多模态 | 图片资产直接读图；视频按镜头/时间点抽帧送模型 | 文字溢出、裁切先用 DOM 规则；语义与画面问题用 DeepSeek 判定 | 纯规则 |
 | 图像生成 | 火山方舟 Seedream（或 OpenAI-compatible 图像 API） | Seedream 5.x | 原创角色/背景/装饰候选；固定参考图/seed；人工筛选后入库 | 其他图像 API |
-| 渲染 | Remotion + Playwright 回退 + ffmpeg | 版本全部钉死 | 动画表现力强、可按镜头缓存 | 纯 Playwright 模板 |
+| 渲染 | Remotion + ffmpeg | 版本全部钉死 | 动画表现力强、可按镜头缓存 | Playwright 仅测试 |
 | 前端 | React + Vite + TypeScript + Ant Design 5 | 最新稳定版 | 后台表格/表单密集，AntD 组件全 | Next.js（不需要 SSR） |
 | 反向代理 | Nginx | 1.27+ | 静态资源、API 代理、SSE 关闭缓冲 | Caddy |
 | 容器 | Docker + Compose | Docker 29 / Compose 2.40 | 与现有 VM 环境一致 | Podman |
@@ -188,7 +188,7 @@
                                                 ┌────────────────────┐
                                                 │ render worker ×N    │
                                                 │ Remotion（Docker）  │
-                                                │ Playwright 回退     │
+                                                │ Remotion-only      │
                                                 └────────────────────┘
                                 ┌──────────────────────────────────────┐
                                 │ 外部服务：国内 LLM / Seedream / 视觉模型 │
@@ -676,7 +676,7 @@ templates/
 
 ### 10.2 信息卡片渲染
 
-- Remotion 镜头优先使用模板 `Card` 组件（文字由 React 渲染，仍保证 100% 准确）；Playwright 回退链路继续用 Jinja2 渲染 HTML。
+- Remotion 镜头使用 `PaperCard`（文字由 React 渲染，仍保证 100% 准确）；Playwright 旧链路仅用于测试/历史。
 - 用 Jinja2 渲染 HTML，Playwright 打开本地 `file://` 或临时 HTTP 页面，截图保存 PNG。
 - 卡片按 2 倍像素密度渲染，再缩放到舞台中的目标尺寸，保证文字边缘清晰。
 - 卡片内文字设硬上限和自动缩放：先按字号阶梯缩小，低于最小字号仍溢出则判定失败，交回分镜/QC。
@@ -720,7 +720,7 @@ window.renderAt = function (tMs) {
 
 ### 10.3.1 Remotion 渲染（默认）与代码生成 Agent
 
-M6 起，镜头画面默认由 Remotion 渲染；§10.3 的 Playwright 逐帧链路保留为回退和旧 spec 兼容。
+M6 起，镜头画面只由 Remotion 渲染（`REMOTION_ONLY=true`）；§10.3 的 Playwright 逐帧链路仅保留测试/历史。
 
 **代码生成：**
 
@@ -741,7 +741,7 @@ M6 起，镜头画面默认由 Remotion 渲染；§10.3 的 Playwright 逐帧链
 - `EpisodeSpec.renderer: "remotion" | "playwright"`；`remotion_meta.enabled` 且每镜头 READY 时用 Remotion，否则 Playwright。
 - `shot_render_hash` 包含 renderer、Remotion 版本、镜像 digest、该镜头 code hash；单个镜头代码变化只失效该镜头。
 - Remotion 输出经 ffmpeg 归一化为 1920×1080/25fps/H.264/yuv420p/CRF18，帧数与时间线一致，保证 `-c copy` 拼接。
-- 单镜头失败且 `REMOTION_FALLBACK_PLAYWRIGHT=true` 时回退 Playwright；`REMOTION_ENABLED=false` 时整条链路保持旧渲染器。
+- `REMOTION_ONLY=true` 时禁止 Playwright：codegen 未全部 READY 或渲染失败即期次失败，不切换旧渲染器。Playwright 仅用于测试/历史。
 
 **质量约束（写进 Skill）：**
 
@@ -770,7 +770,7 @@ frame_count = frame_end - frame_start
 
 - 每句音频末尾补/裁不超过 20ms 的静音，使音频时长对齐到帧边界；成片音画同步以累计时间轴为准。
 - 一个镜头默认对应一句台词；数据模型允许 `script_line 1:N shot`，用于长句拆分或纯视觉节拍。MVP 先按 1:1 实现，若要对齐参考片“160 句 / 200 个画面节拍”，再放开 1:N。
-- 字幕条默认按整句显示（句级对齐，单句 ≤25 字）；字级模式下才按字级时间戳每 6–8 字推进，一个镜头内可以有多段字幕（F-28）。
+- 字幕条默认按整句显示（句级对齐，单句 ≤50 字）；字级模式下才按字级时间戳每 6–8 字推进，一个镜头内可以有多段字幕（F-28）。
 
 ### 10.5 编码与拼接
 
@@ -946,11 +946,11 @@ ffmpeg -i video.mp4 -i audio_norm.wav \
 
 **确定性校验（必须实现，不能只靠模型）：**
 
-- 单句字数 ≤25；超长自动拆分或阻断。
+- 单句字数 ≤50；超长自动拆分或阻断。
 - 全文字数 = 目标时长 × 327，误差 ≤±10%。
 - 每个章节都有内容；章节顺序与 series 配置一致。
 - 禁止词表命中即阻断。
-- 所有台词由洛琪希单人口播，单句 ≤25 字；不设旁白，不再校验旁白/洛琪希比例。
+- 所有台词由洛琪希单人口播，单句 ≤50 字；不设旁白，不再校验旁白/洛琪希比例。
 - 说话人字段保留 `narrator` / `roxy` 以兼容旧数据；新导入统一写 `roxy`。
 
 **模型自检：**
@@ -1218,7 +1218,7 @@ reuse_key → 查 asset 表
 ```json
 {
   "code": "SCRIPT_LINE_TOO_LONG",
-  "message": "第 42 句超过 25 字",
+  "message": "第 42 句超过 50 字",
   "details": {"line_id": "...", "char_count": 31},
   "trace_id": "..."
 }
@@ -1785,7 +1785,7 @@ roxy_pipeline/
 │  ├─ schemas/             # Pydantic API schema
 │  ├─ db/                  # Base + async session
 │  └─ core/                # settings
-├─ templates/              # stage / cards / partials（Playwright 回退）
+├─ templates/              # stage / cards / partials（Playwright 仅测试）
 ├─ infra/remotion/         # Remotion 沙箱 Dockerfile
 ├─ prompts/                # 版本化 Prompt（script / storyboard / remotion）
 ├─ assets/                 # 角色/背景/字体/BGM（或放 MinIO）
@@ -1881,7 +1881,7 @@ qc.align
 | `render.crf` | 18 | 片段质量 |
 | `audio.loudness` | -14 LUFS | 音量标准化 |
 | `script.chars_per_minute` | 327 | 目标语速 |
-| `script.max_line_chars` | 25 | 单句硬上限 |
+| `script.max_line_chars` | 50 | 单句硬上限 |
 | `storyboard.max_retries` | 2 | 分镜重排上限 |
 | `workflow.max_retries` | 3 | 节点重试上限 |
 | `langgraph.checkpoint_schema` | `agent_checkpoints` | 图状态独立 schema |

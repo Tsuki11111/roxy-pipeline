@@ -54,12 +54,15 @@ def test_valid_script_passes():
 def test_long_line_and_missing_section():
     lines = make_valid_lines()
     lines[0] = lines[0].model_copy(
-        update={"text": "这是一句明显超过二十五个字的测试台词用来触发校验错误", "char_count": 27}
+        update={
+            "text": "这是一句明显超过五十个字的测试台词用来触发校验错误我们需要再补充一些内容让它足够长以确保超过限制并且继续增加文字",
+            "char_count": 56,
+        }
     )
     lines = [line for line in lines if line.section != "结尾"]
     result = validate_script(lines, target_duration_s=60, section_labels=LABELS)
     assert result.valid is False
-    assert any("超过 25 字" in error for error in result.errors)
+    assert any("超过 50 字" in error for error in result.errors)
     assert any("缺少章节：结尾" in error for error in result.errors)
 
 

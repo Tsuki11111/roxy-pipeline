@@ -11,6 +11,7 @@ from app.agents.remotion.service import (
     generate_remotion_code,
     start_remotion_codegen,
 )
+from app.render.service import RenderRequestError, start_auto_render
 from app.core.config import get_settings
 from app.models.core import (
     Episode,
@@ -312,6 +313,37 @@ async def seed_ready_episode(session, episode_id: str) -> None:
     episode = await session.get(Episode, episode_id)
     episode.status = EpisodeStatus.READY
     await session.commit()
+
+
+async def test_start_auto_render_queues_codegen(episode, session):
+    _, ep = episode
+    await seed_ready_episode(session, ep["id"])
+    episode_row = await session.get(Episode, ep["id"])
+    episode_row.status = EpisodeStatus.ALIGNING
+    await session.commit()
+
+    _, node = await start_auto_render(session, ep["id"])
+    await session.commit()
+
+    assert node.node_key == "remotion.codegen"
+    event = await session.scalar(
+        select(OutboxEvent).where(OutboxEvent.event_type == "remotion.generate")
+    )
+    assert event is not None
+    assert event.payload["auto_render"] is True
+
+
+async def test_auto_render_requires_remotion_in_only_mode(
+    episode, session, monkeypatch
+):
+    _, ep = episode
+    await seed_ready_episode(session, ep["id"])
+    settings = get_settings()
+    monkeypatch.setattr(settings, "remotion_only", True)
+    monkeypatch.setattr(settings, "remotion_auto_codegen", False)
+
+    with pytest.raises(RenderRequestError):
+        await start_auto_render(session, ep["id"])
 
 
 async def test_start_remotion_codegen_queues_task(client, episode, session):

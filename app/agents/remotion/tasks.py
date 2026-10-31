@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timezone
 
 from app.agents.remotion.service import RemotionError, generate_remotion_code
+from app.core.config import get_settings
 from app.models.core import Episode, NodeRun, NodeStatus
 from app.workflow.cancel import TaskCancelled, ensure_not_cancelled
 from app.workflow.celery_app import celery_app
@@ -12,7 +13,46 @@ from app.workflow.db import run_async, task_session
 logger = logging.getLogger(__name__)
 
 
-async def _run(episode_id: str, node_run_id: str, shot_ids: list[str] | None) -> None:
+async def _mark_no_render(episode_id: str, reason: str) -> None:
+    async with task_session() as session:
+        episode = await session.get(Episode, episode_id)
+        if episode is not None:
+            episode.health = "FAILED"
+            episode.current_node = None
+            meta = dict(episode.remotion_meta or {})
+            meta["error"] = reason[:2000]
+            episode.remotion_meta = meta
+        await session.commit()
+
+
+async def _queue_render(episode_id: str) -> None:
+    from app.render.service import start_render
+
+    async with task_session() as session:
+        try:
+            await start_render(session, episode_id)
+            await session.commit()
+            logger.info("auto render queued after remotion codegen episode=%s", episode_id)
+        except Exception:
+            logger.exception(
+                "auto render queue failed after remotion codegen episode=%s",
+                episode_id,
+            )
+            await session.rollback()
+            async with task_session() as failed:
+                episode = await failed.get(Episode, episode_id)
+                if episode is not None:
+                    episode.health = "FAILED"
+                    episode.current_node = None
+                await failed.commit()
+
+
+async def _run(
+    episode_id: str,
+    node_run_id: str,
+    shot_ids: list[str] | None,
+    auto_render: bool = False,
+) -> None:
     async with task_session() as session:
         episode = await session.get(Episode, episode_id)
         node = await session.get(NodeRun, node_run_id)
@@ -50,6 +90,14 @@ async def _run(episode_id: str, node_run_id: str, shot_ids: list[str] | None) ->
                     meta["error"] = str(exc)[:2000]
                     episode.remotion_meta = meta
                 await failed.commit()
+            if auto_render:
+                if get_settings().remotion_only:
+                    await _mark_no_render(
+                        episode_id,
+                        f"Remotion codegen failed; Playwright disabled: {exc}",
+                    )
+                else:
+                    await _queue_render(episode_id)
             raise
 
         episode = await session.get(Episode, episode_id)
@@ -70,6 +118,16 @@ async def _run(episode_id: str, node_run_id: str, shot_ids: list[str] | None) ->
             episode_id,
             result.get("meta", {}).get("enabled"),
         )
+        if auto_render:
+            if get_settings().remotion_only and not result.get("meta", {}).get(
+                "enabled"
+            ):
+                await _mark_no_render(
+                    episode_id,
+                    "Remotion code is not READY for every shot; Playwright disabled",
+                )
+            else:
+                await _queue_render(episode_id)
 
 
 @celery_app.task(name="remotion.generate", bind=True)
@@ -78,9 +136,10 @@ def remotion_generate_task(
     episode_id: str,
     node_run_id: str,
     shot_ids: list[str] | None = None,
+    auto_render: bool = False,
 ):
     try:
-        run_async(_run(episode_id, node_run_id, shot_ids))
+        run_async(_run(episode_id, node_run_id, shot_ids, auto_render))
     except TaskCancelled:
         logger.info("remotion codegen cancelled episode=%s", episode_id)
         raise

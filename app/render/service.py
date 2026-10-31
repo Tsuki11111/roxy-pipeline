@@ -2,16 +2,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import ValidationError
 
+from app.core.config import get_settings
 from app.models.core import Episode, EpisodeStatus, NodeRun, NodeStatus
 from app.render.models import EpisodeSpec
 from app.render.stage import build_stage_payload
 from app.render.timeline import build_timeline
 from app.workflow.outbox import enqueue_outbox
+
+logger = logging.getLogger(__name__)
 
 
 class RenderRequestError(Exception):
@@ -52,6 +56,12 @@ async def start_render(
         build_stage_payload(spec, timeline)  # fail fast on missing assets/cards
     except ValidationError as exc:
         raise RenderRequestError(f"invalid render_spec: {exc}") from exc
+
+    if get_settings().remotion_only and spec.renderer != "remotion":
+        raise RenderRequestError(
+            "Remotion code is not ready for every shot; "
+            "Playwright rendering is disabled (REMOTION_ONLY=true)"
+        )
 
     digest = spec_hash(spec)
 
@@ -101,6 +111,48 @@ async def start_render(
     return episode, node
 
 
+async def start_auto_render(
+    session: AsyncSession, episode_id: str
+) -> tuple[Episode, NodeRun]:
+    """Queue the default render path for a freshly voiced episode.
+
+    Remotion is the only production renderer: codegen is queued first and the
+    render starts after it. Playwright remains available only for legacy tests
+    when ``REMOTION_ONLY=false``.
+    """
+    settings = get_settings()
+    episode = await session.get(Episode, episode_id)
+    if episode is None:
+        raise LookupError(f"episode not found: {episode_id}")
+
+    use_remotion = settings.remotion_enabled and settings.remotion_auto_codegen
+    if use_remotion:
+        from app.agents.remotion.service import start_remotion_codegen
+        from app.workflow.state_machine import transition_episode
+
+        try:
+            if episode.status == EpisodeStatus.VOICING:
+                await transition_episode(session, episode_id, EpisodeStatus.ALIGNING)
+                episode = await session.get(Episode, episode_id)
+            if episode is not None and episode.status == EpisodeStatus.ALIGNING:
+                await transition_episode(session, episode_id, EpisodeStatus.RENDERING)
+            return await start_remotion_codegen(
+                session, episode_id, auto_render=True
+            )
+        except Exception:
+            logger.exception(
+                "auto remotion codegen queue failed episode=%s", episode_id
+            )
+            await session.rollback()
+            if settings.remotion_only:
+                raise
+    elif settings.remotion_only:
+        raise RenderRequestError(
+            "Remotion-only mode requires REMOTION_ENABLED and REMOTION_AUTO_CODEGEN"
+        )
+    return await start_render(session, episode_id)
+
+
 def _char_timings_from_audio(episode: Episode) -> dict[str, list[dict]] | None:
     meta = episode.audio_meta or {}
     if meta.get("alignment_granularity") != "char":
@@ -145,6 +197,11 @@ async def rerender_episode(
         episode,
         char_timings_by_line=_char_timings_from_audio(episode),
     )
+    if get_settings().remotion_only and spec.renderer != "remotion":
+        raise RenderRequestError(
+            "Remotion code is not ready for every shot; "
+            "Playwright rendering is disabled (REMOTION_ONLY=true)"
+        )
     timeline = build_timeline(spec)
     build_stage_payload(spec, timeline)
     episode.render_spec = spec.model_dump()

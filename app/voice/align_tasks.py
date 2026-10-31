@@ -25,8 +25,7 @@ from app.workflow.celery_app import celery_app
 from app.workflow.cancel import TaskCancelled, ensure_not_cancelled
 from app.workflow.db import run_async, task_session
 from app.workflow.memory import release_memory
-from app.render.service import start_render
-from app.workflow.state_machine import transition_episode
+from app.render.service import start_auto_render
 
 logger = logging.getLogger(__name__)
 
@@ -254,12 +253,7 @@ async def _align_episode(episode_id: str, node_run_id: str) -> None:
     if settings.voice_auto_render:
         try:
             async with task_session() as session:
-                await transition_episode(
-                    session, episode_id, EpisodeStatus.RENDERING
-                )
-                await session.commit()
-            async with task_session() as session:
-                await start_render(session, episode_id)
+                await start_auto_render(session, episode_id)
                 await session.commit()
             logger.info("auto render queued episode=%s", episode_id)
         except Exception:

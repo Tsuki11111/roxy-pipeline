@@ -5,7 +5,7 @@ const assetSrc = (value: string) =>
 
 interface Props {
   src: string;
-  side: 'left' | 'right';
+  side: 'left' | 'center' | 'right';
   height?: number;
   bottom?: number;
   offsetX?: number;
@@ -27,24 +27,32 @@ export const Character = ({
   scale = 1,
   rotate = 0,
   zIndex = 3,
-}: Props) => (
-  <Img
-    src={assetSrc(src)}
-    style={{
-      position: 'absolute',
-      left: side === 'left' ? 210 : 1120,
-      bottom,
-      height,
-      width: 'auto',
-      zIndex,
-      opacity,
-      transform: `translateX(${offsetX}px) scale(${scale}) rotate(${rotate}deg)`,
-      transformOrigin: 'bottom center',
-      filter: `drop-shadow(0 10px 10px rgba(43, 43, 43, 0.22)) blur(${Math.max(
-        0,
-        blur,
-      )}px)`,
-      willChange: 'transform, opacity, filter',
-    }}
-  />
-);
+}: Props) => {
+  const left = side === 'left' ? 210 : side === 'right' ? 1120 : '50%';
+  const translate =
+    side === 'center'
+      ? `translateX(calc(-50% + ${offsetX}px))`
+      : `translateX(${offsetX}px)`;
+
+  return (
+    <Img
+      src={assetSrc(src)}
+      style={{
+        position: 'absolute',
+        left,
+        bottom,
+        height,
+        width: 'auto',
+        zIndex,
+        opacity,
+        transform: `${translate} scale(${scale}) rotate(${rotate}deg)`,
+        transformOrigin: 'bottom center',
+        filter: `drop-shadow(0 10px 10px rgba(43, 43, 43, 0.22)) blur(${Math.max(
+          0,
+          blur,
+        )}px)`,
+        willChange: 'transform, opacity, filter',
+      }}
+    />
+  );
+};

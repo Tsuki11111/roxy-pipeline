@@ -453,7 +453,7 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
 
   const renderWithRemotion = async () => {
     if (!remotion?.meta?.enabled) {
-      message.warning("Remotion 代码还没有全部就绪，先用 Playwright 回退渲染");
+      message.error("Remotion 代码还没有全部就绪，不能渲染（Playwright 已禁用）");
       return;
     }
     setWaiting(true);
@@ -549,7 +549,7 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
           ) : remotion?.meta?.status === "generating" ? (
             <Tag color="processing">生成中</Tag>
           ) : (
-            <Tag color="gold">Playwright 回退</Tag>
+            <Tag color="gold">Remotion 未就绪</Tag>
           )
         }
       >
@@ -560,7 +560,7 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
             message={
               remotion?.meta?.enabled
                 ? "每个镜头已有 Remotion Composition；保存并重渲染会走 Remotion。"
-                : "Remotion 代码需要全部镜头就绪才会默认启用；失败镜头自动回退 Playwright。"
+                : "Remotion 代码需要全部镜头就绪才能渲染；当前只使用 Remotion，不会回退 Playwright。"
             }
           />
           <Space wrap>

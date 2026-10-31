@@ -805,6 +805,20 @@ async def generate_remotion_code(
     episode.version += 1
     await session.flush()
 
+    try:
+        final_spec = await build_episode_render_spec(
+            session,
+            episode,
+            char_timings_by_line=_char_timings_from_audio(episode),
+        )
+        episode.render_spec = final_spec.model_dump()
+        await session.flush()
+    except Exception:
+        logger.exception(
+            "failed to rebuild render spec after remotion codegen episode=%s",
+            episode_id,
+        )
+
     if validation_error and not any(row.status == "READY" for row in all_rows):
         raise RemotionError(f"Remotion validation failed: {validation_error}")
     return {"meta": meta.model_dump(), "failures": failures}
@@ -815,6 +829,7 @@ async def start_remotion_codegen(
     episode_id: str,
     *,
     shot_ids: list[str] | None = None,
+    auto_render: bool = False,
 ) -> tuple[Episode, NodeRun]:
     settings = get_settings()
     if not settings.remotion_enabled:
@@ -826,8 +841,12 @@ async def start_remotion_codegen(
         EpisodeStatus.READY,
         EpisodeStatus.PUBLISHED,
         EpisodeStatus.QC,
+        EpisodeStatus.ALIGNING,
+        EpisodeStatus.RENDERING,
     }:
-        raise RemotionConflict("episode must be READY/QC/PUBLISHED before codegen")
+        raise RemotionConflict(
+            "episode must be ALIGNING/RENDERING/READY/QC/PUBLISHED before codegen"
+        )
     shots = list(
         await session.scalars(select(Shot).where(Shot.episode_id == episode_id))
     )
@@ -881,6 +900,7 @@ async def start_remotion_codegen(
             "episode_id": episode_id,
             "node_run_id": node.id,
             "shot_ids": shot_ids,
+            "auto_render": auto_render,
         },
         episode_id=episode_id,
     )

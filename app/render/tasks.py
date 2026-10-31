@@ -256,32 +256,18 @@ def render_shot_task(
             else None
         )
         if episode_spec.renderer == "remotion" and remotion_entry is not None:
-            try:
-                segment, first_frame = render_shot_remotion(
-                    episode_spec,
-                    shot_id=item.shot.shot_id,
-                    segment=segment,
-                    first_frame=first_frame,
-                    frame_count=item.frame_count,
-                )
-            except Exception:
-                if not settings.remotion_fallback_playwright:
-                    raise
-                logger.exception(
-                    "remotion shot failed, falling back to playwright episode=%s seq=%d",
-                    episode_id,
-                    seq,
-                )
-                segment, first_frame = render_shot(
-                    payload,
-                    item,
-                    Path(out_dir),
-                    get_ffmpeg(),
-                    episode_spec.width,
-                    episode_spec.height,
-                    episode_spec.fps,
-                )
+            segment, first_frame = render_shot_remotion(
+                episode_spec,
+                shot_id=item.shot.shot_id,
+                segment=segment,
+                first_frame=first_frame,
+                frame_count=item.frame_count,
+            )
         else:
+            if settings.remotion_only:
+                raise RuntimeError(
+                    "Remotion code is not ready; Playwright rendering is disabled"
+                )
             segment, first_frame = render_shot(
                 payload,
                 item,

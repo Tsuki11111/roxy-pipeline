@@ -19,7 +19,7 @@
 AI 科普视频自动生成 Agent 系统：文章导入 → AI 结构化脚本/润色 → 分镜 → 逐句 TTS/对齐 → HTML 卡片/逐帧渲染 → ffmpeg 拼接 → 质检。
 
 - **个人自用项目**；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守需求文档第 11 章。
-- **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产持久化/复用 + Asset Agent + M4.1 逐句配音 + M4.2 句级对齐（字级可选） + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包 + Web 控制台 + 分镜时间线编辑器 + Remotion 逐镜头代码生成 Agent（默认渲染器）已跑通；按主题自动生成脚本的功能已移除，下一步成本报表与监控。
+- **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产持久化/复用 + Asset Agent + M4.1 逐句配音 + M4.2 句级对齐（字级可选） + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包 + Web 控制台 + 分镜时间线编辑器 + Remotion 逐镜头代码生成 Agent（唯一生产渲染器）已跑通；按主题自动生成脚本的功能已移除，下一步成本报表与监控。
 - **GitHub**：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
 - **仓库不包含**：`.env`、洛琪希参考图/立绘、`tmp/`、私有 character pack。
 
@@ -48,7 +48,7 @@ AI 科普视频自动生成 Agent 系统：文章导入 → AI 结构化脚本/�
 ### 1. 技术栈已定
 
 Python 3.12 + FastAPI + Pydantic v2 + SQLAlchemy 2.0 + PostgreSQL + RabbitMQ/Celery + Redis + MinIO +
-Remotion（Node 22，Docker 沙箱，默认渲染器）+ Playwright/Chromium（回退）+ ffmpeg + LangGraph（仅 AI 子图）；
+Remotion（Node 22，Docker 沙箱，唯一生产渲染器）+ Playwright/Chromium（仅测试/历史）+ ffmpeg + LangGraph（仅 AI 子图）；
 前端 React + Vite + TypeScript + Ant Design。详见架构方案第 3 节。
 
 ### 2. LangGraph 边界
@@ -67,15 +67,16 @@ Remotion（Node 22，Docker 沙箱，默认渲染器）+ Playwright/Chromium（�
 - Remotion 代码生成：`app/agents/remotion/` 用 DeepSeek `deepseek-flash`，每镜头一次调用，Prompt 在 `prompts/remotion/`，Skill 在 `app/agents/remotion/skills/remotion_shot/SKILL.md`。
 - **TTS：本地 IndexTTS2 zero-shot 声音克隆**（Python 3.11 独立环境 + 常驻 HTTP 服务），不使用付费云 TTS；参考音固定为 `data/assets/voice/indextts2/reference.wav`。
 - **含文字的信息卡片必须用代码渲染（HTML 或 React/Remotion），不得用图像生成模型**。
-- **脚本与配音统一为洛琪希单人口播**，不设旁白；`speaker` 字段仅为兼容旧数据保留，新导入统一写 `roxy`。
+- **脚本与配音统一为洛琪希单人口播**，不设旁白；`speaker` 字段仅为兼容旧数据保留，新导入统一写 `roxy`。脚本单句 ≤50 字，校验是硬闸口。
 
 ### 3.1 Remotion 渲染边界
 
-- **Remotion 是默认镜头渲染器**；Playwright 保留为回退和旧 spec 兼容。关闭开关用 `REMOTION_ENABLED=false`。
+- **Remotion 是唯一生产渲染器**；`REMOTION_ONLY=true` 时 Playwright 只保留给测试/历史，不参与新期渲染。
+- **新期自动 codegen**：配音/对齐完成后 `start_auto_render` 先排队 `remotion.generate`（`REMOTION_AUTO_CODEGEN=true`），成功后自动进入渲染；codegen 失败或未全部 READY 时标记失败，不回退 Playwright。不要只在编辑器手动点生成。
 - **每镜头一个 Composition**：LLM 只生成 `src/shots/shot_<seq>.tsx`；Root、Composition ID、时长、尺寸、素材映射由 Python 生成，LLM 不得改。
 - 生成代码只能在 **Docker 沙箱**执行（`--network none --read-only --user 10001 --cpus 2 -m 3g --pids-limit 256`），禁止在宿主机直接 `npm run`。
 - 生成代码只写 `tmp/remotion/<episode_id>/`，不进主仓库；固定依赖宇宙（react/remotion/@remotion/*/模板组件），不得新增 npm 依赖、外链或 Node 内置模块。
-- 全部镜头代码 READY 才启用 Remotion；单镜头失败按 `REMOTION_FALLBACK_PLAYWRIGHT` 回退。缓存键必须包含 renderer、Remotion 版本、镜像 digest 和该镜头 code hash。
+- 全部镜头代码 READY 才启用 Remotion；单镜头失败即失败，不切换 Playwright。缓存键必须包含 renderer、Remotion 版本、镜像 digest 和该镜头 code hash。
 - Remotion 输出必须经 ffmpeg 归一化为 1920×1080/25fps/H.264/yuv420p，帧数与时间线一致，保证 `-c copy` 拼接。
 - 生成质量约束：单镜头代码 ≤7000 字符/180 行；浅底深字、白字必须有深色实底；有 `character` 必须出现 Roxy；禁止随机/时间/CSS 动画。
 - 布局约束：Remotion 不做关键词标签；画面文字用 `PaperCard` Claude 暖纸卡（variant：note/quote/index/letter/sticky/specimen；tone：cream/sand/peach/sage；transition：slide/zoom/flip/drop/reveal/push）。Python 按镜头排期：约 1/3 镜头 `card_style=null` 做纯演示，其余给卡并指定样式/动效；切换位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°。

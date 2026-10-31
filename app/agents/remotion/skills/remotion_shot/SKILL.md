@@ -32,7 +32,7 @@ description: 为单个分镜生成可编译的 Remotion/React 镜头组件（自
 - 可用依赖：`react`、`remotion`、`@remotion/*`、`../components/*`、`../theme`。
 - 固定组件库（可选）：
   - `Stage`：Claude 暖纸背景（纸纹、底部浅阴影、手绘星）；直接包 children，不要传 `bg`/`floor`。
-  - `Character`：立绘；`src` 用资产清单里的 `staticFile` 名，支持 `side`/`height`/`bottom`/`offsetX`/`opacity`/`blur`/`scale`/`rotate`。
+  - `Character`：立绘；`src` 用资产清单里的 `staticFile` 名，支持 `side`（left/center/right）/`height`/`bottom`/`offsetX`/`opacity`/`blur`/`scale`/`rotate`。
   - `PaperCard`：**Claude 纸卡**；`variant` 支持 `note`/`quote`/`index`/`letter`/`sticky`/`specimen`，`tone` 支持 `cream`/`sand`/`peach`/`sage`；支持 `text`/`lines`/`title`/`meta`/`mark`、`left`/`top`/`width`/`minHeight`、`opacity`/`scale`/`translateX`/`translateY`/`rotate`/`rotateY`/`reveal`、`accent`。
   - `Overlay`、`Progress`、`AgentLoop`、`ToolChips`、`RobotIcon`。
 - **卡片不是每个镜头都必须有**：纯图形/演示镜头可以完全不放卡；按内容需要决定。

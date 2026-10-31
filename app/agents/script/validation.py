@@ -4,7 +4,7 @@ from collections.abc import Iterable, Sequence
 
 from pydantic import BaseModel, Field
 
-MAX_LINE_CHARS = 25
+MAX_LINE_CHARS = 50
 SPEAKERS = {"narrator", "roxy"}
 DEFAULT_SECTION_LABELS = [
     "问题",
@@ -117,7 +117,7 @@ def validate_script(
         if line.speaker not in SPEAKERS:
             errors.append(f"第 {line.seq} 句说话人非法：{line.speaker}")
         if len(text) > MAX_LINE_CHARS:
-            errors.append(f"第 {line.seq} 句超过 25 字（{len(text)} 字）")
+            errors.append(f"第 {line.seq} 句超过 50 字（{len(text)} 字）")
         if line.section not in label_index:
             errors.append(f"第 {line.seq} 句章节未知：{line.section}")
             continue

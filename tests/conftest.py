@@ -4,6 +4,7 @@ import os
 
 os.environ.setdefault("MINIO_UPLOAD_ENABLED", "false")
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -11,8 +12,14 @@ from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401 - register models on Base.metadata
 from app.api.main import app
+from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import get_session
+
+
+@pytest.fixture(autouse=True)
+def _allow_playwright_in_tests(monkeypatch):
+    monkeypatch.setattr(get_settings(), "remotion_only", False)
 
 
 @pytest_asyncio.fixture

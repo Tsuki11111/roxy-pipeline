@@ -81,7 +81,7 @@ async def test_patch_line_recalculates_validation(client, episode, session):
     _, ep = episode
     lines = await seed_lines(session, ep["id"])
     line_id = lines[0].id
-    long_text = "这是一句明显超过二十五个字的测试台词用来触发校验错误"
+    long_text = "这是一句明显超过五十个字的测试台词用来触发校验错误我们需要再补充一些内容让它足够长以确保超过限制并且继续增加文字"
 
     response = await client.patch(
         f"/api/v1/script-lines/{line_id}",
@@ -91,4 +91,4 @@ async def test_patch_line_recalculates_validation(client, episode, session):
     body = response.json()
     assert body["line"]["char_count"] == len(long_text)
     assert body["validation"]["valid"] is False
-    assert any("超过 25 字" in error for error in body["validation"]["errors"])
+    assert any("超过 50 字" in error for error in body["validation"]["errors"])

@@ -366,7 +366,7 @@ Playwright 逐帧渲染稳定、可复现，但镜头画面由固定 HTML 模板
 
 - 每个镜头单独调用一次 DeepSeek，只生成 `src/shots/shot_<seq>.tsx`；Root、Composition、时长、素材映射由 Python 生成。
 - Remotion 4.0.539 + Node 22 固定在 Docker 镜像 `roxy-remotion:4.0.539` 内；生成代码在 `--network none --read-only --user 10001 --cpus 2 -m 3g --pids-limit 256` 沙箱里 `tsc` + `remotion compositions` 校验和渲染。
-- Remotion 为默认 renderer；Playwright 保留回退和旧 spec 兼容。全部镜头代码 READY 才启用，单镜头失败可回退。
+- Remotion 为唯一生产 renderer（`REMOTION_ONLY=true`）；Playwright 仅保留测试/历史。全部镜头代码 READY 才能渲染，codegen 或单镜头渲染失败即期次失败，不切换 Playwright。
 - 镜头缓存键包含 renderer、Remotion 版本、镜像 digest、该镜头 code hash；代码变化只失效受影响镜头。
 
 ### 理由
@@ -388,7 +388,7 @@ Playwright 逐帧渲染稳定、可复现，但镜头画面由固定 HTML 模板
 
 - 单镜头生成失败率长期 >20%，或 QC 文字/布局问题居高不下：考虑代码模板化 + 参数化组件，减少自由 TSX。
 - 商用或分发需求出现：先确认 Remotion 许可，再决定是否替换为自研渲染器。
-- Docker 在目标环境不可用：关闭 `REMOTION_ENABLED`，全量回退 Playwright。
+- Docker 在目标环境不可用：无法出片；必须预构建 `roxy-remotion` 镜像并做启动自检，不再回退 Playwright。
 
 
 
