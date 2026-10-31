@@ -83,6 +83,11 @@ async def _run(
         node = await session.get(NodeRun, node_run_id)
         if episode is None or node is None:
             raise RemotionError("episode/node not found")
+        if node.status not in {NodeStatus.PENDING, NodeStatus.RUNNING}:
+            logger.info(
+                "skip remotion codegen node=%s status=%s", node_run_id, node.status
+            )
+            return
         await ensure_not_cancelled(session, episode_id)
         if await _codegen_cancelled(episode_id):
             await session.rollback()
