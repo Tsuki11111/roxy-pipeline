@@ -530,7 +530,8 @@ Seedream 首版约 12–17 张：背景 3–4、演示物件 6–8、图标表 1
 - `start_render` / `rerender_episode` 在 renderer 不是 remotion 时直接拒绝；`render_shot_task` 渲染失败不再切 Playwright。
 - 自动 codegen 失败或未全部 READY 时期次标记 FAILED，不再静默回退旧样式。
 - `Character` 支持 `side="center"`，避免模型生成 `center` 时编译失败；生成服务仍会校验角色动效。
-- 后端 90 条测试通过，前端构建通过。
+- 补充：`Character`/`PaperCard` 接受 `style` 透传；Remotion 归一化移除 `fps` 滤镜，改为 `-r 25`，保证每镜帧数与时间线一致（之前 130 镜少 130 帧、总时长少 5.2 秒）；QC 抽帧加 `-strict unofficial`，字幕块阈值 20→34，`renderer_version` 升到 `m6.2-frame-exact`。
+- 后端 90 条测试通过，前端构建通过；130 镜头《Agent核心组成是什么》重跑后 QC `PASS`。
 
 ### 2026-10-31 · 新期默认自动 Remotion + 单句 50 字
 

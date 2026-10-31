@@ -32,6 +32,7 @@ interface Props {
   rotateY?: number;
   reveal?: number;
   zIndex?: number;
+  style?: CSSProperties;
 }
 
 const TONES: Record<PaperTone, {paper: string; border: string}> = {
@@ -108,6 +109,7 @@ export const PaperCard = ({
   rotateY = 0,
   reveal = 1,
   zIndex = 8,
+  style,
 }: Props) => {
   const palette = TONES[tone];
   const items = lines ?? (text ? [text] : []);
@@ -173,7 +175,7 @@ export const PaperCard = ({
   };
 
   return (
-    <div style={common}>
+    <div style={{...common, ...style}}>
       <div style={texture} />
 
       {variant === 'specimen' && (

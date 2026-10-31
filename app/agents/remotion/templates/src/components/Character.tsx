@@ -1,4 +1,5 @@
 import {Img, staticFile} from 'remotion';
+import type {CSSProperties} from 'react';
 
 const assetSrc = (value: string) =>
   value.startsWith('/') || value.startsWith('http') ? value : staticFile(value);
@@ -14,6 +15,7 @@ interface Props {
   scale?: number;
   rotate?: number;
   zIndex?: number;
+  style?: CSSProperties;
 }
 
 export const Character = ({
@@ -27,6 +29,7 @@ export const Character = ({
   scale = 1,
   rotate = 0,
   zIndex = 3,
+  style,
 }: Props) => {
   const left = side === 'left' ? 210 : side === 'right' ? 1120 : '50%';
   const translate =
@@ -52,6 +55,7 @@ export const Character = ({
           blur,
         )}px)`,
         willChange: 'transform, opacity, filter',
+        ...style,
       }}
     />
   );

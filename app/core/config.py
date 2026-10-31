@@ -129,7 +129,7 @@ class Settings(BaseSettings):
     remotion_render_timeout_s: float = 600.0
     remotion_only: bool = True
     remotion_version: str = "4.0.539"
-    renderer_version: str = "m6.1-subtitles"
+    renderer_version: str = "m6.2-frame-exact"
     asset_storage: str = "local"
     asset_root: str = "./data/assets"
 

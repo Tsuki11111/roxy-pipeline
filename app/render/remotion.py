@@ -39,7 +39,9 @@ def _normalize(
         "-an",
         "-vf",
         f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black,fps={fps}",
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black",
+        "-r",
+        str(fps),
         "-frames:v",
         str(max(1, frame_count)),
         "-c:v",

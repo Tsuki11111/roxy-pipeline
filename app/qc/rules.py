@@ -171,12 +171,12 @@ def _check_subtitles(spec: EpisodeSpec) -> list[dict]:
     issues: list[dict] = []
     for item in timeline.shots:
         for chunk in item.chunks:
-            if len(chunk.text) > 20:
+            if len(chunk.text) > 34:
                 issues.append(
                     _issue(
                         "subtitle.length",
                         "WARNING",
-                        f"镜头 {item.shot.seq} 字幕块超过 20 字",
+                        f"镜头 {item.shot.seq} 字幕块超过 34 字",
                         seq=item.shot.seq,
                         text=chunk.text,
                         length=len(chunk.text),

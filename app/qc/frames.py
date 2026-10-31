@@ -71,6 +71,8 @@ def extract_frames(
                 f"scale='min({scale},iw)':-2",
                 "-q:v",
                 "2",
+                "-strict",
+                "unofficial",
                 str(path),
             ],
             capture_output=True,
