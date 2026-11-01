@@ -38,7 +38,7 @@ import type {
   Shot,
   StoryboardRead,
 } from "../types";
-import { formatDate, formatDuration, statusMeta } from "../ui";
+import { episodeStatusMeta, formatDate, formatDuration, statusMeta } from "../ui";
 import EpisodeEditorTab from "./EpisodeEditorTab";
 
 const CARD_TYPES = ["chat_bubble", "terminal", "browser", "icon", "pure_text"];
@@ -97,17 +97,28 @@ export default function EpisodeDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    if (!episode || !ACTIVE_STATUSES.includes(episode.status)) {
+    const running =
+      episode &&
+      ACTIVE_STATUSES.includes(episode.status) &&
+      Boolean(episode.current_node);
+    if (!running) {
       setActiveSince(null);
       return;
     }
     setActiveSince((value) => value ?? Date.now());
     const timer = window.setInterval(() => setTick((value) => value + 1), 1000);
     return () => window.clearInterval(timer);
-  }, [episode?.status]);
+  }, [episode?.status, episode?.current_node]);
 
   useEffect(() => {
-    if (!id || !episode || !ACTIVE_STATUSES.includes(episode.status)) return;
+    if (
+      !id ||
+      !episode ||
+      !ACTIVE_STATUSES.includes(episode.status) ||
+      !episode.current_node
+    ) {
+      return;
+    }
     const timer = window.setInterval(async () => {
       try {
         const next = await api.getEpisode(id);
@@ -117,7 +128,7 @@ export default function EpisodeDetailPage() {
       }
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [id, episode?.status]);
+  }, [id, episode?.status, episode?.current_node]);
 
   const refresh = async () => {
     await load();
@@ -257,6 +268,10 @@ export default function EpisodeDetailPage() {
 
   const meta = statusMeta[episode.status];
   const active = ACTIVE_STATUSES.includes(episode.status);
+  const taskRunning =
+    active && Boolean(episode.current_node) && episode.health !== "FAILED";
+  const waiting = active && !taskRunning;
+  const displayMeta = episodeStatusMeta(episode.status, episode.current_node);
   const percent = STAGE_PERCENT[episode.status] ?? 0;
   const nodeLabel =
     (episode.current_node && NODE_LABELS[episode.current_node]) ||
@@ -274,7 +289,7 @@ export default function EpisodeDetailPage() {
           </Button>
           <Typography.Title level={2}>{episode.title}</Typography.Title>
           <Space wrap>
-            <Tag color={meta.color}>{meta.label}</Tag>
+            <Tag color={displayMeta.color}>{displayMeta.label}</Tag>
             <Tag color={episode.health === "OK" ? "green" : episode.health === "WARNING" ? "gold" : "red"}>
               {episode.health}
             </Tag>
@@ -307,7 +322,7 @@ export default function EpisodeDetailPage() {
         </Space>
       </div>
 
-      {active && (
+      {taskRunning && (
         <Card className="progress-card">
           <div className="progress-head">
             <Spin size="small" />
@@ -333,6 +348,15 @@ export default function EpisodeDetailPage() {
             />
           )}
         </Card>
+      )}
+
+      {waiting && (
+        <Alert
+          type="success"
+          showIcon
+          message={displayMeta.label}
+          description="阶段任务已完成，请使用页面上方的操作按钮继续。"
+        />
       )}
 
       <Tabs
@@ -388,7 +412,9 @@ function Overview({ episode }: { episode: Episode }) {
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       <Card>
         <Descriptions column={3} size="small">
-          <Descriptions.Item label="状态">{statusMeta[episode.status].label}</Descriptions.Item>
+          <Descriptions.Item label="状态">
+            {episodeStatusMeta(episode.status, episode.current_node).label}
+          </Descriptions.Item>
           <Descriptions.Item label="健康">{episode.health}</Descriptions.Item>
           <Descriptions.Item label="当前节点">{episode.current_node ?? "—"}</Descriptions.Item>
           <Descriptions.Item label="AI 预估时长">
@@ -465,7 +491,7 @@ function ScriptTab({
 
   useEffect(() => {
     load();
-  }, [episode.id, episode.status, refreshKey]);
+  }, [episode.id, episode.status, episode.updated_at, episode.version, refreshKey]);
 
   const edit = (line: ScriptLine) => {
     setEditing(line);
@@ -626,7 +652,7 @@ function StoryboardTab({
 
   useEffect(() => {
     load();
-  }, [episode.id, episode.status, refreshKey]);
+  }, [episode.id, episode.status, episode.updated_at, episode.version, refreshKey]);
 
   const edit = (shot: Shot) => {
     setEditing(shot);
@@ -780,7 +806,7 @@ function AudioTab({ episode, refreshKey }: { episode: Episode; refreshKey: numbe
 
   useEffect(() => {
     api.getAudio(episode.id).then(setData).catch((error) => message.error(String(error)));
-  }, [episode.id, episode.status, refreshKey]);
+  }, [episode.id, episode.status, episode.updated_at, episode.version, refreshKey]);
 
   const meta = data?.meta ?? {};
   return (
@@ -834,7 +860,7 @@ function QcTab({
     api.getQc(episode.id).then(setData).catch((error) => message.error(String(error)));
   };
 
-  useEffect(load, [episode.id, episode.status, refreshKey]);
+  useEffect(load, [episode.id, episode.status, episode.updated_at, episode.version, refreshKey]);
 
   const resolve = async (reviewId: string) => {
     try {
@@ -924,7 +950,7 @@ function PackageTab({
 
   useEffect(() => {
     load();
-  }, [episode.id, episode.status, refreshKey]);
+  }, [episode.id, episode.status, episode.updated_at, episode.version, refreshKey]);
 
   const build = async () => {
     try {

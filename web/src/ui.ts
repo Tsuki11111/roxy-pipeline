@@ -18,6 +18,34 @@ export const statusMeta: Record<
   CANCELLED: { label: "已取消", color: "default" },
 };
 
+const ACTIVE_STATUSES = new Set([
+  "SCRIPTING",
+  "STORYBOARDING",
+  "VOICING",
+  "ALIGNING",
+  "RENDERING",
+  "QC",
+]);
+const WAITING_LABELS: Record<string, string> = {
+  SCRIPTING: "脚本生成已完成，等待进入下一步",
+  STORYBOARDING: "分镜已生成，等待确认",
+  VOICING: "配音已完成，等待对齐",
+  ALIGNING: "对齐已完成，等待渲染",
+  RENDERING: "渲染已完成，等待质检",
+  QC: "质检已完成，等待发布",
+};
+
+export function episodeStatusMeta(
+  status: EpisodeStatus,
+  currentNode: string | null | undefined,
+): { label: string; color: string } {
+  const meta = statusMeta[status];
+  if (ACTIVE_STATUSES.has(status) && !currentNode) {
+    return { label: WAITING_LABELS[status] ?? meta.label, color: "gold" };
+  }
+  return meta;
+}
+
 export function formatDate(value?: string | null): string {
   if (!value) return "—";
   return new Date(value).toLocaleString("zh-CN", { hour12: false });

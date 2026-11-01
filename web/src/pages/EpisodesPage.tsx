@@ -23,7 +23,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import type { Episode, Series } from "../types";
-import { formatDate, statusMeta } from "../ui";
+import { episodeStatusMeta, formatDate, statusMeta } from "../ui";
 
 const RUNNING_STATUSES = [
   "SCRIPTING",
@@ -175,11 +175,10 @@ export default function EpisodesPage() {
             {
               title: "状态",
               dataIndex: "status",
-              render: (status) => (
-                <Tag color={statusMeta[status as keyof typeof statusMeta].color}>
-                  {statusMeta[status as keyof typeof statusMeta].label}
-                </Tag>
-              ),
+              render: (status, row) => {
+                const meta = episodeStatusMeta(status, row.current_node);
+                return <Tag color={meta.color}>{meta.label}</Tag>;
+              },
             },
             {
               title: "健康",
