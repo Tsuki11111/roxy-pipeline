@@ -30,6 +30,8 @@ export interface Episode {
   title: string;
   topic: string;
   target_duration_s: number;
+  estimated_duration_s: number | null;
+  duration_source: string;
   status: EpisodeStatus;
   health: string;
   current_node: string | null;
@@ -106,6 +108,11 @@ export interface Shot {
   transition: string;
   cache_key: string | null;
   template_version: string;
+  continuity_group: string | null;
+  scene_meta: Record<string, any> | null;
+  line_ids: string[];
+  line_seqs: number[];
+  line_count: number;
 }
 
 export interface RhythmReport {

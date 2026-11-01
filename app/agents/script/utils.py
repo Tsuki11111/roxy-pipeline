@@ -9,7 +9,6 @@ from app.agents.script.validation import (
     coerce_lines,
     validate_script,
 )
-from app.core.config import get_settings
 from app.models.core import Episode, ScriptLine, Series
 
 
@@ -41,12 +40,10 @@ def validate_episode(
     series: Series | None,
     lines: list[ScriptLine],
 ) -> ValidationResult:
-    settings = get_settings()
     return validate_script(
         coerce_lines(lines),
-        target_duration_s=episode.target_duration_s,
         section_labels=section_labels_for(series),
-        target_chars_per_minute=settings.script_target_chars_per_minute,
+        estimated_duration_s=episode.estimated_duration_s,
     )
 
 

@@ -12,6 +12,7 @@ from app.agents.script.validation import (
     ScriptLineData,
     ValidationResult,
     coerce_lines,
+    validate_optimized_lines,
     validate_script,
 )
 from app.core.config import get_settings
@@ -39,13 +40,11 @@ def _validate(
     lines: list[ScriptLineData],
     episode: Episode,
     series: Series | None,
-    settings,
 ) -> ValidationResult:
     return validate_script(
         lines,
-        target_duration_s=episode.target_duration_s,
         section_labels=section_labels_for(series),
-        target_chars_per_minute=settings.script_target_chars_per_minute,
+        estimated_duration_s=episode.estimated_duration_s,
     )
 
 
@@ -100,7 +99,7 @@ async def optimize_script(
         load_system_prompt(),
         prompt,
         temperature=0.55,
-        max_tokens=max(1600, len(lines) * 120),
+        max_tokens=max(2000, len(lines) * 160),
     )
     raw_lines = raw.get("lines")
     if not isinstance(raw_lines, list):
@@ -134,7 +133,17 @@ async def optimize_script(
             )
         )
 
-    validation = _validate(result_lines, episode, series, settings)
+    validation = _validate(result_lines, episode, series)
+    completeness_errors = validate_optimized_lines(
+        coerce_lines(lines), result_lines
+    )
+    if completeness_errors:
+        validation = validation.model_copy(
+            update={
+                "valid": False,
+                "errors": [*validation.errors, *completeness_errors],
+            }
+        )
     if not validation.valid:
         raise ScriptOptimizeInvalid(validation)
 

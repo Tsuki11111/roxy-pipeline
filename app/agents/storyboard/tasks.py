@@ -12,6 +12,7 @@ from app.models.core import (
     ScriptLine,
     Series,
     Shot,
+    ShotLine,
 )
 from app.providers.llm import build_llm
 from app.agents.storyboard.grammar import load_character_assets
@@ -106,15 +107,24 @@ async def _generate_storyboard(episode_id: str, node_run_id: str) -> None:
                     f"episode/node disappeared: {episode_id}/{node_run_id}"
                 )
 
+            await session.execute(delete(ShotLine).where(ShotLine.episode_id == episode_id))
             await session.execute(delete(Shot).where(Shot.episode_id == episode_id))
             section_order: list[str] = []
+            group_scene: dict[str, tuple[str, dict]] = {}
+            group_map: dict[str, list[int]] = {}
             for item in shots:
-                line = line_by_seq.get(int(item["line_seq"]))
-                if line is None:
+                line_seqs = item.get("line_seqs") or [item.get("line_seq")]
+                group_lines = [
+                    line_by_seq[int(seq)]
+                    for seq in line_seqs
+                    if seq is not None and int(seq) in line_by_seq
+                ]
+                if not group_lines:
                     continue
-                section_new = line.section not in section_order
+                first_line = group_lines[0]
+                section_new = first_line.section not in section_order
                 if section_new:
-                    section_order.append(line.section)
+                    section_order.append(first_line.section)
                 move = "none"
                 if section_new and item.get("character_image"):
                     move = (
@@ -122,34 +132,57 @@ async def _generate_storyboard(episode_id: str, node_run_id: str) -> None:
                         if len(section_order) % 2 == 1
                         else "slide_in_right"
                     )
+                text = " ".join(line.text for line in group_lines)
+                continuity_group = str(item.get("continuity_group") or "") or None
+                scene = item.get("scene") if isinstance(item.get("scene"), dict) else None
+                bg = item.get("bg", "paper")
+                if continuity_group:
+                    if continuity_group in group_scene:
+                        bg, scene = group_scene[continuity_group]
+                    elif scene:
+                        group_scene[continuity_group] = (bg, scene)
+                    group_map.setdefault(continuity_group, []).append(
+                        int(item["seq"])
+                    )
                 payload = {
                     "style": item.get("card_style", ""),
-                    "text": line.text,
+                    "text": text,
                     "motion": item.get("motion", "idle_breathe"),
                     "move": move,
                 }
-                session.add(
-                    Shot(
-                        episode_id=episode_id,
-                        script_line_id=line.id,
-                        seq=int(item["seq"]),
-                        duration_ms=int(item["duration_ms"]),
+                shot = Shot(
+                    episode_id=episode_id,
+                    script_line_id=first_line.id,
+                    seq=int(item["seq"]),
+                    duration_ms=int(item["duration_ms"]),
+                    card_type=item["card_type"],
+                    card_payload=payload,
+                    character_image=item.get("character_image"),
+                    character_position=item.get("character_position", "left"),
+                    bg=bg,
+                    transition=item.get("transition", "cut"),
+                    continuity_group=continuity_group,
+                    scene_meta=scene,
+                    cache_key=shot_cache_key(
+                        text=text,
                         card_type=item["card_type"],
                         card_payload=payload,
                         character_image=item.get("character_image"),
-                        character_position=item.get("character_position", "left"),
-                        bg=item.get("bg", "paper"),
-                        transition=item.get("transition", "cut"),
-                        cache_key=shot_cache_key(
-                            text=line.text,
-                            card_type=item["card_type"],
-                            card_payload=payload,
-                            character_image=item.get("character_image"),
-                            template_version=template_version,
-                        ),
                         template_version=template_version,
-                    )
+                    ),
+                    template_version=template_version,
                 )
+                session.add(shot)
+                await session.flush()
+                for index, line in enumerate(group_lines, start=1):
+                    session.add(
+                        ShotLine(
+                            episode_id=episode_id,
+                            shot_id=shot.id,
+                            script_line_id=line.id,
+                            seq=index,
+                        )
+                    )
 
             episode.storyboard_meta = {
                 "rhythm": report,
@@ -157,6 +190,7 @@ async def _generate_storyboard(episode_id: str, node_run_id: str) -> None:
                 "prompt_hash": prompt_hash(),
                 "generated_at": datetime.now(timezone.utc).isoformat(),
                 "shot_count": len(shots),
+                "continuity_groups": group_map,
             }
             episode.current_node = None
             episode.health = "OK" if report.get("valid") else "WARNING"

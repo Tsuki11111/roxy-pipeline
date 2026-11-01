@@ -26,6 +26,14 @@ $previous_tail
 
 $error_feedback
 
+## 视觉连续性（同组镜头必读）
+
+- 输入 JSON 里的 `continuity` 包含 `group`、`scene`、`line_texts`、`index`、`total`；`previous` 包含同组上一镜的 `summary` 和 `code`（首镜没有）。
+- 同组镜头必须复用同一 `scene.setting`、同一 entities 造型和配色；不得把牛、草原、物件重新画成另一个形象。
+- 有 `previous.code` 时，先复制其中的实体绘制函数、颜色、尺寸和布局，只改变动作、位置、镜头内构图；不要重新发明实体。
+- 每个 entity 对应的 SVG/CSS 节点必须加 `data-entity="<实体 id>"`，生成服务会检查。
+- 多句合并的镜头用 `<Sequence>` 在一个场景里分阶段推进子动画，不要切换成新的、不相关的场景。
+
 ## 卡片与动效硬规则
 
 - 不使用 `TerminalCard`/`Card`/`Label`/`Caption`/`Board`；画面文字统一用 `PaperCard`（Claude 暖纸卡）。

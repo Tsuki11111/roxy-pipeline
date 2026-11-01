@@ -57,6 +57,10 @@ async def test_get_script_and_confirm_script(client, episode, session):
 
 async def test_confirm_script_blocks_invalid_script(client, episode, session):
     _, ep = episode
+    long_text = (
+        "这是一句明显超过五十个字的测试台词用来触发校验错误"
+        "我们需要再补充一些内容让它足够长以确保超过限制并且继续增加文字"
+    )
     for index, label in enumerate(LABELS, start=1):
         session.add(
             ScriptLine(
@@ -64,8 +68,8 @@ async def test_confirm_script_blocks_invalid_script(client, episode, session):
                 seq=index,
                 speaker="narrator",
                 section=label,
-                text="太短",
-                char_count=2,
+                text=long_text if index == 1 else "太短",
+                char_count=len(long_text) if index == 1 else 2,
             )
         )
     episode_row = await session.get(Episode, ep["id"])

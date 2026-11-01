@@ -95,33 +95,21 @@ def _sentence_chunks(text: str, start_ms: int, end_ms: int) -> list[SubtitleChun
     return _proportional_chunks(split_subtitle(text), start_ms, end_ms)
 
 
-def _timed_chunks(
-    shot: ShotSpec, labels: list[str], start_ms: int, end_ms: int
-) -> list[SubtitleChunk] | None:
-    if not shot.char_timings:
-        return None
-    text = shot.narration
-    cursor = 0
-    chunks: list[SubtitleChunk] = []
-    for label in labels:
-        index = text.find(label, cursor)
-        if index < 0:
-            return None
-        cursor = index + len(label)
-        timings = [
-            timing
-            for timing in shot.char_timings[index:cursor]
-            if timing.end_ms > timing.start_ms
-        ]
-        if not timings:
-            return None
-        chunk_start = max(start_ms, min(start_ms + timing.start_ms for timing in timings))
-        chunk_end = min(end_ms, max(start_ms + timing.end_ms for timing in timings))
-        chunk_end = max(chunk_start + 1, chunk_end)
-        chunks.append(
-            SubtitleChunk(text=label, start_ms=chunk_start, end_ms=chunk_end)
-        )
-    return chunks
+def _line_windows(shot: ShotSpec, start_ms: int, end_ms: int):
+    lines = shot.lines
+    if not lines:
+        return [(shot.narration, start_ms, end_ms, shot.char_timings)]
+    total = sum(max(1, line.duration_ms) for line in lines)
+    gap = max(0, (end_ms - start_ms) - total)
+    per_gap = gap // max(1, len(lines))
+    windows = []
+    cursor = start_ms
+    for index, line in enumerate(lines):
+        span = max(1, line.duration_ms) + per_gap
+        line_end = end_ms if index == len(lines) - 1 else min(end_ms, cursor + span)
+        windows.append((line.text, cursor, line_end, line.char_timings))
+        cursor = line_end
+    return windows
 
 
 def build_timeline(spec: EpisodeSpec) -> Timeline:
@@ -136,13 +124,34 @@ def build_timeline(spec: EpisodeSpec) -> Timeline:
         if frame_end <= frame_start:
             frame_end = frame_start + 1
 
-        if spec.alignment_level == "sentence":
-            chunks = _sentence_chunks(shot.narration, start_ms, end_ms)
-        else:
-            labels = split_subtitle(shot.narration)
-            chunks = _timed_chunks(shot, labels, start_ms, end_ms)
-            if chunks is None:
-                chunks = _proportional_chunks(labels, start_ms, end_ms)
+        chunks: list[SubtitleChunk] = []
+        for text, line_start, line_end, timings in _line_windows(
+            shot, start_ms, end_ms
+        ):
+            if spec.alignment_level == "sentence" or not timings:
+                chunks.extend(_sentence_chunks(text, line_start, line_end))
+                continue
+            timed = [
+                timing
+                for timing in timings
+                if timing.end_ms > timing.start_ms
+            ]
+            if not timed:
+                chunks.extend(_sentence_chunks(text, line_start, line_end))
+                continue
+            chunk_start = max(
+                line_start, min(line_start + timing.start_ms for timing in timed)
+            )
+            chunk_end = min(
+                line_end, max(line_start + timing.end_ms for timing in timed)
+            )
+            chunks.append(
+                SubtitleChunk(
+                    text=text,
+                    start_ms=chunk_start,
+                    end_ms=max(chunk_start + 1, chunk_end),
+                )
+            )
 
         shots.append(
             ShotTimeline(

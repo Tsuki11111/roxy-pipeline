@@ -105,7 +105,10 @@ class Episode(Base):
     )
     title: Mapped[str] = mapped_column(String(300))
     topic: Mapped[str] = mapped_column(Text, default="")
-    target_duration_s: Mapped[int] = mapped_column(Integer, default=600)
+    target_duration_s: Mapped[int] = mapped_column(Integer, default=0)
+    # AI-estimated duration after script generation; target_duration_s mirrors it for old clients.
+    estimated_duration_s: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_source: Mapped[str] = mapped_column(String(20), default="pending")
     status: Mapped[EpisodeStatus] = mapped_column(
         SAEnum(EpisodeStatus, native_enum=False, length=32),
         default=EpisodeStatus.DRAFT,
@@ -225,8 +228,38 @@ class Shot(Base):
     transition: Mapped[str] = mapped_column(String(30), default="cut")
     cache_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     template_version: Mapped[str] = mapped_column(String(50), default="v1")
+    continuity_group: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    scene_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     episode: Mapped[Episode] = relationship(back_populates="shots")
+    lines: Mapped[list["ShotLine"]] = relationship(
+        back_populates="shot", cascade="all, delete-orphan"
+    )
+
+
+class ShotLine(Base):
+    __tablename__ = "shot_line"
+    __table_args__ = (
+        UniqueConstraint("shot_id", "seq", name="uq_shot_line_shot_seq"),
+        UniqueConstraint("script_line_id", name="uq_shot_line_script_line"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    episode_id: Mapped[str] = mapped_column(
+        ForeignKey("episode.id", ondelete="CASCADE"), index=True
+    )
+    shot_id: Mapped[str] = mapped_column(
+        ForeignKey("shot.id", ondelete="CASCADE"), index=True
+    )
+    script_line_id: Mapped[str] = mapped_column(
+        ForeignKey("script_line.id", ondelete="CASCADE"), index=True
+    )
+    seq: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+    shot: Mapped[Shot] = relationship(back_populates="lines")
 
 
 class RemotionShot(Base):

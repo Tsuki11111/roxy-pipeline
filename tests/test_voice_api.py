@@ -176,12 +176,12 @@ async def test_voice_episode_writes_audio_alignment_and_shots(
                 select(Shot).where(Shot.episode_id == ep["id"]).order_by(Shot.seq)
             )
         )
-        # 800ms audio + 100ms pause, raised to the 1500ms shot floor.
-        assert [shot.duration_ms for shot in shots] == [1500, 1500]
+        # 800ms audio + 100ms pause, raised to the 3000ms shot floor.
+        assert [shot.duration_ms for shot in shots] == [3000, 3000]
 
         with wave.open(episode_row.audio_path, "rb") as wav:
             duration_ms = round(wav.getnframes() * 1000 / wav.getframerate())
-        assert duration_ms == 3000
+        assert duration_ms == 6000
 
 
 async def test_align_episode_writes_char_timings(

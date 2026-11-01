@@ -11,10 +11,15 @@ from app.agents.storyboard.service import (
     StoryboardRequestError,
     start_storyboard,
 )
+from app.agents.storyboard.loaders import (
+    load_script_lines,
+    load_shot_lines,
+    load_shots,
+)
 from app.agents.storyboard.utils import (
     build_render_spec,
-    load_script_lines,
-    load_shots,
+    is_current_storyboard,
+    shot_read,
     store_rhythm,
     validate_storyboard,
 )
@@ -23,7 +28,6 @@ from app.models.core import Episode, EpisodeStatus
 from app.schemas.core import (
     EpisodeActionAccepted,
     EpisodeRead,
-    ShotRead,
     StoryboardRead,
 )
 from app.workflow.state_machine import InvalidTransition, transition_episode
@@ -106,12 +110,16 @@ async def get_storyboard(
         raise HTTPException(status_code=404, detail="series not found")
     lines = await load_script_lines(session, episode_id)
     shots = await load_shots(session, episode_id)
-    report = validate_storyboard(series, lines, shots)
+    shot_lines = await load_shot_lines(session, episode_id)
+    report = validate_storyboard(
+        series, lines, shots, shot_lines, legacy=not is_current_storyboard(episode)
+    )
+    line_by_id = {line.id: line for line in lines}
     return StoryboardRead(
         episode_id=episode.id,
         status=episode.status,
         meta=episode.storyboard_meta,
-        shots=[ShotRead.model_validate(shot) for shot in shots],
+        shots=[shot_read(shot, shot_lines, line_by_id) for shot in shots],
         rhythm=report,
     )
 
@@ -129,7 +137,10 @@ async def validate_storyboard_action(
         raise HTTPException(status_code=404, detail="series not found")
     lines = await load_script_lines(session, episode_id)
     shots = await load_shots(session, episode_id)
-    report = validate_storyboard(series, lines, shots)
+    shot_lines = await load_shot_lines(session, episode_id)
+    report = validate_storyboard(
+        series, lines, shots, shot_lines, legacy=not is_current_storyboard(episode)
+    )
     store_rhythm(episode, report)
     await session.commit()
     return report
@@ -153,7 +164,10 @@ async def confirm_storyboard(
         raise HTTPException(status_code=404, detail="series not found")
     lines = await load_script_lines(session, episode_id)
     shots = await load_shots(session, episode_id)
-    report = validate_storyboard(series, lines, shots)
+    shot_lines = await load_shot_lines(session, episode_id)
+    report = validate_storyboard(
+        series, lines, shots, shot_lines, legacy=not is_current_storyboard(episode)
+    )
     if not report.valid:
         raise HTTPException(
             status_code=409,

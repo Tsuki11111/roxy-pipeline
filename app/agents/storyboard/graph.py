@@ -12,6 +12,9 @@ from app.providers.llm import LLMClient
 from app.agents.storyboard.grammar import (
     CARD_TYPES,
     DEFAULT_CARD_STYLES,
+    MAX_GROUP_DURATION_MS,
+    MAX_LINES_PER_SHOT,
+    MIN_GROUP_DURATION_MS,
     POSITIONS,
     TRANSITIONS,
     MOTIONS,
@@ -20,6 +23,7 @@ from app.agents.storyboard.grammar import (
     estimate_duration_ms,
     load_character_assets,
 )
+from app.agents.storyboard.continuity import canonicalize_continuity
 from app.agents.storyboard.models import ShotDraft
 from app.agents.storyboard.prompts import load_prompt, load_system_prompt
 from app.agents.storyboard.rhythm import apply_rhythm_fixes, validate_rhythm
@@ -38,11 +42,13 @@ class StoryboardState(TypedDict, total=False):
 
 def _normalize_shot(
     item: dict,
-    line: dict,
+    lines: list[dict],
     *,
     catalog_paths: set[str],
     default_image: str | None,
+    group_id: str = "",
 ) -> dict:
+    first = lines[0]
     card_type = item.get("card_type")
     if card_type not in CARD_TYPES:
         card_type = "pure_text"
@@ -66,13 +72,25 @@ def _normalize_shot(
     if motion not in MOTIONS:
         motion = "idle_breathe"
 
+    scene = item.get("scene")
+    if not isinstance(scene, dict):
+        scene = {}
+    continuity_group = str(item.get("continuity_group") or group_id or "")
+
     return {
         "seq": 0,
-        "line_seq": int(line["seq"]),
-        "section": line["section"],
-        "speaker": line.get("speaker", "narrator"),
-        "text": line["text"],
-        "duration_ms": estimate_duration_ms(line["text"]),
+        "line_seq": int(first["seq"]),
+        "line_seqs": [int(line["seq"]) for line in lines],
+        "section": first["section"],
+        "speaker": first.get("speaker", "narrator"),
+        "text": " ".join(line["text"] for line in lines),
+        "duration_ms": max(
+            MIN_GROUP_DURATION_MS,
+            min(
+                MAX_GROUP_DURATION_MS,
+                sum(estimate_duration_ms(line["text"]) for line in lines),
+            ),
+        ),
         "card_type": card_type,
         "card_style": str(
             item.get("card_style") or DEFAULT_CARD_STYLES.get(card_type, "")
@@ -82,6 +100,8 @@ def _normalize_shot(
         "bg": bg,
         "transition": transition,
         "motion": motion,
+        "continuity_group": continuity_group,
+        "scene": scene,
     }
 
 
@@ -147,28 +167,68 @@ def build_storyboard_graph(
                 max_tokens=max(2000, len(section_lines) * 220),
             )
             raw_shots = raw.get("shots")
-            by_line: dict[int, dict] = {}
+            by_seq = {int(line["seq"]): line for line in section_lines}
+            groups: list[tuple[dict, list[dict]]] = []
+            used: set[int] = set()
             if isinstance(raw_shots, list):
                 for item in raw_shots:
                     if not isinstance(item, dict):
                         continue
-                    try:
-                        line_seq = int(item.get("line_seq"))
-                    except (TypeError, ValueError):
+                    raw_seqs = item.get("line_seqs")
+                    if isinstance(raw_seqs, list):
+                        seqs = []
+                        for value in raw_seqs:
+                            try:
+                                seqs.append(int(value))
+                            except (TypeError, ValueError):
+                                continue
+                    else:
+                        try:
+                            seqs = [int(item.get("line_seq"))]
+                        except (TypeError, ValueError):
+                            continue
+                    seqs = [seq for seq in seqs if seq in by_seq]
+                    seqs = list(dict.fromkeys(seqs))
+                    if not seqs:
                         continue
-                    by_line[line_seq] = item
+                    contiguous = sorted(seqs) == list(
+                        range(min(seqs), max(seqs) + 1)
+                    )
+                    if contiguous and len(seqs) <= MAX_LINES_PER_SHOT:
+                        candidate_groups = [seqs]
+                    else:
+                        candidate_groups = [[seq] for seq in seqs]
+                    for group_seqs in candidate_groups:
+                        if any(seq in used for seq in group_seqs):
+                            continue
+                        used.update(group_seqs)
+                        groups.append(
+                            (item, [by_seq[seq] for seq in group_seqs])
+                        )
             for line in section_lines:
+                seq = int(line["seq"])
+                if seq not in used:
+                    used.add(seq)
+                    groups.append(({}, [line]))
+            groups.sort(key=lambda pair: int(pair[1][0]["seq"]))
+
+            for index, (item, group_lines) in enumerate(groups, start=1):
+                group_id = str(
+                    item.get("continuity_group") or f"{label}-{index}"
+                )
                 shots.append(
                     _normalize_shot(
-                        by_line.get(int(line["seq"]), {}),
-                        line,
+                        item,
+                        group_lines,
                         catalog_paths=catalog_paths,
                         default_image=default_image,
+                        group_id=group_id,
                     )
                 )
 
         for index, shot in enumerate(shots, start=1):
             shot["seq"] = index
+        canonicalize_continuity(shots)
         return {"shots": shots}
 
     async def schema_check_node(state: StoryboardState) -> dict:

@@ -10,6 +10,7 @@ class FakeArticleLLM:
         text = "这是一句用于导入测试的口播台词"
         return {
             "summary": "测试文章摘要",
+            "estimated_duration_s": 120,
             "sections": [
                 {
                     "label": "问题",
@@ -50,9 +51,15 @@ async def test_import_article_builds_script(episode, session):
         optimize=False,
     )
     assert result["validation"]["valid"] is True
+    assert result["estimated_duration_s"] == 120
     assert result["status"].value == "SCRIPT_REVIEW"
     assert len(result["lines"]) == 11
     assert result["outline"][0]["question"] == "为什么会有这个问题？"
+
+    episode_row = await session.get(Episode, ep["id"])
+    assert episode_row.estimated_duration_s == 120
+    assert episode_row.duration_source == "ai"
+    assert episode_row.script_meta["duration"]["source"] == "ai"
 
     rows = list(
         await session.scalars(

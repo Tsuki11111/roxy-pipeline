@@ -6,7 +6,6 @@ import {
   Checkbox,
   Form,
   Input,
-  InputNumber,
   Modal,
   Popconfirm,
   Select,
@@ -95,7 +94,6 @@ export default function EpisodesPage() {
         series_id: values.series_id,
         title: values.title,
         topic: values.topic || values.title,
-        target_duration_s: values.target_duration_s,
       });
       createdId = created.id;
       const result = await api.importArticle(created.id, {
@@ -146,7 +144,7 @@ export default function EpisodesPage() {
             icon={<FileTextOutlined />}
             onClick={() => {
               articleForm.resetFields();
-              articleForm.setFieldsValue({ target_duration_s: 600, optimize: true });
+              articleForm.setFieldsValue({ optimize: true });
               setArticleOpen(true);
             }}
             disabled={series.length === 0}
@@ -193,9 +191,14 @@ export default function EpisodesPage() {
               ),
             },
             {
-              title: "目标时长",
-              dataIndex: "target_duration_s",
-              render: (value) => `${value}s`,
+              title: "预估时长",
+              dataIndex: "estimated_duration_s",
+              render: (value, row) =>
+                value
+                  ? `${value}s`
+                  : row.target_duration_s
+                    ? `${row.target_duration_s}s`
+                    : "—",
             },
             {
               title: "更新时间",
@@ -312,9 +315,6 @@ export default function EpisodesPage() {
           </Space>
           <Form.Item name="topic" label="主题/副标题">
             <Input />
-          </Form.Item>
-          <Form.Item name="target_duration_s" label="目标时长（秒）" initialValue={600}>
-            <InputNumber min={30} max={3600} style={{ width: 180 }} />
           </Form.Item>
           <Form.Item
             name="article"

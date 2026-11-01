@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.agents.script.validation import (
     ScriptLineData,
-    target_chars_for_duration,
+    validate_optimized_lines,
     validate_script,
 )
 
@@ -35,18 +35,15 @@ def make_valid_lines() -> list[ScriptLineData]:
     return lines
 
 
-def test_target_chars():
-    assert target_chars_for_duration(60) == 327
-    assert target_chars_for_duration(600) == 3270
-
-
 def test_valid_script_passes():
     result = validate_script(
-        make_valid_lines(), target_duration_s=60, section_labels=LABELS
+        make_valid_lines(),
+        section_labels=LABELS,
+        estimated_duration_s=60,
     )
     assert result.valid is True
     assert result.total_chars == 327
-    assert result.target_chars == 327
+    assert result.estimated_duration_s == 60
     assert result.line_count == 24
     assert result.sections_present == LABELS
 
@@ -60,7 +57,7 @@ def test_long_line_and_missing_section():
         }
     )
     lines = [line for line in lines if line.section != "结尾"]
-    result = validate_script(lines, target_duration_s=60, section_labels=LABELS)
+    result = validate_script(lines, section_labels=LABELS)
     assert result.valid is False
     assert any("超过 50 字" in error for error in result.errors)
     assert any("缺少章节：结尾" in error for error in result.errors)
@@ -69,15 +66,49 @@ def test_long_line_and_missing_section():
 def test_section_order():
     lines = make_valid_lines()
     lines[0] = lines[0].model_copy(update={"section": "结尾"})
-    result = validate_script(lines, target_duration_s=60, section_labels=LABELS)
+    result = validate_script(lines, section_labels=LABELS)
     assert any("章节顺序错误" in error for error in result.errors)
 
 
 def test_forbidden_words():
     result = validate_script(
         make_valid_lines(),
-        target_duration_s=60,
         section_labels=LABELS,
         forbidden_words=["测试脚本"],
     )
     assert any("禁止词" in error for error in result.errors)
+
+
+def test_optimized_lines_reject_content_loss():
+    original = [
+        ScriptLineData(seq=1, section="问题", speaker="roxy", text="光速大约是每秒 30 万公里", char_count=15),
+        ScriptLineData(seq=2, section="解决", speaker="roxy", text="所以先看到闪电再听到雷声", char_count=12),
+    ]
+    optimized = [
+        ScriptLineData(seq=1, section="问题", speaker="roxy", text="光速很快", char_count=4),
+        ScriptLineData(seq=2, section="解决", speaker="roxy", text="所以先看到闪电再听到雷声", char_count=12),
+    ]
+    errors = validate_optimized_lines(original, optimized)
+    assert any("少超过 10%" in error or "疑似省略" in error for error in errors)
+    assert any("丢失原文关键词" in error for error in errors)
+
+
+def test_optimized_lines_reject_number_loss():
+    original = [
+        ScriptLineData(seq=1, section="问题", speaker="roxy", text="模型有 70 亿参数", char_count=10),
+    ]
+    optimized = [
+        ScriptLineData(seq=1, section="问题", speaker="roxy", text="模型有很多参数", char_count=7),
+    ]
+    errors = validate_optimized_lines(original, optimized)
+    assert any("70" in error or "丢失原文关键词" in error for error in errors)
+
+
+def test_optimized_lines_accept_rewrite():
+    original = [
+        ScriptLineData(seq=1, section="问题", speaker="roxy", text="光速大约是每秒三十万公里", char_count=13),
+    ]
+    optimized = [
+        ScriptLineData(seq=1, section="问题", speaker="roxy", text="光速约每秒三十万公里，真快", char_count=15),
+    ]
+    assert validate_optimized_lines(original, optimized) == []

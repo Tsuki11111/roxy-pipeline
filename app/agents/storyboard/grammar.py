@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from app.core.speech import estimate_text_ms
 from app.storage.paths import PROJECT_ROOT
 
 CARD_TYPES = ("chat_bubble", "terminal", "browser", "icon", "pure_text")
@@ -17,9 +18,9 @@ MOVES = (
     "shift_right",
 )
 
-MIN_DURATION_MS = 1500
-MAX_DURATION_MS = 6000
-CHARS_PER_SECOND = 5.5
+MIN_GROUP_DURATION_MS = 3000
+MAX_GROUP_DURATION_MS = 20000
+MAX_LINES_PER_SHOT = 4
 
 DEFAULT_BACKGROUND_KEY = "paper"
 BACKGROUNDS = {
@@ -38,12 +39,8 @@ DEFAULT_CARD_STYLES = {
 }
 
 
-def clamp_duration_ms(value: int) -> int:
-    return max(MIN_DURATION_MS, min(MAX_DURATION_MS, int(value)))
-
-
 def estimate_duration_ms(text: str) -> int:
-    return clamp_duration_ms(round(len(text.strip()) / CHARS_PER_SECOND * 1000))
+    return int(estimate_text_ms(text))
 
 
 def load_character_assets(pack: str | None = None) -> list[dict]:

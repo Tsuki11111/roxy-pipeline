@@ -252,6 +252,24 @@ def run_rules(
                 timeline_ms=timeline.total_ms,
             )
         )
+    if (
+        duration is not None
+        and episode.estimated_duration_s
+        and episode.estimated_duration_s > 0
+    ):
+        estimated_ms = episode.estimated_duration_s * 1000
+        deviation = (duration - estimated_ms) / estimated_ms
+        if abs(deviation) > 0.10:
+            issues.append(
+                _issue(
+                    "video.estimate",
+                    "WARNING",
+                    "成片时长与 AI 预估偏差超过 10%",
+                    video_ms=duration,
+                    estimated_ms=estimated_ms,
+                    deviation=round(deviation, 3),
+                )
+            )
 
     if episode.audio_path and Path(episode.audio_path).is_file():
         loud = _loudness(Path(episode.audio_path))

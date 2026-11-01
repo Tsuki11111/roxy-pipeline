@@ -15,6 +15,7 @@ from app.voice.service import (
     PROVIDER,
     _resolve,
     text_hash,
+    validate_line_coverage,
     voice_identity,
 )
 from app.models.core import (
@@ -25,6 +26,7 @@ from app.models.core import (
     NodeStatus,
     ScriptLine,
     Shot,
+    ShotLine,
 )
 from app.providers.tts import build_tts_provider, request_tts_shutdown
 from app.agents.storyboard.render_spec import build_episode_render_spec
@@ -38,8 +40,8 @@ from app.workflow.state_machine import transition_episode
 logger = logging.getLogger(__name__)
 
 MIN_LINE_MS = 300
-MAX_SHOT_MS = 15000
-MIN_SHOT_MS = 1500
+MAX_SHOT_MS = 30000
+MIN_SHOT_MS = 3000
 
 
 async def _mark_failed(episode_id: str, node_run_id: str, error: str) -> None:
@@ -94,11 +96,26 @@ async def _voice_episode(episode_id: str, node_run_id: str) -> None:
                 select(Shot).where(Shot.episode_id == episode_id).order_by(Shot.seq)
             )
         )
+        shot_line_rows = list(
+            await session.scalars(
+                select(ShotLine)
+                .where(ShotLine.episode_id == episode_id)
+                .order_by(ShotLine.shot_id, ShotLine.seq)
+            )
+        )
         if not lines or not shots:
             raise RuntimeError("episode has no lines or shots")
-        shot_by_line = {shot.script_line_id: shot for shot in shots}
-        if len(shot_by_line) != len(lines):
-            raise RuntimeError("each script line must have exactly one shot")
+        line_map = validate_line_coverage(lines, shots, shot_line_rows)
+        shot_by_id = {shot.id: shot for shot in shots}
+        line_to_shot = {
+            line_id: shot_by_id[shot_id]
+            for shot_id, line_ids in line_map.items()
+            for line_id in line_ids
+        }
+        shot_lines: dict[str, list[ScriptLine]] = {}
+        for line in lines:
+            shot = line_to_shot[line.id]
+            shot_lines.setdefault(shot.id, []).append(line)
 
         now = datetime.now(timezone.utc)
         node.status = NodeStatus.RUNNING
@@ -114,12 +131,11 @@ async def _voice_episode(episode_id: str, node_run_id: str) -> None:
 
         parts: list[tuple[Path, int]] = []
         alignment: list[dict] = []
-        cursor_ms = 0
+        line_results: dict[str, tuple[Path, int]] = {}
 
         for line in lines:
             await ensure_not_cancelled(session, episode_id)
-            shot = shot_by_line.get(line.id)
-            if shot is None:
+            if line.id not in line_to_shot:
                 raise RuntimeError(f"script line {line.seq} has no shot")
             stored = await _find_audio(session, line, voice_key)
             if stored is not None and Path(stored.path).is_file():
@@ -161,32 +177,52 @@ async def _voice_episode(episode_id: str, node_run_id: str) -> None:
                 raise RuntimeError(
                     f"line {line.seq} audio duration {duration_ms}ms is out of range"
                 )
+            line_results[line.id] = (clip, duration_ms)
 
-            shot_ms = duration_ms + settings.voice_pause_ms
-            shot_ms = max(MIN_SHOT_MS, shot_ms)
+        cursor_ms = 0
+        for shot in sorted(shots, key=lambda item: item.seq):
+            group = sorted(
+                shot_lines.get(shot.id, []), key=lambda line: line.seq
+            )
+            if not group:
+                continue
+            base_ms = sum(
+                line_results[line.id][1] + settings.voice_pause_ms
+                for line in group
+            )
+            shot_ms = max(MIN_SHOT_MS, base_ms)
             if shot_ms > MAX_SHOT_MS:
                 raise RuntimeError(
-                    f"line {line.seq} needs {shot_ms}ms, exceeds {MAX_SHOT_MS}ms; "
-                    "split the line"
+                    f"shot {shot.seq} needs {shot_ms}ms, exceeds {MAX_SHOT_MS}ms; "
+                    "split the shot"
                 )
-            gap_ms = shot_ms - duration_ms
+            extra_ms = shot_ms - base_ms
+            shot_start = cursor_ms
             shot.duration_ms = shot_ms
-
-            alignment.append(
-                {
-                    "script_line_id": line.id,
-                    "seq": line.seq,
-                    "speaker": line.speaker,
-                    "text": line.text,
-                    "start_ms": cursor_ms,
-                    "end_ms": cursor_ms + duration_ms,
-                    "shot_end_ms": cursor_ms + shot_ms,
-                    "duration_ms": duration_ms,
-                    "shot_duration_ms": shot_ms,
-                }
-            )
-            parts.append((clip, gap_ms))
-            cursor_ms += shot_ms
+            for index, line in enumerate(group):
+                clip, duration_ms = line_results[line.id]
+                gap_ms = settings.voice_pause_ms
+                if index == len(group) - 1:
+                    gap_ms += extra_ms
+                alignment.append(
+                    {
+                        "script_line_id": line.id,
+                        "seq": line.seq,
+                        "speaker": line.speaker,
+                        "text": line.text,
+                        "start_ms": cursor_ms,
+                        "end_ms": cursor_ms + duration_ms,
+                        "shot_id": shot.id,
+                        "shot_start_ms": shot_start,
+                        "shot_local_start_ms": cursor_ms - shot_start,
+                        "shot_local_end_ms": cursor_ms + duration_ms - shot_start,
+                        "shot_end_ms": shot_start + shot_ms,
+                        "duration_ms": duration_ms,
+                        "shot_duration_ms": shot_ms,
+                    }
+                )
+                parts.append((clip, gap_ms))
+                cursor_ms += duration_ms + gap_ms
             await session.commit()
 
         episode = await session.get(Episode, episode_id)

@@ -16,6 +16,7 @@ from app.models.core import (
     NodeStatus,
     ScriptLine,
     Shot,
+    ShotLine,
 )
 from app.workflow.outbox import enqueue_outbox
 from app.storage.paths import PROJECT_ROOT
@@ -51,7 +52,7 @@ def text_hash(text: str) -> str:
 
 async def _load_lines_shots(
     session: AsyncSession, episode_id: str
-) -> tuple[list[ScriptLine], list[Shot]]:
+) -> tuple[list[ScriptLine], list[Shot], list[ShotLine]]:
     lines = list(
         await session.scalars(
             select(ScriptLine)
@@ -66,7 +67,37 @@ async def _load_lines_shots(
             .order_by(Shot.seq)
         )
     )
-    return lines, shots
+    shot_lines = list(
+        await session.scalars(
+            select(ShotLine)
+            .where(ShotLine.episode_id == episode_id)
+            .order_by(ShotLine.shot_id, ShotLine.seq)
+        )
+    )
+    return lines, shots, shot_lines
+
+
+def shot_line_map(
+    shots: list[Shot], shot_lines: list[ShotLine]
+) -> dict[str, list[str]]:
+    mapping: dict[str, list[str]] = {}
+    for row in shot_lines:
+        mapping.setdefault(row.shot_id, []).append(row.script_line_id)
+    for shot in shots:
+        mapping.setdefault(shot.id, [shot.script_line_id])
+    return mapping
+
+
+def validate_line_coverage(
+    lines: list[ScriptLine], shots: list[Shot], shot_lines: list[ShotLine]
+) -> dict[str, list[str]]:
+    mapping = shot_line_map(shots, shot_lines)
+    covered = [line_id for ids in mapping.values() for line_id in ids]
+    if sorted(covered) != sorted(line.id for line in lines):
+        raise VoiceRequestError(
+            "script lines must be covered exactly once by shots"
+        )
+    return mapping
 
 
 async def start_voice(
@@ -85,18 +116,12 @@ async def start_voice(
     if retry and episode.health != "FAILED":
         raise VoiceConflict("only a failed voice run can be retried")
 
-    lines, shots = await _load_lines_shots(session, episode.id)
+    lines, shots, shot_lines = await _load_lines_shots(session, episode.id)
     if not lines:
         raise VoiceRequestError("episode has no script lines")
     if not shots:
         raise VoiceRequestError("episode has no shots")
-    if len(lines) != len(shots):
-        raise VoiceRequestError(
-            f"script lines ({len(lines)}) and shots ({len(shots)}) do not match"
-        )
-    shot_line_ids = {shot.script_line_id for shot in shots}
-    if len(shot_line_ids) != len(lines):
-        raise VoiceRequestError("each script line must have exactly one shot")
+    line_map = validate_line_coverage(lines, shots, shot_lines)
 
     settings = get_settings()
     voice_key, ref_audio = voice_identity()
@@ -113,6 +138,10 @@ async def start_voice(
         ],
         "voice_key": voice_key,
         "ref_audio": str(ref_audio),
+        "shots": [
+            {"id": shot.id, "lines": line_map.get(shot.id, [])}
+            for shot in shots
+        ],
         "pause_ms": settings.voice_pause_ms,
         "auto_render": settings.voice_auto_render,
     }

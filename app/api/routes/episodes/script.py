@@ -87,6 +87,7 @@ async def get_script(
         episode_id=episode.id,
         status=episode.status,
         meta=episode.script_meta,
+        estimated_duration_s=episode.estimated_duration_s,
         lines=[ScriptLineRead.model_validate(line) for line in lines],
         validation=validation,
     )

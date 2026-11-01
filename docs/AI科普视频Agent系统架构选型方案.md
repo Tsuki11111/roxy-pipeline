@@ -2,13 +2,13 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | v1.21 |
+| 文档版本 | v1.22 |
 | 文档状态 | 本地单机方案已确认 |
 | 日期 | 2026-11-01 |
 | 关联文档 | [需求分析文档](AI科普视频Agent系统需求分析文档.md)；[架构决策记录](decisions-architecture.md) |
 | 已确认约束 | Windows 单机运行；LLM 国内为主；TTS 用本地 IndexTTS2（可选组件），不做付费云 TTS；视觉质检统一用 `deepseek-flash` 多模态；`deepseek-flash` 文本主模型 + 火山方舟备选/图像 |
 | 推荐方案 | 方案 A：Python 模块化单体 + 进程级拆分 + Celery；AI 子图用 LangGraph |
-| 变更说明 | v1.21：移除 PostgreSQL、RabbitMQ、MinIO 和 VM 部署，改为 SQLite + 单 Redis（Celery broker）+ 本地文件系统，前端由 FastAPI 托管；v1.20：Remotion 成为唯一生产渲染器（`REMOTION_ONLY=true`），Playwright 仅保留测试/历史；新期配音/对齐后自动 codegen 再渲染，codegen 失败不再回退；v1.19：新期在配音/对齐完成后自动触发 Remotion codegen 再渲染（`REMOTION_AUTO_CODEGEN`），失败回退 Playwright；脚本单句上限 25→50 字；v1.18：Remotion 卡片、背景、字幕统一改为 Claude 暖纸风格（`PaperCard` 六种纸卡 × 四种纸色，暖纸舞台，纸墨字幕），删除终端卡/旧卡片组件；v1.17：Remotion 卡片改为 `TerminalCard` 二次元终端/代码块（terminal/editor/hud/console/snippet/chat × navy/purple/mint/rose），Python 按镜头排期约 1/3 纯演示、其余指定样式与切换配方（slide/zoom/flip/drop/reveal/push）；v1.16：Remotion 改为长段 `Board` 板书卡 + `<Sequence>` 演示分段，卡片切换使用大幅位移/缩放/旋转；禁用 `Card`/`Label`/`Caption` 作为画面文字；v1.15：新增 M6 Remotion 逐镜头代码生成 Agent，Remotion 取代 Playwright 成为默认镜头渲染器（Playwright 保留回退），新增 Docker 沙箱、镜头级 code hash 与 `remotion_shot` 表；v1.14：编辑器新增独立贴图层、图片上传与 Seedream 生成（DeepSeek 写提示词）；v1.13：新增分镜时间线编辑器、成片视频流与视觉编辑重渲染接口，`PATCH /shots` 支持卡片文案与逐镜头背景；v1.12：默认改为句级对齐（`ALIGN_LEVEL=sentence`），字幕整句显示，字级 wav2vec2 对齐改为可选；v1.11：移除按主题生成脚本（`script_graph` / topic 模块 / confirm-topic / retry-script / regenerate-script），脚本唯一来源改为文章导入 + 可选润色；新增取消/删除期接口；v1.10：新增文稿生活化润色 Agent 与 Web 控制台；v1.9：新增半身反应镜头与角色滑入、输出时间戳目录与 MinIO 上传；v1.8：新增 Asset Agent（文本→无文字演示素材，reuse_key 复用，暂不引入 RAG）；v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
+| 变更说明 | v1.22：AI 生成脚本后估算时长（取消用户预设时长）；镜头允许 1–4 句合并、3–20 秒；新增 `shot_line`、`continuity_group`/`scene` 与同组串行视觉连续性；v1.21：移除 PostgreSQL、RabbitMQ、MinIO 和 VM 部署，改为 SQLite + 单 Redis（Celery broker）+ 本地文件系统，前端由 FastAPI 托管；v1.20：Remotion 成为唯一生产渲染器（`REMOTION_ONLY=true`），Playwright 仅保留测试/历史；新期配音/对齐后自动 codegen 再渲染，codegen 失败不再回退；v1.19：新期在配音/对齐完成后自动触发 Remotion codegen 再渲染（`REMOTION_AUTO_CODEGEN`），失败回退 Playwright；脚本单句上限 25→50 字；v1.18：Remotion 卡片、背景、字幕统一改为 Claude 暖纸风格（`PaperCard` 六种纸卡 × 四种纸色，暖纸舞台，纸墨字幕），删除终端卡/旧卡片组件；v1.17：Remotion 卡片改为 `TerminalCard` 二次元终端/代码块（terminal/editor/hud/console/snippet/chat × navy/purple/mint/rose），Python 按镜头排期约 1/3 纯演示、其余指定样式与切换配方（slide/zoom/flip/drop/reveal/push）；v1.16：Remotion 改为长段 `Board` 板书卡 + `<Sequence>` 演示分段，卡片切换使用大幅位移/缩放/旋转；禁用 `Card`/`Label`/`Caption` 作为画面文字；v1.15：新增 M6 Remotion 逐镜头代码生成 Agent，Remotion 取代 Playwright 成为默认镜头渲染器（Playwright 保留回退），新增 Docker 沙箱、镜头级 code hash 与 `remotion_shot` 表；v1.14：编辑器新增独立贴图层、图片上传与 Seedream 生成（DeepSeek 写提示词）；v1.13：新增分镜时间线编辑器、成片视频流与视觉编辑重渲染接口，`PATCH /shots` 支持卡片文案与逐镜头背景；v1.12：默认改为句级对齐（`ALIGN_LEVEL=sentence`），字幕整句显示，字级 wav2vec2 对齐改为可选；v1.11：移除按主题生成脚本（`script_graph` / topic 模块 / confirm-topic / retry-script / regenerate-script），脚本唯一来源改为文章导入 + 可选润色；新增取消/删除期接口；v1.10：新增文稿生活化润色 Agent 与 Web 控制台；v1.9：新增半身反应镜头与角色滑入、输出时间戳目录与 MinIO 上传；v1.8：新增 Asset Agent（文本→无文字演示素材，reuse_key 复用，暂不引入 RAG）；v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
 
 > 本文档回答“用什么做、怎么拆、怎么部署、接口长什么样”。需求编号（F-xx / N-xx / A-xx）沿用需求分析文档，不重复展开。
 
@@ -756,7 +756,7 @@ M6 起，镜头画面只由 Remotion 渲染（`REMOTION_ONLY=true`）；Playwrig
 
 ### 10.4 帧时间与镜头时长
 
-- 时长由对应句子的配音时长驱动，不写死（F-16）。
+- 时长由组内所有句子的配音时长之和驱动，不写死（F-16）；单镜头 3–20 秒。
 - 全片用累计时间计算帧边界，避免逐镜头四舍五入累积漂移：
 
 ```text
@@ -766,8 +766,9 @@ frame_count = frame_end - frame_start
 ```
 
 - 每句音频末尾补/裁不超过 20ms 的静音，使音频时长对齐到帧边界；成片音画同步以累计时间轴为准。
-- 一个镜头默认对应一句台词；数据模型允许 `script_line 1:N shot`，用于长句拆分或纯视觉节拍。MVP 先按 1:1 实现，若要对齐参考片“160 句 / 200 个画面节拍”，再放开 1:N。
-- 字幕条默认按整句显示（句级对齐，单句 ≤50 字）；字级模式下才按字级时间戳每 6–8 字推进，一个镜头内可以有多段字幕（F-28）。
+- 一个镜头覆盖 1–4 句连续台词，通过 `shot_line` 关联；详细讲解保持一个镜头，用 `<Sequence>` 演分子动画。字幕仍按句显示。
+- 字幕条默认按整句显示（句级对齐，单句 ≤50 字）；字级模式下才按字级时间戳推进，一个镜头内可以有多段字幕（F-28）。
+- 同一 `continuity_group` 的镜头共享 `scene`（setting + entities）和背景；Remotion 同组镜头串行生成，后一镜复用前一镜代码中的实体造型，实体节点带 `data-entity` 标记。跨组镜头可并行。
 
 ### 10.5 编码与拼接
 
@@ -944,7 +945,8 @@ ffmpeg -i video.mp4 -i audio_norm.wav \
 **确定性校验（必须实现，不能只靠模型）：**
 
 - 单句字数 ≤50；超长自动拆分或阻断。
-- 全文字数 = 目标时长 × 327，误差 ≤±10%。
+- 脚本不再按预设时长控制字数；生成后由 AI 估算 `estimated_duration_s`，字符数估算兜底。
+- 润色完整性：句数不变、每句非空、总字数不低于原文 90%、数字/英文 token 必须保留；超过 125% 也拒绝。
 - 每个章节都有内容；章节顺序与 series 配置一致。
 - 禁止词表命中即阻断。
 - 所有台词由洛琪希单人口播，单句 ≤50 字；不设旁白，不再校验旁白/洛琪希比例。
@@ -979,9 +981,11 @@ ffmpeg -i video.mp4 -i audio_norm.wav \
 1. 连续 3 个镜头不得使用同一 `card_type`。
 2. 角色连续出现不得超过 4 个镜头（第 5 个镜头必须无角色）。
 3. 每小节最后一个镜头必须是 `icon` 或 `pure_text`。
-4. 单镜头时长必须在 1.5–6 秒。
-5. 可选：角色不能连续 4 个镜头站在同一位置；连续 5 个镜头不能都是对话气泡。
-6. 可选：每 8–12 个镜头至少有一次“呼吸镜头”（无角色、纯图标/文字）。
+4. 单镜头时长必须在 3–20 秒。
+5. 章节台词 ≥4 句时，至少一个镜头合并 ≥2 句；多句镜头必须有 `scene` 和 `continuity_group`。
+6. 同一 `continuity_group` 的镜头必须使用相同背景，scene setting/entities 保持一致。
+7. 可选：角色不能连续 4 个镜头站在同一位置；连续 5 个镜头不能都是对话气泡。
+8. 可选：每 8–12 个镜头至少有一次“呼吸镜头”（无角色、纯图标/文字）。
 
 **软约束（提示不阻断）：** 角色出现比例约 60%；洛琪希台词占约 20% 的句子；每章至少一次情绪变化。软约束用于节奏报告，不作为硬性打回条件。
 

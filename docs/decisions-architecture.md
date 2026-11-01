@@ -33,6 +33,28 @@
 
 ---
 
+## ADR-013：AI 估算时长、镜头分组与同组视觉连续性
+
+### 背景
+
+逐句生成动画导致两个问题：一是每句都换画面，详细讲解被切碎；二是相关镜头各自独立生成，同一头牛/同一片草原在不同镜头里变成不同形象。同时，用户不应在脚本生成前预设视频时长。
+
+### 决策
+
+- 脚本 Agent 输出 `estimated_duration_s`，写入 `episode.estimated_duration_s` 和 `duration_source`；`target_duration_s` 仅作旧客户端兼容镜像。脚本不再按预设字数删减内容。
+- 分镜 Agent 把 1–4 句连续台词合并成一个镜头，单镜 3–20 秒；详细讲解保持一个镜头，用 `Sequence` 演分子动画。
+- `Shot` 通过 `shot_line` 关联多句台词；`Shot.script_line_id` 保留为首句兼容字段。
+- 每个镜头带 `continuity_group` 和 `scene`（setting + entities）。同组共享背景与实体设定；Remotion 同组镜头串行生成，后一镜拿到前一镜代码，实体节点必须带 `data-entity` 标记。
+
+### 后果
+
+- 镜头数减少、单镜变长，渲染单镜耗时增加，但同组串行只在组内，组间仍并行。
+- 脚本完整性校验变严（数字/英文 token、总字数下限），可能拒绝过度删减的润色结果。
+- 旧期迁移后按单句 `shot_line` 兜底；没有 `continuity_group` 的期不追加连续性上下文。
+- Prompt 变更会让旧 Remotion 代码缓存失效，旧期需要重新生成代码。
+
+---
+
 ## ADR-001：采用方案 A（Python 模块化单体 + 进程级拆分 + Celery）
 
 ### 背景

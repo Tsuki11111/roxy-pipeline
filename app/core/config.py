@@ -50,7 +50,6 @@ class Settings(BaseSettings):
     asset_agent_auto_check: bool = True
     asset_agent_max_count: int = 3
 
-    script_target_chars_per_minute: int = 327
     script_article_max_chars: int = 30000
 
     storyboard_max_repairs: int = 2

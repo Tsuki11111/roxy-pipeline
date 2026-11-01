@@ -50,7 +50,6 @@ class EpisodeCreate(BaseModel):
     series_id: str
     title: str = Field(min_length=1, max_length=300)
     topic: str = ""
-    target_duration_s: int = Field(default=600, ge=30, le=3600)
 
 
 class EpisodeRead(BaseModel):
@@ -61,6 +60,8 @@ class EpisodeRead(BaseModel):
     title: str
     topic: str
     target_duration_s: int
+    estimated_duration_s: int | None
+    duration_source: str
     status: EpisodeStatus
     health: str
     current_node: str | None
@@ -122,6 +123,11 @@ class ShotRead(BaseModel):
     transition: str
     cache_key: str | None
     template_version: str
+    continuity_group: str | None = None
+    scene_meta: dict | None = None
+    line_ids: list[str] = Field(default_factory=list)
+    line_seqs: list[int] = Field(default_factory=list)
+    line_count: int = 0
 
 
 class NodeRunRead(BaseModel):
@@ -146,6 +152,7 @@ class ScriptRead(BaseModel):
     episode_id: str
     status: EpisodeStatus
     meta: dict | None
+    estimated_duration_s: int | None
     lines: list[ScriptLineRead]
     validation: ValidationResult
 
@@ -178,6 +185,7 @@ class ArticleImportRead(BaseModel):
     status: EpisodeStatus
     summary: str
     outline: list[dict]
+    estimated_duration_s: int | None
     validation: ValidationResult
     optimized: bool
     optimization_error: str | None

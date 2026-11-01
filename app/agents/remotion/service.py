@@ -117,6 +117,32 @@ def _check_character_motion(code: str, payload: dict) -> None:
     )
 
 
+def _check_continuity(code: str, payload: dict) -> str | None:
+    continuity = payload.get("continuity") or {}
+    scene = continuity.get("scene") or {}
+    entities = scene.get("entities") if isinstance(scene, dict) else None
+    if not isinstance(entities, list):
+        return None
+    ids = [
+        str(entity["id"])
+        for entity in entities
+        if isinstance(entity, dict) and entity.get("id")
+    ]
+    missing = [
+        entity_id
+        for entity_id in dict.fromkeys(ids)
+        if f'data-entity="{entity_id}"' not in code
+        and f"data-entity='{entity_id}'" not in code
+    ]
+    if missing:
+        return (
+            "视觉连续性不足：同组镜头必须复用实体 "
+            + "、".join(missing)
+            + " 的造型，并为对应 SVG/元素加 data-entity=\"<id>\" 标记。"
+        )
+    return None
+
+
 def _sha_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -270,6 +296,14 @@ def _shot_payload(
         for raw in sorted(relevant)
         if raw in mapped
     ]
+    continuity = None
+    if shot.continuity_group:
+        continuity = {
+            "group": shot.continuity_group,
+            "scene": shot.scene or {},
+            "line_texts": [line.text for line in shot.lines],
+        }
+
     return {
         "component_name": _component_name(shot.seq),
         "composition_id": _composition_id(shot.seq),
@@ -301,6 +335,7 @@ def _shot_payload(
         ],
         "previous_tail": previous_tail,
         "card_style": _card_style(shot.seq),
+        "continuity": continuity,
         "assets": assets,
     }
 
@@ -626,6 +661,50 @@ async def generate_remotion_code(
             previous_tail=previous_tail,
         )
         if requested is None or item.shot.shot_id in requested:
+            payloads.append(payload)
+        previous_tail = item.shot.narration[-40:]
+
+    groups: dict[str, list[dict]] = {}
+    for payload in payloads:
+        continuity = payload.get("continuity") or {}
+        group_key = continuity.get("group") or f"shot:{payload['shot_id']}"
+        groups.setdefault(str(group_key), []).append(payload)
+
+    llm = build_llm()
+    semaphore = asyncio.Semaphore(max(1, settings.remotion_codegen_concurrency))
+    skill = load_skill()
+
+    async def _generate_with_retry(payload: dict, error_feedback: str | None = None):
+        try:
+            return await _generate_one(
+                llm,
+                context=context,
+                payload=payload,
+                skill=skill,
+                error_feedback=error_feedback,
+            )
+        except RemotionPolicyError as exc:
+            try:
+                return await _generate_one(
+                    llm,
+                    context=context,
+                    payload=payload,
+                    skill=skill,
+                    error_feedback=str(exc),
+                )
+            except Exception as retry_exc:
+                raise RemotionPolicyError(str(retry_exc)) from retry_exc
+
+    async def generate_group(items: list[dict]):
+        results: list[tuple[dict, object | None, str | None, str | None]] = []
+        previous: dict | None = None
+        for index, payload in enumerate(items, start=1):
+            continuity = payload.get("continuity")
+            if continuity:
+                continuity["index"] = index
+                continuity["total"] = len(items)
+            if previous is not None:
+                payload["previous"] = previous
             input_hash = _sha_text(
                 json.dumps(
                     {
@@ -641,7 +720,8 @@ async def generate_remotion_code(
                 )
             )
             payload["input_hash"] = input_hash
-            row = existing.get(item.shot.shot_id)
+            row = existing.get(payload["shot_id"])
+            item = timeline_by_id[payload["shot_id"]]
             code_path = workdir / _code_path(item.shot.seq)
             if (
                 row is not None
@@ -650,41 +730,50 @@ async def generate_remotion_code(
                 and code_path.is_file()
             ):
                 payload["skip"] = True
-            else:
-                payload["skip"] = False
-                payloads.append(payload)
-        previous_tail = item.shot.narration[-40:]
+                code = code_path.read_text(encoding="utf-8")
+                results.append((payload, None, None, code))
+                previous = {
+                    "shot_id": payload["shot_id"],
+                    "summary": "cached",
+                    "code": code[:6000],
+                }
+                continue
+            payload["skip"] = False
+            async with semaphore:
+                try:
+                    result = await _generate_with_retry(payload)
+                    if continuity and continuity.get("index", 1) > 1:
+                        issue = _check_continuity(result.code, payload)
+                        if issue:
+                            result = await _generate_with_retry(
+                                payload, error_feedback=issue
+                            )
+                            remaining = _check_continuity(result.code, payload)
+                            if remaining:
+                                raise RemotionPolicyError(remaining)
+                    results.append((payload, result, None, None))
+                    previous = {
+                        "shot_id": payload["shot_id"],
+                        "summary": result.summary,
+                        "code": result.code[:6000],
+                    }
+                except Exception as exc:
+                    results.append((payload, None, str(exc)[:2000], None))
+        return results
 
-    llm = build_llm()
-    semaphore = asyncio.Semaphore(max(1, settings.remotion_codegen_concurrency))
-    skill = load_skill()
-
-    async def generate(payload: dict):
+    async def regenerate_payload(payload: dict):
         async with semaphore:
             try:
-                result = await _generate_one(
-                    llm, context=context, payload=payload, skill=skill
-                )
-                return payload, result, None
-            except RemotionPolicyError as exc:
-                try:
-                    retry = await _generate_one(
-                        llm,
-                        context=context,
-                        payload=payload,
-                        skill=skill,
-                        error_feedback=str(exc),
-                    )
-                    return payload, retry, None
-                except Exception as retry_exc:
-                    return payload, None, str(retry_exc)[:2000]
+                return payload, await _generate_with_retry(payload), None
             except Exception as exc:
                 return payload, None, str(exc)[:2000]
 
     async def cancelled() -> bool:
         return bool(cancel_check and await cancel_check())
 
-    gather_task = asyncio.gather(*(generate(payload) for payload in payloads))
+    gather_task = asyncio.gather(
+        *(generate_group(items) for items in groups.values())
+    )
     watcher = (
         asyncio.create_task(_wait_cancel(episode_id, cancel_check))
         if cancel_check is not None
@@ -699,17 +788,21 @@ async def generate_remotion_code(
                 gather_task.cancel()
                 await asyncio.gather(gather_task, return_exceptions=True)
                 raise TaskCancelled("remotion codegen cancelled by user")
-        results = await gather_task
+        grouped_results = await gather_task
     finally:
         if watcher is not None:
             watcher.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await watcher
 
+    results = [entry for group in grouped_results for entry in group]
+
     if await cancelled():
         raise TaskCancelled("remotion codegen cancelled by user")
     failures: dict[str, str] = {}
-    for payload, result, error in results:
+    for payload, result, error, _cached_code in results:
+        if payload.get("skip"):
+            continue
         item = timeline_by_id[payload["shot_id"]]
         if error or result is None:
             failures[payload["shot_id"]] = error or "empty result"
@@ -795,7 +888,7 @@ async def generate_remotion_code(
             if await cancelled():
                 raise TaskCancelled("remotion codegen cancelled by user")
             retry_results = await asyncio.gather(
-                *(generate(payload) for payload in retry_payloads)
+                *(regenerate_payload(payload) for payload in retry_payloads)
             )
             if await cancelled():
                 raise TaskCancelled("remotion codegen cancelled by user")

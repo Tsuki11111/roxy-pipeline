@@ -5,7 +5,8 @@ from pydantic import BaseModel, Field
 
 class ShotDraft(BaseModel):
     seq: int
-    line_seq: int
+    line_seq: int = 0
+    line_seqs: list[int] = Field(default_factory=list)
     line_id: str | None = None
     section: str
     speaker: str = "narrator"
@@ -18,6 +19,8 @@ class ShotDraft(BaseModel):
     bg: str = "paper"
     transition: str = "cut"
     motion: str = "idle_breathe"
+    continuity_group: str = ""
+    scene: dict = Field(default_factory=dict)
 
 
 class RhythmReport(BaseModel):

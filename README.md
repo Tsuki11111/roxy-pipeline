@@ -194,7 +194,7 @@ curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/optimize
 curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/confirm-script
 ```
 
-脚本由 `prompts/script/article.md` 和 DeepSeek `deepseek-flash` 生成，润色用 `prompts/script/optimize.md`；校验规则是单句 ≤50 字、全文字数 ±10%、章节顺序与覆盖。所有台词统一由洛琪希单人口播，不设旁白。
+脚本由 `prompts/script/article.md` 和 DeepSeek `deepseek-flash` 生成，润色用 `prompts/script/optimize.md`；校验规则是单句 ≤50 字、章节顺序与覆盖、润色不得删减事实/数字/例子。脚本生成后由 AI 估算时长（`estimated_duration_s`），新建视频期不再要求填写目标时长。所有台词统一由洛琪希单人口播，不设旁白。
 
 - 支持最多 30000 字；前端视频期页提供「导入文稿」按钮，可直接粘贴或上传 `.txt`/`.md`。
 - 导入后保持 series 的章节标签顺序，生成问题式小标题和逐句台词。
@@ -225,7 +225,7 @@ curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/confirm-
 curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/build-render-spec
 ```
 
-节奏规则是纯函数：连续 3 个同卡片、角色连续 5 个、章节末非 icon/pure_text、时长越界都会被确定性修复器拦住；`PATCH /api/v1/shots/{id}` 可手工改单个镜头。
+节奏规则是纯函数：连续 3 个同卡片、角色连续 5 个、章节末非 icon/pure_text、时长越界、台词覆盖不完整都会被确定性修复器拦住；一个镜头可覆盖 1–4 句连续台词，单镜 3–20 秒，章节台词 ≥4 句时必须至少合并一个多句镜头。`PATCH /api/v1/shots/{id}` 可手工改单个镜头。
 
 ### 资产入库与复用
 
@@ -308,6 +308,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/start_all.ps1 -D
 
 - 编辑器「Remotion 渲染」卡片点「生成 Remotion 代码」，或 `POST /api/v1/episodes/{id}/actions/generate-remotion`。
 - 每个镜头单独调用一次 DeepSeek，生成自由 TSX；Python 负责 `Root.tsx`、时长、素材映射和 Composition 注册。
+- 分镜可为镜头指定 `continuity_group` 与 `scene`（setting + entities）；同组共享背景和实体设定，codegen 按组串行，后一镜复用前一镜实体造型，实体节点必须带 `data-entity` 标记。
 - 代码在 Docker 沙箱里 `tsc` + `remotion compositions` 校验，失败自动带编译错误重试一次。
 - 全部镜头 READY 后 `remotion_meta.enabled=true`，后续 `POST /actions/rerender` 自动走 Remotion；新期在配音/对齐完成后会**自动排队 Remotion codegen 再渲染**（`REMOTION_AUTO_CODEGEN=true`），失败或未全部 READY 时标记失败、不渲染（不再有 Playwright 回退）。
 - 生成过程中可在编辑器点「取消生成」，或调用 `POST /api/v1/episodes/{id}/actions/cancel-remotion`；已就绪的旧代码会保留。

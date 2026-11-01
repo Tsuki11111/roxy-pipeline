@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.models.core import Episode, ScriptLine, Series, Shot
+from app.models.core import Episode, ScriptLine, Series, Shot, ShotLine
 from app.render.timeline import build_timeline
 from app.agents.storyboard.grammar import load_character_assets
 from app.agents.storyboard.spec_builder import build_episode_spec, shot_cache_key
@@ -84,6 +84,70 @@ def test_bust_and_move_are_projected():
     assert character is not None
     assert character.anchor_y == 0
     assert character.move == "slide_in_left"
+
+
+def test_grouped_shot_builds_lines_and_subtitles():
+    episode = Episode(id="ep-group", series_id="ser-group", title="分组测试")
+    series = Series(id="ser-group", name="测试系列", section_labels=["问题"])
+    lines = [
+        ScriptLine(
+            id=f"line-{seq}",
+            episode_id=episode.id,
+            seq=seq,
+            speaker="roxy",
+            section="问题",
+            text=text,
+            char_count=len(text),
+        )
+        for seq, text in enumerate(["牛在草原上", "牛开始奔跑"], start=1)
+    ]
+    shot = Shot(
+        id="shot-1",
+        episode_id=episode.id,
+        script_line_id=lines[0].id,
+        seq=1,
+        duration_ms=4000,
+        card_type="pure_text",
+        card_payload={"text": "牛在草原上 牛开始奔跑"},
+        character_position="none",
+        bg="paper",
+        transition="cut",
+        template_version="v1",
+        continuity_group="cow-1",
+        scene_meta={
+            "setting": "草原",
+            "entities": [{"id": "cow", "name": "牛", "appearance": "棕色"}],
+        },
+    )
+    shot_lines = {
+        shot.id: [
+            ShotLine(
+                id="sl-1",
+                episode_id=episode.id,
+                shot_id=shot.id,
+                script_line_id=lines[0].id,
+                seq=1,
+            ),
+            ShotLine(
+                id="sl-2",
+                episode_id=episode.id,
+                shot_id=shot.id,
+                script_line_id=lines[1].id,
+                seq=2,
+            ),
+        ]
+    }
+    spec = build_episode_spec(
+        episode, series, lines, [shot], shot_lines_by_shot=shot_lines
+    )
+    assert spec.shots[0].narration == "牛在草原上 牛开始奔跑"
+    assert spec.shots[0].line_ids == [line.id for line in lines]
+    assert len(spec.shots[0].lines) == 2
+    assert spec.shots[0].continuity_group == "cow-1"
+    timeline = build_timeline(spec)
+    assert len(timeline.shots[0].chunks) == 2
+    assert timeline.shots[0].chunks[0].text == "牛在草原上"
+    assert timeline.shots[0].chunks[1].text == "牛开始奔跑"
 
 
 def test_character_catalog_includes_bust_assets():

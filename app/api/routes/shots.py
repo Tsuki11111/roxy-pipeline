@@ -3,9 +3,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.storyboard.utils import (
+from app.agents.storyboard.loaders import (
     load_script_lines,
+    load_shot_lines,
     load_shots,
+)
+from app.agents.storyboard.utils import (
+    is_current_storyboard,
+    shot_read,
     store_rhythm,
     validate_storyboard,
 )
@@ -78,8 +83,8 @@ async def update_shot(
             raise HTTPException(status_code=422, detail="invalid character_position")
         shot.character_position = payload.character_position
     if "duration_ms" in fields and payload.duration_ms is not None:
-        if not 1500 <= payload.duration_ms <= 6000:
-            raise HTTPException(status_code=422, detail="duration_ms must be 1500–6000")
+        if not 3000 <= payload.duration_ms <= 30000:
+            raise HTTPException(status_code=422, detail="duration_ms must be 3000–30000")
         shot.duration_ms = payload.duration_ms
     if "bg" in fields and payload.bg is not None:
         if payload.bg not in BACKGROUNDS:
@@ -131,7 +136,7 @@ async def update_shot(
     card_payload["text"] = str(card_payload.get("text") or line.text)
     shot.card_payload = card_payload
     shot.cache_key = shot_cache_key(
-        text=line.text,
+        text=card_payload["text"],
         card_type=shot.card_type,
         card_payload=card_payload,
         character_image=shot.character_image,
@@ -140,11 +145,18 @@ async def update_shot(
 
     lines = await load_script_lines(session, episode.id)
     shots = await load_shots(session, episode.id)
-    report = validate_storyboard(series, lines, shots)
+    shot_lines = await load_shot_lines(session, episode.id)
+    report = validate_storyboard(
+        series,
+        lines,
+        shots,
+        shot_lines,
+        legacy=not is_current_storyboard(episode),
+    )
     store_rhythm(episode, report)
     await session.commit()
     await session.refresh(shot)
     return ShotUpdateResult(
-        shot=ShotRead.model_validate(shot),
+        shot=shot_read(shot, shot_lines, {line.id: line for line in lines}),
         rhythm=report,
     )

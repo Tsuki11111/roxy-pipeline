@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Sequence
 
 from pydantic import BaseModel, Field
 
 MAX_LINE_CHARS = 50
 SPEAKERS = {"narrator", "roxy"}
+_NUMBER_TOKEN = re.compile(r"\d+(?:\.\d+)?%?")
+_ENGLISH_TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9+#.-]{1,}")
 DEFAULT_SECTION_LABELS = [
     "问题",
     "概念",
@@ -30,16 +33,11 @@ class ValidationResult(BaseModel):
     valid: bool
     errors: list[str] = Field(default_factory=list)
     total_chars: int
-    target_chars: int
+    target_chars: int | None = None
+    estimated_duration_s: int | None = None
     line_count: int
     roxy_ratio: float
     sections_present: list[str] = Field(default_factory=list)
-
-
-def target_chars_for_duration(
-    target_duration_s: int, chars_per_minute: int = 327
-) -> int:
-    return max(1, round(target_duration_s / 60 * chars_per_minute))
 
 
 def coerce_lines(rows: Iterable) -> list[ScriptLineData]:
@@ -90,15 +88,11 @@ def normalize_lines(
 def validate_script(
     lines: Sequence[ScriptLineData],
     *,
-    target_duration_s: int,
     section_labels: Sequence[str],
-    target_chars_per_minute: int = 327,
+    estimated_duration_s: int | None = None,
     forbidden_words: Sequence[str] = (),
 ) -> ValidationResult:
     errors: list[str] = []
-    target_chars = target_chars_for_duration(
-        target_duration_s, target_chars_per_minute
-    )
     total_chars = sum(len(line.text.strip()) for line in lines)
     roxy_count = sum(1 for line in lines if line.speaker == "roxy")
     roxy_ratio = roxy_count / len(lines) if lines else 0.0
@@ -132,13 +126,6 @@ def validate_script(
     if missing:
         errors.append("缺少章节：" + "、".join(missing))
 
-    if total_chars:
-        deviation = (total_chars - target_chars) / target_chars
-        if abs(deviation) > 0.10:
-            errors.append(
-                f"全文字数 {total_chars}，目标 {target_chars}，偏差 {deviation:+.0%}"
-            )
-
     for word in forbidden_words:
         if word and any(word in line.text for line in lines):
             errors.append(f"命中禁止词：{word}")
@@ -147,8 +134,62 @@ def validate_script(
         valid=not errors,
         errors=errors,
         total_chars=total_chars,
-        target_chars=target_chars,
+        estimated_duration_s=estimated_duration_s,
         line_count=len(lines),
         roxy_ratio=round(roxy_ratio, 3),
         sections_present=sections_present,
     )
+
+
+def _content_tokens(text: str) -> set[str]:
+    return set(_NUMBER_TOKEN.findall(text)) | set(_ENGLISH_TOKEN.findall(text))
+
+
+def validate_optimized_lines(
+    original: Sequence[ScriptLineData],
+    optimized: Sequence[ScriptLineData],
+) -> list[str]:
+    errors: list[str] = []
+    if len(original) != len(optimized):
+        errors.append(
+            f"润色后句数 {len(optimized)} 与原文 {len(original)} 不一致"
+        )
+        return errors
+
+    original_chars = sum(len(line.text.strip()) for line in original)
+    optimized_chars = sum(len(line.text.strip()) for line in optimized)
+    if original_chars and optimized_chars < original_chars * 0.90:
+        errors.append(
+            f"润色后总字数 {optimized_chars} 比原文 {original_chars} 少超过 10%，"
+            "疑似省略内容"
+        )
+    if original_chars and optimized_chars > original_chars * 1.25:
+        errors.append(
+            f"润色后总字数 {optimized_chars} 比原文 {original_chars} 多超过 25%"
+        )
+
+    original_tokens: set[str] = set()
+    for line in original:
+        original_tokens |= _content_tokens(line.text)
+    optimized_text = " ".join(line.text for line in optimized)
+    missing = sorted(token for token in original_tokens if token not in optimized_text)
+    if missing:
+        errors.append("润色后丢失原文关键词/数字：" + "、".join(missing))
+
+    for source, target in zip(original, optimized):
+        source_chars = len(source.text.strip())
+        target_chars = len(target.text.strip())
+        if not target.text.strip():
+            errors.append(f"第 {target.seq} 句润色后为空")
+            continue
+        if source.seq != target.seq:
+            errors.append(
+                f"润色后 seq 不连续：原文 {source.seq}，结果 {target.seq}"
+            )
+        if source_chars > 12 and target_chars < source_chars * 0.65:
+            errors.append(
+                f"第 {target.seq} 句从 {source_chars} 字缩到 {target_chars} 字，"
+                "疑似省略内容"
+            )
+
+    return errors

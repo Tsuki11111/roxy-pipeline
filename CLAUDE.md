@@ -70,12 +70,15 @@ Remotion（Node 22，Docker 沙箱，唯一渲染器）+ ffmpeg + LangGraph（�
 - **TTS：本地 IndexTTS2 zero-shot 声音克隆**（Python 3.11 独立环境 + 常驻 HTTP 服务），不使用付费云 TTS；参考音固定为 `data/assets/voice/indextts2/reference.wav`。
 - **含文字的信息卡片必须用代码渲染（HTML 或 React/Remotion），不得用图像生成模型**。
 - **脚本与配音统一为洛琪希单人口播**，不设旁白；`speaker` 字段仅为兼容旧数据保留，新导入统一写 `roxy`。脚本单句 ≤50 字，校验是硬闸口。
+- **时长由 AI 估算**：新建视频期不填目标时长；脚本生成后 AI 输出 `estimated_duration_s`，Python 用字符数兜底。润色必须保留事实、数字、例子和限定条件，不得为简洁删减。
+- **镜头分组**：一个镜头覆盖 1–4 句连续台词（`shot_line`），单镜 3–20 秒；详细讲解保持一个镜头，用子动画推进，不要每句生成一个动画。
 
 ### 3.1 Remotion 渲染边界
 
 - **Remotion 是唯一渲染器**；Playwright 已移除，不再有回退路径。
 - **新期自动 codegen**：配音/对齐完成后 `start_auto_render` 先排队 `remotion.generate`（`REMOTION_AUTO_CODEGEN=true`），成功后自动进入渲染；codegen 失败或未全部 READY 时标记失败，不回退到其他渲染器。不要只在编辑器手动点生成。生成中可调用 `POST /actions/cancel-remotion` 取消，已就绪的旧代码保留。
 - **每镜头一个 Composition**：LLM 只生成 `src/shots/shot_<seq>.tsx`；Root、Composition ID、时长、尺寸、素材映射由 Python 生成，LLM 不得改。
+- **视觉连续性**：分镜输出 `continuity_group` 与 `scene`（setting + entities）；同组共享背景和实体设定，codegen 按组串行，后一镜复用前一镜实体造型；实体节点必须带 `data-entity="<id>"`，缺失会重试并失败。
 - 生成代码只能在 **Docker 沙箱**执行（`--network none --read-only --user 10001 --cpus 2 -m 3g --pids-limit 256`），禁止在宿主机直接 `npm run`。
 - 生成代码只写 `tmp/remotion/<episode_id>/`，不进主仓库；固定依赖宇宙（react/remotion/@remotion/*/模板组件），不得新增 npm 依赖、外链或 Node 内置模块。
 - 全部镜头代码 READY 才启用 Remotion；单镜头失败即失败，不切换渲染器。缓存键必须包含 renderer、Remotion 版本、镜像 digest 和该镜头 code hash。

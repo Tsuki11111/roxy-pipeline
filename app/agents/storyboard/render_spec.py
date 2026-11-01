@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.registry import resolve_background, resolve_floor
-from app.models.core import Episode, Series
+from app.models.core import Episode, Series, ShotLine
 from app.render.models import EpisodeSpec, RemotionRenderSpec, RemotionShotSpec
 from app.agents.storyboard.loaders import load_script_lines, load_shots
 from app.agents.storyboard.spec_builder import build_episode_spec
@@ -22,6 +23,16 @@ async def build_episode_render_spec(
     shots = await load_shots(session, episode.id)
     if not shots:
         raise ValueError("episode has no shots")
+    shot_line_rows = list(
+        await session.scalars(
+            select(ShotLine)
+            .where(ShotLine.episode_id == episode.id)
+            .order_by(ShotLine.shot_id, ShotLine.seq)
+        )
+    )
+    shot_lines_by_shot: dict[str, list[ShotLine]] = {}
+    for row in shot_line_rows:
+        shot_lines_by_shot.setdefault(row.shot_id, []).append(row)
     bg_keys = {str(shot.bg or "paper") for shot in shots}
     background_by_key = {
         key: await resolve_background(session, key) for key in bg_keys
@@ -58,6 +69,7 @@ async def build_episode_render_spec(
         series,
         lines,
         shots,
+        shot_lines_by_shot=shot_lines_by_shot,
         background=background,
         background_by_key=background_by_key,
         floor=floor,

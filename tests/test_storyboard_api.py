@@ -10,6 +10,7 @@ from app.models.core import (
     OutboxEvent,
     ScriptLine,
     Shot,
+    ShotLine,
 )
 from app.workflow.outbox import queue_for
 
@@ -34,27 +35,56 @@ async def seed_storyboard(session, episode_id: str):
             lines.append(line)
     await session.flush()
 
-    for index, line in enumerate(lines):
-        card_type = CARDS[index % 8]
-        session.add(
-            Shot(
+    shot_seq = 0
+    for section_index, label in enumerate(LABELS):
+        section_lines = lines[section_index * 8 : section_index * 8 + 8]
+        groups = [section_lines[:2]] + [[line] for line in section_lines[2:]]
+        for group_index, group in enumerate(groups):
+            shot_seq += 1
+            card_type = CARDS[min(group_index, 7)]
+            shot = Shot(
                 episode_id=episode_id,
-                script_line_id=line.id,
-                seq=line.seq,
-                duration_ms=2000,
+                script_line_id=group[0].id,
+                seq=shot_seq,
+                duration_ms=4000,
                 card_type=card_type,
                 card_payload={
                     "style": "conclusion" if card_type == "pure_text" else "info",
-                    "text": line.text,
+                    "text": " ".join(line.text for line in group),
                     "motion": "idle_breathe",
                 },
-                character_image=CHARACTER if line.seq % 3 != 0 else None,
-                character_position="left" if line.seq % 3 != 0 else "none",
+                character_image=CHARACTER if shot_seq % 3 != 0 else None,
+                character_position="left" if shot_seq % 3 != 0 else "none",
                 bg="paper",
                 transition="cut",
                 template_version="v1",
+                continuity_group=f"{label}-1" if len(group) > 1 else None,
+                scene_meta=(
+                    {
+                        "setting": "暖纸舞台",
+                        "entities": [
+                            {
+                                "id": "demo",
+                                "name": "演示图",
+                                "appearance": "陶土色手绘图形",
+                            }
+                        ],
+                    }
+                    if len(group) > 1
+                    else None
+                ),
             )
-        )
+            session.add(shot)
+            await session.flush()
+            for line_index, line in enumerate(group, start=1):
+                session.add(
+                    ShotLine(
+                        episode_id=episode_id,
+                        shot_id=shot.id,
+                        script_line_id=line.id,
+                        seq=line_index,
+                    )
+                )
 
     episode = await session.get(Episode, episode_id)
     episode.status = EpisodeStatus.STORYBOARDING
@@ -109,7 +139,7 @@ async def test_get_validate_and_confirm_storyboard(client, episode, session):
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["rhythm"]["valid"] is True
-    assert len(body["shots"]) == 24
+    assert len(body["shots"]) == 21
 
     response = await client.post(f"/api/v1/episodes/{ep['id']}/storyboard/validate")
     assert response.status_code == 200
@@ -131,7 +161,7 @@ async def test_confirm_storyboard_blocks_invalid_rhythm(client, episode, session
     await session.commit()
     # Make the section-final shot a chat bubble.
     last = await session.scalar(
-        select(Shot).where(Shot.episode_id == ep["id"], Shot.seq == 8)
+        select(Shot).where(Shot.episode_id == ep["id"], Shot.seq == 7)
     )
     last.card_type = "chat_bubble"
     await session.commit()
@@ -150,17 +180,17 @@ async def test_patch_shot_and_build_render_spec(client, episode, session):
 
     response = await client.patch(
         f"/api/v1/shots/{shot.id}",
-        json={"duration_ms": 2500, "card_text": "编辑后的卡片文案"},
+        json={"duration_ms": 3500, "card_text": "编辑后的卡片文案"},
     )
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["shot"]["duration_ms"] == 2500
+    assert body["shot"]["duration_ms"] == 3500
     assert body["shot"]["card_payload"]["text"] == "编辑后的卡片文案"
     assert body["rhythm"]["valid"] is True
 
     response = await client.patch(
         f"/api/v1/shots/{shot.id}",
-        json={"duration_ms": 9000},
+        json={"duration_ms": 35000},
     )
     assert response.status_code == 422
 
@@ -188,7 +218,7 @@ async def test_patch_shot_and_build_render_spec(client, episode, session):
     assert response.status_code == 200, response.text
     spec = response.json()["render_spec"]
     assert spec["title"] == "M1.2 测试期"
-    assert len(spec["shots"]) == 24
+    assert len(spec["shots"]) == 21
     assert spec["shots"][0]["card"]["text"] == "编辑后的卡片文案"
     assert spec["shots"][0]["overlay"]["image"] == (
         "character_packs/placeholder/background.png"

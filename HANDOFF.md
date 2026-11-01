@@ -26,7 +26,8 @@
 **M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产复用/持久化 + M4.1 逐句配音 + M4.2 句级对齐（字级可选） + M4.3 质检 + M5.1 局部修改/续跑/发布包 + Web 控制台 + 分镜时间线编辑器 + Remotion 逐镜头代码生成 Agent（唯一生产渲染器）+ 真实音轨成片已跑通（2026-10-30）；按主题自动生成脚本已移除。**
 
 - **2026-11-01 运行时简化（当前有效）**：已移除 PostgreSQL、RabbitMQ、MinIO 和 VM 部署；默认 SQLite `data/db/roxy.db` + 单 Redis（Celery broker）+ 本地文件系统，FastAPI 托管 `web/dist`，TTS 为可选组件。Playwright 依赖、渲染器、模板、相关测试和 demo 也已移除，Remotion 是唯一渲染器。下文 2026-11-01 之前的历史条目里出现的 Postgres/RabbitMQ/MinIO/VM/Playwright 只作记录，不再是当前运行方式。
-- 本地运行时已验证：`uv run pytest -q` 79 passed；Redis-only compose + API + 2 worker + beat；`/health` 正常，SQLite 5 期数据可见。
+- 本地运行时已验证：`uv run pytest -q` 88 passed；Redis-only compose + API + 2 worker + beat；`/health` 正常，SQLite 5 期数据可见。
+- **2026-11-01 脚本/分镜/连续性改造（当前有效）**：新建期不再填时长，脚本生成后由 AI 估算 `estimated_duration_s`；润色增加完整性校验（数字/英文 token、总字数下限）。分镜允许 1–4 句合并成一个镜头（`shot_line`），单镜 3–20 秒；新增 `continuity_group`/`scene`，同组共享背景与实体，Remotion 同组串行生成并要求 `data-entity`。旧期通过迁移回填单句 `shot_line`，行为不变。
 
 - 需求文档 v1.2、架构方案 v1.10、ADR-001～010 已写完。
 - GitHub 仓库已创建：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
@@ -66,7 +67,7 @@
 - 文稿润色 Agent：`POST /episodes/{id}/actions/optimize-script` 在 SCRIPT_REVIEW 阶段做口语化润色，保持章节/句数/说话人不变，校验通过才写回。
 - 脚本 API：`GET /episodes/{id}/script`、`PATCH /script-lines/{id}`、`POST /episodes/{id}/script/validate`、confirm-script（校验通过才进 STORYBOARDING）。
 - 按主题自动生成脚本（`script_graph`、`script.generate`、confirm-topic、retry/regenerate-script）已于 2026-10-29 移除；历史实现见 §6。
-- M3 分镜 Agent 已跑通：`storyboard_graph` 按章节让 DeepSeek 选镜头，代码做 schema 归一化 + 确定性节奏修复（连续 3 同卡片、角色连续 5、章节末 icon/pure_text、时长 1.5–6s）。
+- M3 分镜 Agent 已跑通：`storyboard_graph` 按章节让 DeepSeek 分组镜头，代码做 schema 归一化 + 确定性节奏修复（连续 3 同卡片、角色连续 5、章节末 icon/pure_text、单镜 3–20s、多句镜头必须有 scene/continuity_group）。
 - M3 API：generate/retry/regenerate-storyboard、`GET /episodes/{id}/storyboard`、storyboard/validate、confirm-storyboard（进 VOICING）、`PATCH /shots/{id}`、build-render-spec。
 - M3 实测：29 句脚本生成 29 镜头、4 种卡片、角色占比 75.9%、节奏校验 valid；confirm 进 VOICING，build-render-spec 生成 29 镜头 spec，静帧已出图。
 - LLM JSON 增加 `json-repair` 兜底；分镜单次输出上限提高到 `max(2000, 行数×220)`，避免截断。
@@ -294,6 +295,8 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - Remotion 代码只存在于 `tmp/remotion/<episode_id>/`；`remotion_shot` 表记录 code_hash/status/input_hash。
 - 生成代码约束：单镜头 ≤7000 字符；浅底必须深字，白字必须有深色实底；有 `character` 必须出现 Roxy；不能用随机/时间/CSS 动画。
 - 布局约束：Remotion 不做关键词标签；画面文字用 `PaperCard` Claude 暖纸卡（variant：note/quote/index/letter/sticky/specimen；tone：cream/sand/peach/sage；transition：slide/zoom/flip/drop/reveal/push）。Python 按镜头序号排期：约 1/3 镜头 `card_style=null` 做纯演示，其余给卡并指定样式/动效；切换位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°。
+- 镜头分组：`shot_line` 关联 1–4 句连续台词，单镜 3–20 秒；详细讲解保持一个镜头，用 `<Sequence>` 演分子动画；章节台词 ≥4 句时至少一个多句镜头。
+- 视觉连续性：`continuity_group` + `scene`（setting/entities）同组共享；Remotion 同组按 seq 串行生成，后一镜 payload 带 `previous.code`，实体节点必须带 `data-entity="<id>"`，缺失重试一次后失败。
 - 角色动效：有 `character` 的镜头必须有入场（offsetX ±400–600、opacity 0→1、scale 0.94→1、rotate ±2°）、呼吸轻摆和至少一次手势/让位；生成检查会拒绝只有 `src/side/height` 的静态 `<Character>`。
 - 背景与字幕：`Stage` 统一渲染 Claude 暖纸背景（纸纹 + 底部浅阴影 + 手绘星），不再使用旧纸纹/木地板资产；`SubtitleTrack` 改为暖纸底 + 墨字 + 陶土短线。
 - 改动 `infra/remotion/template/` 后必须重建镜像 `roxy-remotion:4.0.539`，否则沙箱仍用旧组件。

@@ -3,7 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 
-from app.models.core import Episode, ScriptLine, Series, Shot
+from app.core.speech import estimate_text_ms
+from app.models.core import Episode, ScriptLine, Series, Shot, ShotLine
 from app.render.models import (
     CardSpec,
     CharacterSpec,
@@ -11,6 +12,7 @@ from app.render.models import (
     EpisodeSpec,
     OverlaySpec,
     RemotionRenderSpec,
+    ShotLineSpec,
     ShotSpec,
 )
 from app.agents.storyboard.grammar import (
@@ -53,6 +55,7 @@ def build_episode_spec(
     lines: list[ScriptLine],
     shots: list[Shot],
     *,
+    shot_lines_by_shot: dict[str, list[ShotLine]] | None = None,
     background: str | None = None,
     background_by_key: dict[str, str] | None = None,
     floor: str | None = None,
@@ -64,16 +67,26 @@ def build_episode_spec(
     floor = floor or DEFAULT_FLOOR
     if not series.section_labels:
         raise ValueError("series has no section labels")
-    if len(shots) != len(lines):
-        raise ValueError(
-            f"shots ({len(shots)}) and script lines ({len(lines)}) do not match"
-        )
     line_by_id = {line.id: line for line in lines}
+    shot_lines_by_shot = shot_lines_by_shot or {}
+    covered: list[str] = []
     spec_shots: list[ShotSpec] = []
     for shot in sorted(shots, key=lambda item: item.seq):
-        line = line_by_id.get(shot.script_line_id)
-        if line is None:
+        group = shot_lines_by_shot.get(shot.id) or []
+        if group:
+            group = sorted(group, key=lambda row: row.seq)
+            group_lines = [
+                line_by_id[row.script_line_id]
+                for row in group
+                if row.script_line_id in line_by_id
+            ]
+        else:
+            fallback = line_by_id.get(shot.script_line_id)
+            group_lines = [fallback] if fallback is not None else []
+        if not group_lines:
             raise ValueError(f"shot {shot.seq} references an unknown script line")
+        covered.extend(line.id for line in group_lines)
+        line = group_lines[0]
 
         payload = shot.card_payload or {}
         card_type = shot.card_type if shot.card_type in CARD_TYPES else "pure_text"
@@ -132,13 +145,50 @@ def build_episode_spec(
                 blend=overlay_blend,
             )
 
-        card_text = str(payload.get("text") or line.text)
+        line_specs: list[ShotLineSpec] = []
+        flat_timings: list[CharTiming] = []
+        offset = 0
+        for grouped in group_lines:
+            timings = [
+                CharTiming(
+                    text=str(item["text"]),
+                    start_ms=max(0, int(item["start_ms"])),
+                    end_ms=max(0, int(item["end_ms"])),
+                )
+                for item in (char_timings_by_line or {}).get(grouped.id, [])
+            ]
+            duration = (
+                max(timing.end_ms for timing in timings)
+                if timings
+                else estimate_text_ms(grouped.text)
+            )
+            line_specs.append(
+                ShotLineSpec(
+                    line_id=grouped.id,
+                    seq=grouped.seq,
+                    text=grouped.text,
+                    duration_ms=duration,
+                    char_timings=timings,
+                )
+            )
+            flat_timings.extend(
+                CharTiming(
+                    text=timing.text,
+                    start_ms=offset + timing.start_ms,
+                    end_ms=offset + timing.end_ms,
+                )
+                for timing in timings
+            )
+            offset += duration
+
+        narration = " ".join(item.text for item in group_lines)
+        card_text = str(payload.get("text") or narration)
         spec_shots.append(
             ShotSpec(
                 shot_id=shot.id,
                 seq=shot.seq,
                 section=line.section,
-                narration=line.text,
+                narration=narration,
                 duration_ms=shot.duration_ms,
                 character=character,
                 card=CardSpec(type=card_type, style=style, text=card_text),
@@ -146,15 +196,17 @@ def build_episode_spec(
                 bg=(background_by_key or {}).get(shot.bg or "paper", background),
                 floor=floor,
                 template_version=shot.template_version,
-                char_timings=[
-                    CharTiming(
-                        text=str(item["text"]),
-                        start_ms=max(0, int(item["start_ms"])),
-                        end_ms=max(0, int(item["end_ms"])),
-                    )
-                    for item in (char_timings_by_line or {}).get(line.id, [])
-                ],
+                line_ids=[item.id for item in group_lines],
+                lines=line_specs,
+                continuity_group=shot.continuity_group,
+                scene=shot.scene_meta,
+                char_timings=flat_timings,
             )
+        )
+
+    if sorted(covered) != sorted(line_by_id):
+        raise ValueError(
+            "script lines are not covered exactly once by shots"
         )
 
     return EpisodeSpec(

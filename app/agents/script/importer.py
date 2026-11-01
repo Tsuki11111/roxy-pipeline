@@ -16,10 +16,10 @@ from app.agents.script.utils import (
 from app.agents.script.validation import (
     ScriptLineData,
     ValidationResult,
-    target_chars_for_duration,
     validate_script,
 )
 from app.core.config import get_settings
+from app.core.speech import estimate_duration_s
 from app.models.core import Episode, EpisodeStatus, ScriptLine, Series
 from app.providers.llm import LLMClient, build_llm
 
@@ -65,9 +65,6 @@ async def import_article(
 
     series = await session.get(Series, episode.series_id)
     labels = section_labels_for(series)
-    target_chars = target_chars_for_duration(
-        episode.target_duration_s, settings.script_target_chars_per_minute
-    )
     original_status = episode.status
     episode.status = EpisodeStatus.SCRIPTING
     episode.current_node = "script.import"
@@ -77,8 +74,6 @@ async def import_article(
     prompt = load_prompt(
         "article.md",
         title=episode.title,
-        target_duration_s=episode.target_duration_s,
-        target_chars=target_chars,
         section_labels="、".join(labels),
         article=article,
         instructions=instructions.strip() or "无",
@@ -88,7 +83,7 @@ async def import_article(
             load_system_prompt(),
             prompt,
             temperature=0.55,
-            max_tokens=max(5000, target_chars * 8),
+            max_tokens=max(6000, min(30000, len(article) * 2)),
         )
     except Exception:
         episode.status = original_status
@@ -143,11 +138,28 @@ async def import_article(
         episode.health = "FAILED"
         raise ArticleImportError("article import produced no lines")
 
+    ai_duration = raw.get("estimated_duration_s")
+    estimated_duration = None
+    try:
+        candidate = int(ai_duration)
+        if 30 <= candidate <= 3600:
+            estimated_duration = candidate
+    except (TypeError, ValueError):
+        pass
+    if estimated_duration is None:
+        estimated_duration = estimate_duration_s(line.text for line in lines)
+        duration_source = "fallback"
+    else:
+        duration_source = "ai"
+
+    episode.estimated_duration_s = estimated_duration
+    episode.target_duration_s = estimated_duration
+    episode.duration_source = duration_source
+
     validation = validate_script(
         lines,
-        target_duration_s=episode.target_duration_s,
         section_labels=labels,
-        target_chars_per_minute=settings.script_target_chars_per_minute,
+        estimated_duration_s=estimated_duration,
     )
 
     await session.execute(
@@ -173,6 +185,11 @@ async def import_article(
             "summary": str(raw.get("summary", "")),
             "outline": outline,
             "article_chars": len(article),
+            "duration": {
+                "estimated_duration_s": estimated_duration,
+                "source": duration_source,
+                "total_chars": sum(line.char_count for line in lines),
+            },
             "imported_at": datetime.now(timezone.utc).isoformat(),
             "validation": validation.model_dump(),
         }
@@ -204,6 +221,7 @@ async def import_article(
         "status": episode.status,
         "summary": meta.get("summary", ""),
         "outline": outline,
+        "estimated_duration_s": episode.estimated_duration_s,
         "validation": final_validation.model_dump(),
         "optimized": optimized,
         "optimization_error": optimization_error,

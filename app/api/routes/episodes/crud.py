@@ -20,6 +20,7 @@ from app.models.core import (
     ScriptLine,
     Series,
     Shot,
+    ShotLine,
 )
 from app.schemas.core import EpisodeCreate, EpisodeRead
 
@@ -37,7 +38,6 @@ async def create_episode(
         series_id=payload.series_id,
         title=payload.title,
         topic=payload.topic,
-        target_duration_s=payload.target_duration_s,
         status=EpisodeStatus.DRAFT,
     )
     session.add(episode)
@@ -85,6 +85,7 @@ async def delete_episode(
         OutboxEvent,
         NodeRun,
         RemotionShot,
+        ShotLine,
         Shot,
         ScriptLine,
     ):

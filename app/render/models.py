@@ -46,18 +46,31 @@ class OverlaySpec(BaseModel):
     blend: Literal["normal", "multiply"] = "normal"
 
 
+class ShotLineSpec(BaseModel):
+    line_id: str
+    seq: int
+    text: str
+    duration_ms: int = Field(default=0, ge=0)
+    char_timings: list[CharTiming] = Field(default_factory=list)
+
+
 class ShotSpec(BaseModel):
     shot_id: str
     seq: int = Field(ge=1)
     section: str
     narration: str
-    duration_ms: int = Field(ge=500, le=15000)
+    duration_ms: int = Field(ge=500, le=30000)
     character: CharacterSpec | None = None
     card: CardSpec | None = None
     overlay: OverlaySpec | None = None
     bg: str | None = None
     floor: str | None = None
     template_version: str = "v1"
+    # One shot may cover several script lines; lines keep their own subtitles.
+    line_ids: list[str] = Field(default_factory=list)
+    lines: list[ShotLineSpec] = Field(default_factory=list)
+    continuity_group: str | None = None
+    scene: dict | None = None
     # Character timings relative to shot start; populated after M4.2 alignment.
     char_timings: list[CharTiming] = Field(default_factory=list)
 

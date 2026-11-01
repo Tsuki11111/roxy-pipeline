@@ -6,7 +6,7 @@ from pathlib import Path
 from string import Template
 
 PROMPTS_DIR = Path(__file__).resolve().parents[3] / "prompts" / "storyboard"
-STORYBOARD_GRAPH_VERSION = "storyboard-graph-1"
+STORYBOARD_GRAPH_VERSION = "storyboard-graph-2"
 
 
 @lru_cache(maxsize=8)

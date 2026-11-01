@@ -391,7 +391,13 @@ function Overview({ episode }: { episode: Episode }) {
           <Descriptions.Item label="状态">{statusMeta[episode.status].label}</Descriptions.Item>
           <Descriptions.Item label="健康">{episode.health}</Descriptions.Item>
           <Descriptions.Item label="当前节点">{episode.current_node ?? "—"}</Descriptions.Item>
-          <Descriptions.Item label="目标时长">{episode.target_duration_s} 秒</Descriptions.Item>
+          <Descriptions.Item label="AI 预估时长">
+            {episode.estimated_duration_s
+              ? `${episode.estimated_duration_s} 秒（${episode.duration_source === "ai" ? "AI 估算" : episode.duration_source === "fallback" ? "字符数兜底" : "旧数据"}）`
+              : episode.target_duration_s
+                ? `${episode.target_duration_s} 秒（旧数据）`
+                : "待脚本生成"}
+          </Descriptions.Item>
           <Descriptions.Item label="创建时间">{formatDate(episode.created_at)}</Descriptions.Item>
           <Descriptions.Item label="更新时间">{formatDate(episode.updated_at)}</Descriptions.Item>
           <Descriptions.Item label="成片路径" span={3}>
@@ -690,6 +696,19 @@ function StoryboardTab({
           pagination={{ pageSize: 30 }}
           columns={[
             { title: "#", dataIndex: "seq", width: 64 },
+            {
+              title: "句数",
+              dataIndex: "line_count",
+              width: 70,
+              render: (value) => value || 1,
+            },
+            {
+              title: "场景组",
+              dataIndex: "continuity_group",
+              width: 120,
+              ellipsis: true,
+              render: (value) => value || "—",
+            },
             { title: "卡片", dataIndex: "card_type", width: 140 },
             {
               title: "角色",
@@ -732,7 +751,7 @@ function StoryboardTab({
       >
         <Form form={form} layout="vertical">
           <Form.Item name="duration_ms" label="时长（毫秒）">
-            <InputNumber min={500} max={15000} style={{ width: "100%" }} />
+            <InputNumber min={3000} max={30000} style={{ width: "100%" }} />
           </Form.Item>
           <Form.Item name="card_type" label="卡片类型">
             <Select options={CARD_TYPES.map((value) => ({ value }))} />
