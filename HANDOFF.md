@@ -126,6 +126,7 @@ roxy_pipline/
 ├─ CLAUDE.md / HANDOFF.md / README.md
 ├─ .env.example / .gitignore / pyproject.toml / uv.lock / alembic.ini
 ├─ start-dev.bat                     # 一键启动
+├─ stop-dev.bat                      # 停止并关闭服务窗口
 ├─ compose.local.yml                 # 单 Redis（Celery broker）
 ├─ docs/
 │  ├─ AI科普视频Agent系统需求分析文档.md
@@ -158,6 +159,7 @@ roxy_pipline/
 ├─ tests/                            # 扁平 pytest 用例
 ├─ scripts/
 │  ├─ dev/start_all.ps1              # 一键启动
+│  ├─ dev/stop_all.ps1               # 按 PID 停止并关闭窗口
 │  ├─ runtime/                       # indextts_server.py / align_words.py
 │  └─ tools/                         # check_llm / seedream / ingest_assets 等
 ├─ character_packs/                  # roxy 本地 pack、placeholder 公开包
@@ -224,6 +226,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - media worker 常驻 IndexTTS2（GPU），并发必须为 1；Windows 调试同样加 `--pool=solo`。
 - Windows 本机 Celery 默认 prefork 不可用：调试加 `--pool=solo`（单并发）。
 - Windows 一键启动（本地极简模式）：双击仓库根目录 `start-dev.bat`（内部 `scripts/dev/start_all.ps1`），只启动 Docker、单个 Redis 容器、API、两个 worker 和 beat；前端由 FastAPI 托管 `web/dist`，默认 SQLite + 本地文件系统，不启动 Postgres/RabbitMQ/MinIO。`-Dev` 参数会额外启动 Vite。
+- 停止服务：双击 `stop-dev.bat` 或运行 `scripts/dev/stop_all.ps1`，按 `data/run/*.pid` 关闭整棵进程树；启动脚本每次会先清理上次残留的空窗口，避免服务窗口越积越多。
 - Celery broker 固定为 Redis：`CELERY_BROKER_URL=redis://localhost:6380/0`，不再回退 RabbitMQ。
 - 队列：`workflow`（状态推进/outbox 补投）、`agent`（`storyboard.generate` / `qc.episode`）、`media`（`voice.episode` / `align.episode`）、`render`（`render.episode` / `render.shot` / `render.concat`）。
 - 触发真实队列渲染：通过前端视频期详情页或对应 API 动作发起；旧的队列 demo 脚本已删除。

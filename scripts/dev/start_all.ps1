@@ -4,6 +4,8 @@ $ErrorActionPreference = 'Stop'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-Location $root
+$runDir = Join-Path $root 'data\run'
+New-Item -ItemType Directory -Path $runDir -Force | Out-Null
 
 foreach ($cmd in @('docker', 'uv')) {
     if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
@@ -77,12 +79,32 @@ function Start-Docker {
     throw 'Docker engine did not start within 180s.'
 }
 
-function Start-ServiceWindow([string]$Title, [string]$Command) {
+function Start-ServiceWindow([string]$Title, [string]$Command, [string]$Slug) {
     $script = "`$Host.UI.RawUI.WindowTitle = '$Title'; $Command"
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
-    Start-Process 'powershell.exe' -ArgumentList @(
+    $process = Start-Process 'powershell.exe' -ArgumentList @(
         '-NoProfile', '-NoExit', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $encoded
-    ) -WindowStyle Normal
+    ) -WindowStyle Normal -PassThru
+    Set-Content -Path (Join-Path $runDir "$Slug.pid") -Value $process.Id
+}
+
+function Close-StaleServiceWindows {
+    # Earlier runs leave empty -NoExit windows behind after a service is killed.
+    $procs = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -eq 'powershell.exe' -and $_.CommandLine -match '-EncodedCommand' }
+    foreach ($proc in $procs) {
+        $children = Get-CimInstance Win32_Process -Filter "ParentProcessId=$($proc.ProcessId)" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -ne 'conhost.exe' }
+        if ($children) { continue }
+        $match = [regex]::Match($proc.CommandLine, '-EncodedCommand\s+(\S+)')
+        if (-not $match.Success) { continue }
+        try {
+            $decoded = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($match.Groups[1].Value))
+        } catch { continue }
+        if ($decoded -match 'roxy_pipline' -or $decoded -match 'app\.workflow\.celery_app') {
+            Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 if (-not (Test-Docker)) { Start-Docker }
@@ -108,11 +130,19 @@ $mediaCmd = "Set-Location '$root'; uv run celery -A app.workflow.celery_app work
 $beatCmd = "Set-Location '$root'; uv run celery -A app.workflow.celery_app beat -l info -s data/celerybeat-schedule"
 $webCmd = "Set-Location '$root\web'; if (-not (Test-Path node_modules)) { npm install }; npm run dev"
 
-if (-not (Test-Port 8000)) { Start-ServiceWindow 'API 8000' $apiCmd }
-if (-not (Test-Process 'celery.*worker-main@')) { Start-ServiceWindow 'Worker main' $mainCmd }
-if (-not (Test-Process 'celery.*worker-media@')) { Start-ServiceWindow 'Worker media' $mediaCmd }
-if (-not (Test-Process 'celery.*beat')) { Start-ServiceWindow 'Celery beat' $beatCmd }
-if ($Dev -and -not (Test-Port 5173)) { Start-ServiceWindow 'Frontend 5173' $webCmd }
+Close-StaleServiceWindows
+Get-ChildItem $runDir -Filter '*.pid' -ErrorAction SilentlyContinue | ForEach-Object {
+    $servicePid = [int](Get-Content $_.FullName -ErrorAction SilentlyContinue)
+    if (-not (Get-Process -Id $servicePid -ErrorAction SilentlyContinue)) {
+        Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+    }
+}
+
+if (-not (Test-Port 8000)) { Start-ServiceWindow 'API 8000' $apiCmd 'api' }
+if (-not (Test-Process 'celery.*worker-main@')) { Start-ServiceWindow 'Worker main' $mainCmd 'worker-main' }
+if (-not (Test-Process 'celery.*worker-media@')) { Start-ServiceWindow 'Worker media' $mediaCmd 'worker-media' }
+if (-not (Test-Process 'celery.*beat')) { Start-ServiceWindow 'Celery beat' $beatCmd 'beat' }
+if ($Dev -and -not (Test-Port 5173)) { Start-ServiceWindow 'Frontend 5173' $webCmd 'web' }
 
 $deadline = (Get-Date).AddSeconds(60)
 while ((Get-Date) -lt $deadline) {
