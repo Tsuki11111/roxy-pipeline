@@ -280,13 +280,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/start_all.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/start_all.ps1 -Dev
 ```
 
-停止所有服务并关闭服务窗口，双击 `stop-dev.bat` 或运行：
+停止所有服务、关闭服务窗口并停止 Redis 容器，双击 `stop-dev.bat` 或运行：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/stop_all.ps1
 ```
 
-启动脚本会在 `data/run/*.pid` 记录每个服务窗口，并在每次启动前自动关闭上次强杀后残留的空窗口；停止脚本按 PID 关掉整棵进程树，避免窗口越开越多。Redis 容器不会被停止，需要时运行 `docker compose -f compose.local.yml down`。
+启动脚本会在 `data/run/*.pid` 记录每个服务窗口，并在每次启动前自动关闭上次强杀后残留的空窗口；停止脚本按 PID 关掉整棵进程树，避免窗口越开越多。Redis 数据卷会保留，下次启动继续使用。只想停 API/worker、保留 Redis 时加 `-KeepRedis`：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/stop_all.ps1 -KeepRedis
+```
 
 ### Web 控制台
 

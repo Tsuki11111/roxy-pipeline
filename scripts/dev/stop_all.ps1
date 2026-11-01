@@ -1,4 +1,5 @@
 #requires -Version 5.1
+param([switch]$KeepRedis)
 $ErrorActionPreference = 'SilentlyContinue'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -44,4 +45,14 @@ foreach ($window in $windows) {
 }
 
 Write-Host "Stopped $stopped Roxy Pipeline process/window(s)."
-Write-Host 'Redis container is left running; use "docker compose -f compose.local.yml down" to stop it.'
+
+if ($KeepRedis) {
+    Write-Host 'Redis container left running (-KeepRedis).'
+} else {
+    docker compose -f (Join-Path $root 'compose.local.yml') down *> $null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host 'Redis container stopped (data volume kept).'
+    } else {
+        Write-Host 'Failed to stop Redis; run "docker compose -f compose.local.yml down" manually.'
+    }
+}
