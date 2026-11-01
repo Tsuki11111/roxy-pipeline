@@ -1665,45 +1665,42 @@ Windows 11
 roxy_pipeline/
 ├─ pyproject.toml
 ├─ uv.lock
-├─ docker/
-│  ├─ Dockerfile.api
-│  ├─ Dockerfile.worker
-│  ├─ Dockerfile.render
-│  └─ nginx.conf
-├─ compose.infra.yml
-├─ compose.dev.yml
-├─ compose.prod.yml
+├─ start-dev.bat
+├─ compose.local.yml       # 单 Redis（Celery broker）
 ├─ app/
-│  ├─ api/                 # FastAPI 路由、认证、SSE
+│  ├─ api/                 # FastAPI 路由；episodes 拆成包
+│  │  └─ routes/episodes/  # crud/script/storyboard/media/render/lifecycle
 │  ├─ agents/              # 所有智能体
-│  │  ├─ script/           # 脚本 Agent：graph/validation/service/optimizer/tasks
-│  │  ├─ storyboard/       # 分镜 Agent：graph/rhythm/service/spec
-│  │  ├─ asset/            # 文本→无文字演示素材，reuse_key 复用
-│  │  └─ remotion/         # 每镜头 Remotion TSX 生成 + Docker 沙箱 + Skill
+│  │  ├─ script/
+│  │  ├─ storyboard/
+│  │  ├─ asset/
+│  │  └─ remotion/         # 每镜头 TSX 生成 + Docker 沙箱 + Skill
 │  ├─ voice/               # 逐句 TTS、句级/字级对齐、音轨装配
 │  ├─ qc/                  # 规则 + DeepSeek 多模态质检
 │  ├─ publish/             # 本地发布包
-│  ├─ storage/             # 时间戳输出目录、MinIO 上传
-│  ├─ render/              # 舞台、逐帧、镜头缓存、拼接
-│  ├─ assets/              # 资产持久化/复用
-│  ├─ providers/           # llm / tts 适配层
+│  ├─ storage/             # paths/assets/output 本地文件读写
+│  ├─ render/              # Remotion 渲染、编码、时间线
+│  ├─ assets/              # 资产领域/复用
+│  ├─ providers/           # llm / imagegen / tts 适配层
 │  ├─ workflow/            # Celery、outbox、状态机、resume/revision
-│  ├─ models/              # SQLAlchemy 模型
-│  ├─ schemas/             # Pydantic API schema
-│  ├─ db/                  # Base + async session
-│  └─ core/                # settings
-├─ templates/              # stage / cards / partials（Playwright 仅测试）
-├─ infra/remotion/         # Remotion 沙箱 Dockerfile
-├─ prompts/                # 版本化 Prompt（script / storyboard / remotion）
-├─ assets/                 # 角色/背景/字体/BGM（或放 MinIO）
-├─ character_packs/        # 角色包：canonical 设定图、表情/姿势、manifest
+│  ├─ models/ schemas/ db/ core/
+├─ infra/remotion/
+│  ├─ Dockerfile
+│  └─ template/            # Node/Remotion 工程骨架
+├─ prompts/                # script / storyboard / remotion / asset
+├─ character_packs/        # 角色包：roxy 本地、placeholder 公开
 ├─ migrations/             # Alembic
 ├─ tests/                  # pytest（当前扁平结构）
 ├─ web/                    # React + Vite
+├─ data/                   # gitignore：db/assets/voice/tools/backup
+├─ output/                 # gitignore：成片
+├─ tmp/                    # gitignore：可清理中间产物
 └─ docs/
 ```
 
-### B. Compose 服务清单（概要）
+### B. Compose 服务清单（历史方案）
+
+> 2026-11-01 起本地只保留 `compose.local.yml`（Redis）；下面完整栈仅作历史参考。
 
 ```yaml
 services:

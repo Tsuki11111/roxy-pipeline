@@ -13,13 +13,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.asset.service import AssetAgentError, generate_assets_from_text
-from app.assets.store import ingest_asset, sha256_file
+from app.assets.store import ingest_asset
 from app.core.config import get_settings
 from app.db.session import get_session
 from app.models.core import Asset, AssetStatus, AssetType
 from app.providers.imagegen import ImageGenError, build_image_provider
 from app.providers.llm import LLMError, build_llm
 from app.qc.vision import check_image_asset
+from app.storage.assets import sha256_file
+from app.storage.paths import PROJECT_ROOT
 from app.schemas.core import (
     AssetAgentItem,
     AssetGenerateRequest,
@@ -32,8 +34,6 @@ from app.schemas.core import (
     SeedreamGenerateRequest,
     SeedreamGenerateResponse,
 )
-
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 router = APIRouter(prefix="/api/v1/assets", tags=["assets"])
 

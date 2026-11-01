@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.models.core import Episode, EpisodeStatus, NodeRun, NodeStatus
 from app.workflow.celery_app import celery_app
-from app.workflow.db import run_async, task_session
+from app.db.task import run_async, task_session
 from app.workflow.outbox import dispatch_pending
 
 logger = get_task_logger(__name__)

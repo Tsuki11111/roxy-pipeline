@@ -18,8 +18,8 @@ from app.models.core import (
     Shot,
 )
 from app.workflow.outbox import enqueue_outbox
+from app.storage.paths import PROJECT_ROOT
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROVIDER = "indextts2"
 MODEL = "IndexTTS-2"
 

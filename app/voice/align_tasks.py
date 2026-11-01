@@ -23,7 +23,7 @@ from app.models.core import (
 from app.agents.storyboard.render_spec import build_episode_render_spec
 from app.workflow.celery_app import celery_app
 from app.workflow.cancel import TaskCancelled, ensure_not_cancelled
-from app.workflow.db import run_async, task_session
+from app.db.task import run_async, task_session
 from app.workflow.memory import release_memory
 from app.render.service import start_auto_render
 

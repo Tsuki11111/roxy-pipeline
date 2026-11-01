@@ -15,8 +15,8 @@ from app.models.core import Episode, ScriptLine, Series
 from app.render.encode import get_ffmpeg
 from app.render.models import EpisodeSpec
 from app.render.timeline import build_timeline
+from app.storage.paths import PROJECT_ROOT
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _resolve(value: str) -> Path:

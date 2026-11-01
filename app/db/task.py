@@ -25,7 +25,7 @@ async def task_session() -> AsyncIterator[AsyncSession]:
     engine = create_async_engine(
         settings.database_url,
         poolclass=NullPool,
-        **( {"connect_args": {"timeout": 30}} if sqlite else {}),
+        **({"connect_args": {"timeout": 30}} if sqlite else {}),
     )
     if sqlite:
 
@@ -34,6 +34,7 @@ async def task_session() -> AsyncIterator[AsyncSession]:
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA busy_timeout=30000")
+            cursor.execute("PRAGMA synchronous=NORMAL")
             cursor.close()
 
     session_factory = async_sessionmaker(

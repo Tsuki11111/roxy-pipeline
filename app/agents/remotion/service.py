@@ -42,13 +42,13 @@ from app.models.core import (
 from app.providers.llm import build_llm
 from app.render.service import _char_timings_from_audio
 from app.render.timeline import build_timeline
+from app.storage.paths import PROJECT_ROOT
 from app.workflow.cancel import TaskCancelled
-from app.workflow.db import task_session
+from app.db.task import task_session
 from app.workflow.outbox import enqueue_outbox
 
 logger = logging.getLogger(__name__)
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
+TEMPLATE_DIR = PROJECT_ROOT / "infra" / "remotion" / "template"
 
 
 class RemotionError(RuntimeError):

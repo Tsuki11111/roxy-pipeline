@@ -12,7 +12,7 @@ from app.core.config import get_settings
 from app.models.core import Episode, NodeRun, NodeStatus
 from app.workflow.cancel import TaskCancelled, ensure_not_cancelled
 from app.workflow.celery_app import celery_app
-from app.workflow.db import run_async, task_session
+from app.db.task import run_async, task_session
 
 logger = logging.getLogger(__name__)
 

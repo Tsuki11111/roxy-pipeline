@@ -6,9 +6,9 @@ import subprocess
 from pathlib import Path
 
 from app.core.config import get_settings
+from app.storage.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 class RemotionDockerError(RuntimeError):

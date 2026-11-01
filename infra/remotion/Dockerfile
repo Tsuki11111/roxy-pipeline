@@ -10,9 +10,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY app/agents/remotion/templates/package.json app/agents/remotion/templates/package-lock.json ./
+COPY infra/remotion/template/package.json infra/remotion/template/package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
-COPY app/agents/remotion/templates/ ./
+COPY infra/remotion/template/ ./
 
 RUN useradd -u 10001 -m appuser \
     && mkdir -p /home/appuser/.cache \

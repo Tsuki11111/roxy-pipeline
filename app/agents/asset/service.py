@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.asset.models import AssetKind, AssetPlan
-from app.agents.asset.prompts import SYSTEM, build_user_prompt
+from app.agents.asset.prompts import build_user_prompt, load_system_prompt
 from app.assets.store import asset_path, ingest_asset
 from app.core.config import get_settings
 from app.models.core import Asset, AssetStatus, AssetType, Episode, ScriptLine
@@ -94,7 +94,7 @@ async def plan_assets(
     existing, existing_keys = await _existing_context(session)
     llm = llm or build_llm()
     result = await llm.chat_json(
-        SYSTEM,
+        load_system_prompt(),
         build_user_prompt(
             text, asset_type=asset_type, count=count, existing=existing
         ),

@@ -8,8 +8,8 @@ from app.models.core import Episode
 from app.render.encode import get_ffmpeg
 from app.render.models import EpisodeSpec
 from app.render.timeline import build_timeline
+from app.storage.paths import PROJECT_ROOT
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 _DURATION_RE = re.compile(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)")
 _VIDEO_RE = re.compile(r"Stream #\d+:\d+.*Video:")

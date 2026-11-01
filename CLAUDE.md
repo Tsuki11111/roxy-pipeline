@@ -64,7 +64,7 @@ Remotion（Node 22，Docker 沙箱，唯一渲染器）+ ffmpeg + LangGraph（�
 
 - 文本/代码主模型：DeepSeek `deepseek-flash`（当前 Key 只开放这个模型）。
 - 豆包 Pro：仅备选/A-B，不阻塞主流程。
-- 图像素材：火山方舟 Seedream 5.0 Pro，生成候选后**人工筛选、固定资产化**；仅限原创角色/背景/装饰，洛琪希会被版权过滤，不能 AI 复刻。文本→素材规划由 `app/agents/asset/` 的 Asset Agent 用 DeepSeek + `reuse_key` 复用，缺失才生成。
+- 图像素材：火山方舟 Seedream 5.0 Pro，生成候选后**人工筛选、固定资产化**；仅限原创角色/背景/装饰，洛琪希会被版权过滤，不能 AI 复刻。文本→素材规划由 `app/agents/asset/` 的 Asset Agent 用 DeepSeek + `reuse_key` 复用，缺失才生成，Prompt 在 `prompts/asset/`。
 - 视觉质检：统一用 **DeepSeek `deepseek-flash` 多模态**；图片资产直接传图检查，完整视频按镜头/时间点抽帧 + ffmpeg 流指标一起送模型。不接入豆包 Vision 等第二视觉模型；确定性 DOM/几何规则仍作为前置检查。
 - Remotion 代码生成：`app/agents/remotion/` 用 DeepSeek `deepseek-flash`，每镜头一次调用，Prompt 在 `prompts/remotion/`，Skill 在 `app/agents/remotion/skills/remotion_shot/SKILL.md`。
 - **TTS：本地 IndexTTS2 zero-shot 声音克隆**（Python 3.11 独立环境 + 常驻 HTTP 服务），不使用付费云 TTS；参考音固定为 `data/assets/voice/indextts2/reference.wav`。
@@ -87,7 +87,7 @@ Remotion（Node 22，Docker 沙箱，唯一渲染器）+ ffmpeg + LangGraph（�
 - 风格约束：视觉风格必须服务内容；先判断主题再选色调/材质/线条/图形语言，同一期保持统一；禁止与内容无关的赛博霓虹、故障扫描线、机器人装饰。
 - 字幕：由 Python 生成 Root 时统一叠加 `SubtitleTrack`（句级 chunks、镜头内相对时间），生成代码不画字幕；字幕层变化要提升 `renderer_version` 失效镜头缓存。
 - 画面长段文本由生成代码的 `PaperCard` 组件渲染（Claude 暖纸/墨字/陶土），Python 只叠加底部字幕；文本长度和分段由模型决定，优先直接用 `narration`/`card.text` 的长段。`TerminalCard`/`Card`/`Label`/`Caption`/`Board` 禁止用于新镜头。
-- 改动 `app/agents/remotion/templates/` 后必须重建镜像，否则沙箱仍用旧组件。
+- 改动 `infra/remotion/template/` 后必须重建镜像，否则沙箱仍用旧组件。
 - 许可：个人/非商业免费；商用需 Remotion 授权，本项目保持个人非商业。镜像 `roxy-remotion:4.0.539` 由 `infra/remotion/Dockerfile` 构建。
 
 ### 4. 密钥与素材

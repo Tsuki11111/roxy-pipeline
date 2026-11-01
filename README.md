@@ -326,7 +326,7 @@ docker build -f infra/remotion/Dockerfile -t roxy-remotion:4.0.539 .
 - 有角色的镜头必须有动效：从屏幕外冲入、呼吸轻摆、至少一次手势/让位；静态 `<Character>` 会被生成检查拦下。
 - 视觉风格必须服务内容：同一期统一色调、材质、线条和图形语言；禁止与主题无关的赛博霓虹/故障/机器人装饰。
 - 字幕由 Python 生成 Root 时统一叠加 `SubtitleTrack`，按句级时间轴显示；生成代码不画字幕。
-- 改动 `app/agents/remotion/templates/` 后需要重新构建镜像，沙箱才会使用新组件。
+- 改动 `infra/remotion/template/` 后需要重新构建镜像，沙箱才会使用新组件。
 - Remotion 许可：个人/非商业项目免费；商用需另行获得 Remotion 授权。
 
 ### 成片输出

@@ -22,15 +22,15 @@ from app.qc.frames import extract_frames
 from app.qc.rules import run_rules
 from app.qc.vision import check_frames
 from app.render.models import EpisodeSpec
+from app.storage.paths import PROJECT_ROOT
 from app.workflow.celery_app import celery_app
 from app.workflow.cancel import TaskCancelled, ensure_not_cancelled
-from app.workflow.db import run_async, task_session
+from app.db.task import run_async, task_session
 from app.workflow.memory import release_memory
 from app.workflow.state_machine import transition_episode
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 async def _mark_failed(episode_id: str, node_run_id: str, error: str) -> None:

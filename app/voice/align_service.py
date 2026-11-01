@@ -17,8 +17,8 @@ from app.models.core import (
     ScriptLine,
 )
 from app.workflow.outbox import enqueue_outbox
+from app.storage.paths import PROJECT_ROOT
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class AlignRequestError(Exception):

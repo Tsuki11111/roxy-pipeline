@@ -18,7 +18,7 @@ from app.render.timeline import build_timeline
 from app.storage.output import export_episode_video
 from app.workflow.celery_app import celery_app
 from app.workflow.cancel import TaskCancelled, ensure_not_cancelled
-from app.workflow.db import run_async, task_session
+from app.db.task import run_async, task_session
 from app.workflow.memory import release_memory
 
 logger = get_task_logger(__name__)

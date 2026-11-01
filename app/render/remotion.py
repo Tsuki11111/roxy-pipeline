@@ -7,8 +7,8 @@ from app.agents.remotion import docker
 from app.core.config import get_settings
 from app.render.encode import get_ffmpeg
 from app.render.models import EpisodeSpec
+from app.storage.paths import PROJECT_ROOT
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _workdir(spec: EpisodeSpec) -> Path:

@@ -19,7 +19,7 @@ from app.agents.storyboard.graph import run_storyboard_graph
 from app.agents.storyboard.prompts import STORYBOARD_GRAPH_VERSION, prompt_hash
 from app.agents.storyboard.spec_builder import shot_cache_key
 from app.workflow.celery_app import celery_app
-from app.workflow.db import run_async, task_session
+from app.db.task import run_async, task_session
 
 logger = logging.getLogger(__name__)
 

@@ -48,7 +48,7 @@ def _settings(tmp_path: Path, monkeypatch) -> None:
     settings = get_settings()
     monkeypatch.setattr(settings, "asset_root", str(tmp_path / "assets"))
     monkeypatch.setattr(settings, "asset_agent_tmp_dir", str(tmp_path / "agent_tmp"))
-    monkeypatch.setattr("app.assets.store.PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr("app.storage.paths.PROJECT_ROOT", tmp_path)
 
 
 async def test_asset_agent_reuses_approved_asset(

@@ -1,40 +1,14 @@
 from __future__ import annotations
 
-import hashlib
-import mimetypes
-import shutil
 from pathlib import Path
 
-from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.models.core import Asset, AssetStatus, AssetType
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def image_info(path: Path) -> tuple[int, int, str]:
-    with Image.open(path) as image:
-        width, height = image.size
-    mime = mimetypes.guess_type(path.name)[0] or "image/png"
-    return width, height, mime
-
-
-def relative_project_path(path: Path) -> str:
-    resolved = path.resolve()
-    if not resolved.is_relative_to(PROJECT_ROOT):
-        raise ValueError(f"asset path escapes project root: {path}")
-    return resolved.relative_to(PROJECT_ROOT).as_posix()
+from app.storage.assets import image_info, sha256_file, store_asset_file
+from app.storage.paths import PROJECT_ROOT, relative_project_path
 
 
 def asset_path(asset: Asset) -> Path:
@@ -92,12 +66,12 @@ async def ingest_asset(
         stored_path = same_file.path
     elif copy:
         settings = get_settings()
-        target_dir = (root or Path(settings.asset_root)).resolve() / asset_type.value
-        target_dir.mkdir(parents=True, exist_ok=True)
-        target = target_dir / f"{checksum[:16]}{source_path.suffix.lower()}"
-        if not target.exists():
-            shutil.copy2(source_path, target)
-        stored_path = relative_project_path(target)
+        stored_path = store_asset_file(
+            source_path,
+            target_root=root or Path(settings.asset_root),
+            asset_type=asset_type.value,
+            checksum=checksum,
+        )
     else:
         stored_path = relative_project_path(source_path)
 

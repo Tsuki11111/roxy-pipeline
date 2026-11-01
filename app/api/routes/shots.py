@@ -20,9 +20,9 @@ from app.agents.storyboard.grammar import (
     TRANSITIONS,
     MOTIONS,
     MOVES,
-    PROJECT_ROOT,
 )
 from app.agents.storyboard.spec_builder import shot_cache_key
+from app.storage.paths import PROJECT_ROOT
 
 router = APIRouter(prefix="/api/v1/shots", tags=["storyboard"])
 
