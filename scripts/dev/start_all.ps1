@@ -138,19 +138,35 @@ Get-ChildItem $runDir -Filter '*.pid' -ErrorAction SilentlyContinue | ForEach-Ob
     }
 }
 
-if (-not (Test-Port 8000)) { Start-ServiceWindow 'API 8000' $apiCmd 'api' }
+if (Test-Port 8000) {
+    try {
+        $existing = Invoke-RestMethod -TimeoutSec 3 'http://127.0.0.1:8000/health'
+        if ($existing.status -ne 'ok') { throw 'unhealthy' }
+    } catch {
+        throw 'Port 8000 is occupied but the Roxy API is not healthy; stop the other process first.'
+    }
+} else {
+    Start-ServiceWindow 'API 8000' $apiCmd 'api'
+}
 if (-not (Test-Process 'celery.*worker-main@')) { Start-ServiceWindow 'Worker main' $mainCmd 'worker-main' }
 if (-not (Test-Process 'celery.*worker-media@')) { Start-ServiceWindow 'Worker media' $mediaCmd 'worker-media' }
 if (-not (Test-Process 'celery.*beat')) { Start-ServiceWindow 'Celery beat' $beatCmd 'beat' }
 if ($Dev -and -not (Test-Port 5173)) { Start-ServiceWindow 'Frontend 5173' $webCmd 'web' }
 
 $deadline = (Get-Date).AddSeconds(60)
+$healthy = $false
 while ((Get-Date) -lt $deadline) {
     try {
         $health = Invoke-RestMethod -TimeoutSec 2 'http://127.0.0.1:8000/health'
-        if ($health.status -eq 'ok') { break }
+        if ($health.status -eq 'ok') {
+            $healthy = $true
+            break
+        }
     } catch {}
     Start-Sleep -Seconds 2
+}
+if (-not $healthy) {
+    throw 'API did not become healthy within 60s; check the "API 8000" PowerShell window for errors.'
 }
 
 Write-Host '[4/4] services started'
