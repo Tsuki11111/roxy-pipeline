@@ -271,7 +271,11 @@ export default function EpisodeDetailPage() {
   const taskRunning =
     active && Boolean(episode.current_node) && episode.health !== "FAILED";
   const waiting = active && !taskRunning;
-  const displayMeta = episodeStatusMeta(episode.status, episode.current_node);
+  const displayMeta = episodeStatusMeta(
+    episode.status,
+    episode.current_node,
+    Boolean(episode.output_path),
+  );
   const percent = STAGE_PERCENT[episode.status] ?? 0;
   const nodeLabel =
     (episode.current_node && NODE_LABELS[episode.current_node]) ||
@@ -413,7 +417,11 @@ function Overview({ episode }: { episode: Episode }) {
       <Card>
         <Descriptions column={3} size="small">
           <Descriptions.Item label="状态">
-            {episodeStatusMeta(episode.status, episode.current_node).label}
+            {episodeStatusMeta(
+              episode.status,
+              episode.current_node,
+              Boolean(episode.output_path),
+            ).label}
           </Descriptions.Item>
           <Descriptions.Item label="健康">{episode.health}</Descriptions.Item>
           <Descriptions.Item label="当前节点">{episode.current_node ?? "—"}</Descriptions.Item>

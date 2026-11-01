@@ -176,7 +176,11 @@ export default function EpisodesPage() {
               title: "状态",
               dataIndex: "status",
               render: (status, row) => {
-                const meta = episodeStatusMeta(status, row.current_node);
+                const meta = episodeStatusMeta(
+                  status,
+                  row.current_node,
+                  Boolean(row.output_path),
+                );
                 return <Tag color={meta.color}>{meta.label}</Tag>;
               },
             },

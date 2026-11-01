@@ -38,9 +38,16 @@ const WAITING_LABELS: Record<string, string> = {
 export function episodeStatusMeta(
   status: EpisodeStatus,
   currentNode: string | null | undefined,
+  hasOutput = false,
 ): { label: string; color: string } {
   const meta = statusMeta[status];
   if (ACTIVE_STATUSES.has(status) && !currentNode) {
+    if (status === "RENDERING") {
+      return {
+        label: hasOutput ? "渲染已完成，等待质检" : "等待渲染",
+        color: "gold",
+      };
+    }
     return { label: WAITING_LABELS[status] ?? meta.label, color: "gold" };
   }
   return meta;

@@ -440,6 +440,40 @@ async def test_generate_remotion_code_persists_component_and_meta(
     assert "durationInFrames={50}" in root
 
 
+async def test_rerender_allowed_in_rendering_without_active_render(
+    episode, session
+):
+    from app.render.service import rerender_episode
+
+    _, ep = episode
+    await seed_ready_episode(session, ep["id"])
+    episode_row = await session.get(Episode, ep["id"])
+    shot = await session.scalar(
+        select(Shot).where(Shot.episode_id == ep["id"])
+    )
+    episode_row.remotion_meta = {
+        "enabled": True,
+        "work_dir": "tmp/remotion/test",
+        "version": "4.0.539",
+        "image_digest": "sha256:test",
+        "shots": {
+            shot.id: {
+                "status": "READY",
+                "composition_id": "Shot_0001",
+                "code_hash": "abc",
+            }
+        },
+    }
+    episode_row.status = EpisodeStatus.RENDERING
+    episode_row.current_node = None
+    await session.commit()
+
+    episode_row, node = await rerender_episode(session, ep["id"])
+    await session.commit()
+    assert node.node_key == "render.episode"
+    assert episode_row.current_node == "render.episode"
+
+
 async def test_render_spec_uses_remotion_when_meta_ready(
     episode, session, monkeypatch
 ):

@@ -117,7 +117,9 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
     | string
     | undefined;
 
-  const canEdit = EDITABLE_STATUSES.includes(episode.status);
+  const canEdit =
+    EDITABLE_STATUSES.includes(episode.status) ||
+    (episode.status === "RENDERING" && !episode.current_node);
   const shots = storyboard?.shots ?? [];
   const selected = shots.find((shot) => shot.id === selectedId) ?? null;
   const lineByShot = useMemo(() => {

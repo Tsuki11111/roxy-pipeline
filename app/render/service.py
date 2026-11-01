@@ -182,7 +182,17 @@ async def rerender_episode(
     episode = await session.get(Episode, episode_id, with_for_update=True)
     if episode is None:
         raise LookupError(f"episode not found: {episode_id}")
-    if episode.status not in {
+    if episode.status == EpisodeStatus.RENDERING:
+        active = await session.scalar(
+            select(NodeRun).where(
+                NodeRun.episode_id == episode.id,
+                NodeRun.node_key == "render.episode",
+                NodeRun.status.in_([NodeStatus.PENDING, NodeStatus.RUNNING]),
+            )
+        )
+        if active is not None:
+            raise RenderConflict("render is already queued or running")
+    elif episode.status not in {
         EpisodeStatus.READY,
         EpisodeStatus.PUBLISHED,
         EpisodeStatus.QC,
