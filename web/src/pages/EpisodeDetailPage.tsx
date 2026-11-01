@@ -399,11 +399,6 @@ function Overview({ episode }: { episode: Episode }) {
               {episode.output_path ?? "—"}
             </Typography.Text>
           </Descriptions.Item>
-          <Descriptions.Item label="MinIO" span={3}>
-            <Typography.Text copyable={!!episode.output_meta?.minio?.uri}>
-              {episode.output_meta?.minio?.uri ?? "—"}
-            </Typography.Text>
-          </Descriptions.Item>
         </Descriptions>
       </Card>
       <Card title="流程">
@@ -933,11 +928,6 @@ function PackageTab({
             {episode.output_path ?? "尚未生成成片"}
           </Typography.Text>
         </Space>
-        {episode.output_meta?.minio?.uri && (
-          <Typography.Paragraph style={{ marginTop: 12, marginBottom: 0 }} copyable>
-            MinIO：{episode.output_meta.minio.uri}
-          </Typography.Paragraph>
-        )}
       </Card>
       {manifest ? (
         <Card title="发布包文件">

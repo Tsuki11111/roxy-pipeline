@@ -8,6 +8,31 @@
 
 ---
 
+## ADR-012：本地单机运行时，移除 PostgreSQL/RabbitMQ/MinIO 和 Playwright
+
+### 背景
+
+原方案面向 Ubuntu VM 和多 worker 部署，使用 PostgreSQL 作为状态事实源、RabbitMQ 作为 Celery broker、MinIO 作为对象存储。项目实际变为个人 Windows 单机使用，且目标改为 GitHub 下载后一键安装；继续维护四容器完整栈会显著增加安装门槛、内存占用和故障面。
+
+### 决策
+
+- 运行时只保留本地单机栈：SQLite（`data/db/roxy.db`）+ 单个 Redis（Celery broker + result backend）+ 本地文件系统（`data/assets`、`output/`）。
+- 移除 PostgreSQL、RabbitMQ、MinIO 的配置、依赖、compose 文件和部署文档；不做“完整栈/VM”双模式。
+- 移除 Playwright 渲染器、HTML 模板、相关测试和 demo；`EpisodeSpec.renderer` 固定为 `remotion`，Remotion 是唯一渲染器。
+- 前端构建产物 `web/dist` 由 FastAPI 直接托管；Docker 只保留给 Redis 和 Remotion 沙箱。
+- TTS 降为可选组件；没有模型/GPU 时跳过配音，不影响脚本、分镜和画面流程。
+- 仍然调用 DeepSeek/Seedream 云端 API 做 AI 推理；本决策只改变运行环境，不代表离线。
+
+### 后果
+
+- 安装和启动大幅简化，单机内存/磁盘占用下降。
+- SQLite 单写者、无行锁：本地只运行一个主 worker，渲染并发建议固定为 1，不能依赖 `FOR UPDATE` 做并发控制。
+- 没有对象存储副本：`data/`、`output/` 需要手动备份。
+- 云端 API 成为硬依赖；断网时脚本、分镜、Remotion 代码、图像和视觉质检会失败。
+- 历史架构文档中的 Postgres/RabbitMQ/MinIO 段落仅作记录，不再代表当前实现。
+
+---
+
 ## ADR-001：采用方案 A（Python 模块化单体 + 进程级拆分 + Celery）
 
 ### 背景
@@ -366,7 +391,7 @@ Playwright 逐帧渲染稳定、可复现，但镜头画面由固定 HTML 模板
 
 - 每个镜头单独调用一次 DeepSeek，只生成 `src/shots/shot_<seq>.tsx`；Root、Composition、时长、素材映射由 Python 生成。
 - Remotion 4.0.539 + Node 22 固定在 Docker 镜像 `roxy-remotion:4.0.539` 内；生成代码在 `--network none --read-only --user 10001 --cpus 2 -m 3g --pids-limit 256` 沙箱里 `tsc` + `remotion compositions` 校验和渲染。
-- Remotion 为唯一生产 renderer（`REMOTION_ONLY=true`）；Playwright 仅保留测试/历史。全部镜头代码 READY 才能渲染，codegen 或单镜头渲染失败即期次失败，不切换 Playwright。
+- Remotion 为唯一生产 renderer（`REMOTION_ONLY=true`）；Playwright 后续由 ADR-012 移除。全部镜头代码 READY 才能渲染，codegen 或单镜头渲染失败即期次失败，不切换渲染器。
 - 镜头缓存键包含 renderer、Remotion 版本、镜像 digest、该镜头 code hash；代码变化只失效受影响镜头。
 
 ### 理由

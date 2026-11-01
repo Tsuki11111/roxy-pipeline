@@ -1,13 +1,29 @@
 #requires -Version 5.1
+param([switch]$Dev)
 $ErrorActionPreference = 'Stop'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-Location $root
 
-foreach ($cmd in @('docker', 'uv', 'npm')) {
+foreach ($cmd in @('docker', 'uv')) {
     if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
         throw "$cmd not found in PATH"
     }
+}
+
+$distIndex = Join-Path $root 'web\dist\index.html'
+if ($Dev) {
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+        throw 'npm not found in PATH (required for -Dev)'
+    }
+} elseif (-not (Test-Path -LiteralPath $distIndex)) {
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+        throw 'web/dist is missing and npm is not installed; run npm ci && npm run build in web/'
+    }
+    Push-Location (Join-Path $root 'web')
+    npm run build
+    if ($LASTEXITCODE -ne 0) { throw 'frontend build failed' }
+    Pop-Location
 }
 
 function Test-Port([int]$Port) {
@@ -72,37 +88,31 @@ function Start-ServiceWindow([string]$Title, [string]$Command) {
 if (-not (Test-Docker)) { Start-Docker }
 Write-Host '[1/4] Docker ready'
 
-docker compose -f compose.infra.yml --profile storage up -d postgres rabbitmq redis minio
-if ($LASTEXITCODE -ne 0) { throw 'docker compose up failed' }
+docker compose -f compose.local.yml up -d
+if ($LASTEXITCODE -ne 0) { throw 'docker compose -f compose.local.yml up failed' }
 
-Write-Host '[2/4] waiting for infra...'
-$deadline = (Get-Date).AddSeconds(120)
+Write-Host '[2/4] waiting for Redis...'
+$deadline = (Get-Date).AddSeconds(60)
 $ready = $false
 while ((Get-Date) -lt $deadline) {
-    $pg = (docker compose -f compose.infra.yml exec -T postgres pg_isready -U roxy 2>$null) -match 'accepting connections'
-    $rd = (docker compose -f compose.infra.yml exec -T redis redis-cli ping 2>$null) -eq 'PONG'
-    $mq = (docker compose -f compose.infra.yml exec -T rabbitmq rabbitmq-diagnostics -q ping 2>$null) -match 'succeeded|ok'
-    $mn = [bool](docker compose -f compose.infra.yml --profile storage ps --status running -q minio 2>$null)
-    if ($pg -and $rd -and $mq -and $mn) { $ready = $true; break }
+    $rd = (docker compose -f compose.local.yml exec -T redis redis-cli ping 2>$null) -eq 'PONG'
+    if ($rd) { $ready = $true; break }
     Start-Sleep -Seconds 2
 }
-if (-not $ready) { throw 'infra services are not ready' }
-Write-Host '[3/4] infra healthy'
-
-uv run python scripts/tools/ensure_minio_buckets.py
-if ($LASTEXITCODE -ne 0) { throw 'MinIO bucket init failed' }
+if (-not $ready) { throw 'Redis is not ready' }
+Write-Host '[3/4] Redis healthy'
 
 $apiCmd = "Set-Location '$root'; uv run uvicorn app.api.main:app --reload --port 8000"
 $mainCmd = "Set-Location '$root'; uv run celery -A app.workflow.celery_app worker -Q workflow,agent,render -l info --pool=solo -n `"worker-main@%h`""
 $mediaCmd = "Set-Location '$root'; uv run celery -A app.workflow.celery_app worker -Q media -l info --pool=solo -n `"worker-media@%h`""
-$beatCmd = "Set-Location '$root'; uv run celery -A app.workflow.celery_app beat -l info"
+$beatCmd = "Set-Location '$root'; uv run celery -A app.workflow.celery_app beat -l info -s data/celerybeat-schedule"
 $webCmd = "Set-Location '$root\web'; if (-not (Test-Path node_modules)) { npm install }; npm run dev"
 
 if (-not (Test-Port 8000)) { Start-ServiceWindow 'API 8000' $apiCmd }
 if (-not (Test-Process 'celery.*worker-main@')) { Start-ServiceWindow 'Worker main' $mainCmd }
 if (-not (Test-Process 'celery.*worker-media@')) { Start-ServiceWindow 'Worker media' $mediaCmd }
 if (-not (Test-Process 'celery.*beat')) { Start-ServiceWindow 'Celery beat' $beatCmd }
-if (-not (Test-Port 5173)) { Start-ServiceWindow 'Frontend 5173' $webCmd }
+if ($Dev -and -not (Test-Port 5173)) { Start-ServiceWindow 'Frontend 5173' $webCmd }
 
 $deadline = (Get-Date).AddSeconds(60)
 while ((Get-Date) -lt $deadline) {
@@ -118,6 +128,10 @@ Write-Host ''
 Write-Host 'Roxy Pipeline is up:'
 Write-Host '  API      http://127.0.0.1:8000'
 Write-Host '  Docs     http://127.0.0.1:8000/docs'
-Write-Host '  Frontend http://localhost:5173'
+if ($Dev) {
+    Write-Host '  Frontend http://localhost:5173 (Vite dev)'
+} else {
+    Write-Host '  Web      http://127.0.0.1:8000'
+}
 Write-Host ''
 Write-Host 'Each service runs in its own PowerShell window; close a window to stop it.'

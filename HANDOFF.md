@@ -25,6 +25,9 @@
 
 **M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产复用/持久化 + M4.1 逐句配音 + M4.2 句级对齐（字级可选） + M4.3 质检 + M5.1 局部修改/续跑/发布包 + Web 控制台 + 分镜时间线编辑器 + Remotion 逐镜头代码生成 Agent（唯一生产渲染器）+ 真实音轨成片已跑通（2026-10-30）；按主题自动生成脚本已移除。**
 
+- **2026-11-01 运行时简化（当前有效）**：已移除 PostgreSQL、RabbitMQ、MinIO 和 VM 部署；默认 SQLite `data/db/roxy.db` + 单 Redis（Celery broker）+ 本地文件系统，FastAPI 托管 `web/dist`，TTS 为可选组件。Playwright 依赖、渲染器、模板、相关测试和 demo 也已移除，Remotion 是唯一渲染器。下文 2026-11-01 之前的历史条目里出现的 Postgres/RabbitMQ/MinIO/VM/Playwright 只作记录，不再是当前运行方式。
+- 本地运行时已验证：`uv run pytest -q` 79 passed；Redis-only compose + API + 2 worker + beat；`/health` 正常，SQLite 5 期数据可见。
+
 - 需求文档 v1.2、架构方案 v1.10、ADR-001～010 已写完。
 - GitHub 仓库已创建：<https://github.com/Tsuki11111/roxy-pipeline>（Public）。
 - 本地 initial commit 与文档规范化 commit 已推送到 `origin/main`（2026-10-26）。
@@ -109,14 +112,14 @@
 
 1. `compose.infra.yml`：Postgres、RabbitMQ、Redis、MinIO（MinIO 可选，先本地存储也可）。
 2. `pyproject.toml` + `uv`；FastAPI skeleton；Alembic 初始迁移（`series` / `episode` / `script_line` / `shot` / `node_run`）。
-3. `render-worker`：Playwright/Chromium + Jinja2 舞台模板 + ffmpeg 逐帧编码。
+3. `render-worker`：Remotion Docker 沙箱 + ffmpeg 归一化/拼接。
 4. `character_packs/placeholder/`：先放 1 套占位立绘/背景，保证渲染链路能跑。
 5. 手写 3–5 个镜头的 `shot.json`，跑通“卡片 → 镜头片段 → concat → 成片”。
 6. golden frame 测试：同一输入重复渲染，像素差异在阈值内。
 
 **已完成（2026-10-27）：**
 
-- `pyproject.toml` + `uv` 环境；Playwright 钉在 1.59（复用本机 Chromium）。
+- `pyproject.toml` + `uv` 环境；Remotion 镜像单独构建/加载，Playwright 已移除。
 - `app/render/`：models / timeline / cards / stage / capture / encode。
 - 舞台模板 `templates/stage/` 与 5 类卡片模板 `templates/cards/`。
 - `specs/demo_episode.json`：3 镜头、12 秒；`scripts/demo/render_demo.py` 输出 `tmp/render_demo/demo_episode.mp4`。
@@ -330,43 +333,41 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 
 - 依赖安装（PyPI 直连容易卡，国内镜像更快）：
   `UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple uv sync`
-- Playwright 钉在 **1.59.0**，复用本机 `chromium-1217`；升级 Playwright 前先确认对应 Chromium 已安装，否则 `uv run playwright install chromium`。
+- 渲染依赖：Remotion 镜像 `roxy-remotion:4.0.539`（Docker）+ ffmpeg；Playwright 已移除。
 - ffmpeg 用 `imageio-ffmpeg` 自带二进制（`imageio-ffmpeg==0.6.0`，含 libx264/AAC），本机不需要系统 ffmpeg。
 - 测试：`uv run pytest -q`
-- 渲染成片：`uv run python scripts/demo/render_demo.py`
-- 只出静帧：`uv run python scripts/demo/render_demo.py --stills-only --still-ms 2000 --still-out tmp/render_demo/still_2s.png`
+- 渲染由 Celery/Remotion 执行；旧的 `render_demo.py` 和静帧脚本已删除。
 - 当前单进程速度约 **0.53 秒/帧**；10 分钟片约 2.3 小时，后续必须并行 render worker。
 
-### 4.2.1 API / 基础设施（M1.1）
+### 4.2.1 API（M1.1）
 
-- 本地无 Docker 时默认 SQLite，先迁移再启动：
+- 本地默认 SQLite，先迁移再启动：
   `uv run alembic upgrade head`
   `uv run uvicorn app.api.main:app --reload --port 8000`
-  打开 `http://localhost:8000/docs`。
-- 使用 compose 基础设施：
-  `docker compose -f compose.infra.yml up -d`
-  然后把 `.env` 的 `DATABASE_URL` 改为 `postgresql+asyncpg://roxy:roxy-dev@localhost:5433/roxy`，再跑迁移。
-- 端口避开现有栈：Postgres 5433、RabbitMQ 5673/15673、Redis 6380、MinIO 9100/9101。
-- 本机 Docker 已启动并验证三件套；compose 默认只起 Postgres/RabbitMQ/Redis，MinIO 用 `--profile storage` 另行启动。RabbitMQ 4.4 挂载 `infra/rabbitmq.conf`，允许 Celery pidbox 的临时非独占回复队列。
+  打开 `http://127.0.0.1:8000/docs`；`web/dist` 存在时 `/` 直接打开前端。
+- 数据文件：`data/db/roxy.db`。不再提供 Postgres/MinIO 配置。
+- 端口：API 8000、Redis 6380；Remotion 只在 Docker 内部运行。
 
 ### 4.2.2 队列与 render worker（M1.2）
 
-- 本机原生进程要在 `.env` 用 localhost：`DATABASE_URL=postgresql+asyncpg://roxy:roxy-dev@localhost:5433/roxy`、`RABBITMQ_URL=amqp://roxy:roxy-dev@localhost:5673//`、`REDIS_URL=redis://localhost:6380/0`；只做单机演示也可继续 SQLite。
-- 迁移后分别启动：
+- `.env` 本地默认：`DATABASE_URL=sqlite+aiosqlite:///./data/db/roxy.db`、`REDIS_URL=redis://localhost:6380/0`、`CELERY_BROKER_URL=redis://localhost:6380/0`。
+- 启动 Redis 和迁移：
+  `docker compose -f compose.local.yml up -d`
+  `uv run alembic upgrade head`
+- 分别启动：
   `uv run uvicorn app.api.main:app --reload --port 8000`
-  `uv run celery -A app.workflow.celery_app worker -Q workflow,agent,render -l info -c 2`
+  `uv run celery -A app.workflow.celery_app worker -Q workflow,agent,render -l info -c 1`
   `uv run celery -A app.workflow.celery_app worker -Q media -l info -c 1`
-  `uv run celery -A app.workflow.celery_app beat -l info`
-- `-c` 是同时渲染的 Chromium 数量：2 vCPU/2GB 先 `-c 1`，4 核以上再 `-c 2`。
+  `uv run celery -A app.workflow.celery_app beat -l info -s data/celerybeat-schedule`
+- `-c` 是同时渲染的 Chromium 数量；单机 SQLite 建议固定 `-c 1`，避免并发写。
 - media worker 常驻 IndexTTS2（GPU），并发必须为 1；Windows 调试同样加 `--pool=solo`。
-- Windows 本机 Celery 默认 prefork 不可用：调试加 `--pool=solo`（单并发）；并行渲染在 Ubuntu VM 上用默认 prefork `-c N`。
-- Windows 一键启动：双击仓库根目录 `start-dev.bat`（内部 `scripts/dev/start_all.ps1`），会启动 Docker、依赖容器、MinIO buckets、API、两个 worker、beat 和前端；已运行的服务会跳过。
+- Windows 本机 Celery 默认 prefork 不可用：调试加 `--pool=solo`（单并发）。
+- Windows 一键启动（本地极简模式）：双击仓库根目录 `start-dev.bat`（内部 `scripts/dev/start_all.ps1`），只启动 Docker、单个 Redis 容器、API、两个 worker 和 beat；前端由 FastAPI 托管 `web/dist`，默认 SQLite + 本地文件系统，不启动 Postgres/RabbitMQ/MinIO。`-Dev` 参数会额外启动 Vite。
+- Celery broker 固定为 Redis：`CELERY_BROKER_URL=redis://localhost:6380/0`，不再回退 RabbitMQ。
 - 队列：`workflow`（状态推进/outbox 补投）、`agent`（`storyboard.generate` / `qc.episode`）、`media`（`voice.episode` / `align.episode`）、`render`（`render.episode` / `render.shot` / `render.concat`）。
-- 触发真实队列渲染：`uv run python scripts/demo/queue_demo_render.py --base-url http://localhost:8000`。
-- beat 每 5 秒执行 `workflow.dispatch_outbox`，把 PENDING 事件投到 RabbitMQ；失败按指数退避，5 次后置 FAILED。
+- 触发真实队列渲染：通过前端视频期详情页或对应 API 动作发起；旧的队列 demo 脚本已删除。
+- beat 每 5 秒执行 `workflow.dispatch_outbox`，把 PENDING 事件投到 Redis；失败按指数退避，5 次后置 FAILED。
 - `CELERY_TASK_ALWAYS_EAGER=true` 只用于任务级测试；在 async dispatcher 里同步执行 task 会和事件循环冲突。
-- 本机实测（2026-10-28）：`queue_demo_render.py` 3 镜头 6.00 秒成片，outbox DISPATCHED、episode READY、node_run SUCCESS；worker 用 `--pool=solo`。
-- MinIO 不是 M1.2 必需；`docker compose -f compose.infra.yml --profile storage up -d` 单独启动（`minio/mc` 镜像拉取失败时先跳过）。
 
 ### 4.2.3 文章导入与文稿润色（取代 M2 主题生成）
 
@@ -412,13 +413,12 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 
 ### 4.4 Docker 与端口
 
-- 部署目标：Ubuntu 24.04 VM，Docker 29 / Compose 2.40。
-- **环境隔离**：本地 `ROXY_ENV=local`、`COMPOSE_PROJECT_NAME=roxy-local`，容器 `roxy-local-*`、网络 `roxy-local-net`；VM 用 `ROXY_ENV=vm`、`COMPOSE_PROJECT_NAME=roxy-vm`，容器 `roxy-vm-*`、网络 `roxy-vm-net`。数据卷随 compose project 名自动隔离。
-- **配置来源**：本地 `.env` 用 `.env.example`；VM 用 `.env.vm.example`（服务名 `postgres/rabbitmq/redis/minio`）。两份模板不要互相复制。
-- **后端解耦**：数据库、RabbitMQ、Redis、MinIO、API 地址全部经 `app/core/config.py` 的 `Settings` 读取；业务模块不得出现 `localhost`、VM IP 或容器名。
-- Postgres 库 `roxy`；Redis key 前缀 `roxy:`；MinIO bucket `roxy-*`。
-- 端口：Nginx 8080/8443；MinIO 9100/9101；本地映射 Postgres 5433、RabbitMQ 5673/15673、Redis 6380，均可在 `.env` 覆盖。
-- 现有 VM 已占用 8088/8001/8002/8003/9000/9002，避开。
+- 运行目标：Windows 单机；Docker 仅用于 Redis 和 Remotion 沙箱，不再有 VM 部署。
+- **本地栈**：`compose.local.yml`（project `roxy-local-min`）只起 `roxy-local-min-redis`，数据卷 `roxy-min-redis-data`，AOF 持久化。
+- **配置来源**：本地 `.env` 用 `.env.example`；`.env.vm.example` 已删除。
+- **后端解耦**：数据库、Redis、API 地址全部经 `app/core/config.py` 的 `Settings` 读取；业务模块不得出现 `localhost` 或容器名。
+- 端口：API 8000、Vite 5173、Redis 6380；Remotion 容器只在 Docker 内部运行。
+- 数据目录：`data/db`、`data/assets`、`output/`、`tmp/`；升级/重装前手动备份。
 - 根分区约 18GB 不够；数据盘挂 `/data`，`PGDATA`、`MINIO_DATA`、备份都指过去。
 - MinIO 预签名 URL 要区分 `MINIO_INTERNAL_ENDPOINT`（容器内 `http://minio:9000`）与 `MINIO_PUBLIC_ENDPOINT`（浏览器可访问的外部地址）。
 
@@ -430,16 +430,16 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - 镜头片段编码参数必须完全一致，最终 `-c copy` 拼接。
 - 含文字卡片用 HTML；Seedream 只做背景/舞台/演示物件（无文字空壳）。
 - 背景/演示物件生成后固定资产化，不每期重生成。
-- Remotion 为唯一生产渲染器；Playwright 仅测试/历史。Remotion 输出经 ffmpeg 统一为 1920×1080/25fps/H.264/yuv420p/CRF18，保证 `-c copy` 拼接。
+- Remotion 为唯一渲染器；Playwright 已移除。Remotion 输出经 ffmpeg 统一为 1920×1080/25fps/H.264/yuv420p/CRF18，保证 `-c copy` 拼接。
 - Remotion 代码只存在于 `tmp/remotion/<episode_id>/`；`remotion_shot` 表记录 code_hash/status/input_hash。
 - 生成代码约束：单镜头 ≤7000 字符；浅底必须深字，白字必须有深色实底；有 `character` 必须出现 Roxy；不能用随机/时间/CSS 动画。
 - 布局约束：Remotion 不做关键词标签；画面文字用 `PaperCard` Claude 暖纸卡（variant：note/quote/index/letter/sticky/specimen；tone：cream/sand/peach/sage；transition：slide/zoom/flip/drop/reveal/push）。Python 按镜头序号排期：约 1/3 镜头 `card_style=null` 做纯演示，其余给卡并指定样式/动效；切换位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°。
 - 角色动效：有 `character` 的镜头必须有入场（offsetX ±400–600、opacity 0→1、scale 0.94→1、rotate ±2°）、呼吸轻摆和至少一次手势/让位；生成检查会拒绝只有 `src/side/height` 的静态 `<Character>`。
 - 背景与字幕：`Stage` 统一渲染 Claude 暖纸背景（纸纹 + 底部浅阴影 + 手绘星），不再使用旧纸纹/木地板资产；`SubtitleTrack` 改为暖纸底 + 墨字 + 陶土短线。
 - 改动 `app/agents/remotion/templates/` 后必须重建镜像 `roxy-remotion:4.0.539`，否则沙箱仍用旧组件。
-- Remotion 字幕由 Root 里的 `SubtitleTrack` 统一叠加（bottom 40，样式同旧 Playwright）；生成代码不画字幕，y 940–1080 的底部区留给字幕。
+- Remotion 字幕由 Root 里的 `SubtitleTrack` 统一叠加（bottom 40，暖纸字幕条）；生成代码不画字幕，y 940–1080 的底部区留给字幕。
 - 画面长段文本由生成代码的 `PaperCard` 组件渲染（Claude 暖纸/墨字/陶土），Python 只负责底部字幕 `SubtitleTrack`。文本长度和分段由模型决定，优先直接用 `narration`/`card.text` 的长段。
-- Docker 不可用或镜像缺失时 Remotion 生成失败，期次标记失败；`REMOTION_ONLY=true` 下不回退 Playwright。
+- Docker 不可用或镜像缺失时 Remotion 生成失败，期次标记失败；`REMOTION_ONLY=true` 下不回退其他渲染器。
 
 ### 4.6 资产生产分工
 

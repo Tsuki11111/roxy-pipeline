@@ -125,7 +125,7 @@ class Episode(Base):
     audio_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # M4.3: QC summary and review findings.
     qc_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    # M5.2: final output location and MinIO object metadata.
+    # M5.2: final local output location and metadata.
     output_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Remotion: generated per-shot code, workdir and renderer state.
     remotion_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)

@@ -81,7 +81,7 @@ class EpisodeSpec(BaseModel):
     height: int = 1080
     section_labels: list[str] = Field(min_length=1)
     alignment_level: Literal["sentence", "char"] = "char"
-    renderer: Literal["playwright", "remotion"] = "playwright"
+    renderer: Literal["remotion"] = "remotion"
     remotion: RemotionRenderSpec | None = None
     background: str
     floor: str

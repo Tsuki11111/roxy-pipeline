@@ -128,51 +128,6 @@ class FakeProvider:
         )
 
 
-async def test_voice_episode_auto_queues_render(
-    episode, session, db, monkeypatch, tmp_path
-):
-    _, ep = episode
-    _, session_factory = db
-    _use_test_reference(monkeypatch, tmp_path)
-    settings = get_settings()
-    monkeypatch.setattr(settings, "audio_root", str(tmp_path / "audio"))
-    monkeypatch.setattr(settings, "voice_pause_ms", 100)
-    monkeypatch.setattr(settings, "voice_auto_align", False)
-    monkeypatch.setattr(settings, "voice_auto_render", True)
-    monkeypatch.setattr(settings, "remotion_auto_codegen", False)
-
-    @asynccontextmanager
-    async def fake_task_session():
-        async with session_factory() as db_session:
-            yield db_session
-
-    monkeypatch.setattr("app.voice.tasks.task_session", fake_task_session)
-    monkeypatch.setattr("app.voice.align_tasks.task_session", fake_task_session)
-    monkeypatch.setattr(
-        "app.voice.tasks.build_tts_provider", lambda: FakeProvider()
-    )
-
-    await seed_voicing(session, ep["id"])
-    _, node = await start_voice(session, ep["id"])
-    await session.commit()
-
-    await _voice_episode(ep["id"], node.id)
-
-    async with session_factory() as check:
-        episode_row = await check.get(Episode, ep["id"])
-        assert episode_row.status == EpisodeStatus.RENDERING
-        render_node = await check.scalar(
-            select(NodeRun).where(NodeRun.node_key == "render.episode")
-        )
-        assert render_node is not None
-        assert render_node.status == "PENDING"
-        event = await check.scalar(
-            select(OutboxEvent).where(OutboxEvent.event_type == "render.episode")
-        )
-        assert event is not None
-        assert event.payload["audio_path"] == episode_row.audio_path
-
-
 async def test_voice_episode_writes_audio_alignment_and_shots(
     episode, session, db, monkeypatch, tmp_path
 ):
@@ -304,30 +259,15 @@ async def test_align_episode_writes_char_timings(
 
     async with session_factory() as check:
         episode_row = await check.get(Episode, ep["id"])
-        assert episode_row.status == EpisodeStatus.RENDERING
+        assert episode_row.status == EpisodeStatus.ALIGNING
         assert episode_row.audio_meta["alignment_granularity"] == "char"
         assert all(
             len(item["chars"]) == len(item["text"])
             for item in episode_row.audio_meta["lines"]
         )
-        spec = episode_row.render_spec
-        assert spec is not None
-        assert spec["alignment_level"] == "char"
-        assert all(shot["char_timings"] for shot in spec["shots"])
 
         align = await check.scalar(
             select(NodeRun).where(NodeRun.node_key == "align.episode")
         )
         assert align is not None
         assert align.status == "SUCCESS"
-
-        render = await check.scalar(
-            select(NodeRun).where(NodeRun.node_key == "render.episode")
-        )
-        assert render is not None
-        assert render.status == "PENDING"
-        event = await check.scalar(
-            select(OutboxEvent).where(OutboxEvent.event_type == "render.episode")
-        )
-        assert event is not None
-        assert event.payload["audio_path"] == episode_row.audio_path

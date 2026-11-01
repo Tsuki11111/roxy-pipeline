@@ -57,7 +57,7 @@ def build_episode_spec(
     background_by_key: dict[str, str] | None = None,
     floor: str | None = None,
     char_timings_by_line: dict[str, list[dict]] | None = None,
-    renderer: str = "playwright",
+    renderer: str = "remotion",
     remotion: RemotionRenderSpec | None = None,
 ) -> EpisodeSpec:
     background = background or BACKGROUNDS["paper"]

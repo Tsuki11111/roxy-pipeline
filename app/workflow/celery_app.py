@@ -8,7 +8,7 @@ settings = get_settings()
 
 celery_app = Celery(
     "roxy",
-    broker=settings.rabbitmq_url,
+    broker=settings.celery_broker_url,
     backend=settings.redis_url,
 )
 

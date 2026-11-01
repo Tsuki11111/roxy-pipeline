@@ -11,11 +11,9 @@ from celery.utils.log import get_task_logger
 
 from app.core.config import get_settings
 from app.models.core import Episode, EpisodeStatus, NodeRun, NodeStatus
-from app.render.capture import render_shot
 from app.render.remotion import render_shot_remotion
 from app.render.encode import concat_and_mux, get_ffmpeg
 from app.render.models import EpisodeSpec
-from app.render.stage import build_stage_payload
 from app.render.timeline import build_timeline
 from app.storage.output import export_episode_video
 from app.workflow.celery_app import celery_app
@@ -26,7 +24,7 @@ from app.workflow.memory import release_memory
 logger = get_task_logger(__name__)
 
 
-def shot_render_hash(spec: EpisodeSpec, item, character_from: dict | None = None) -> str:
+def shot_render_hash(spec: EpisodeSpec, item) -> str:
     remotion_entry = (
         spec.remotion.shots.get(item.shot.shot_id)
         if spec.remotion is not None
@@ -35,7 +33,6 @@ def shot_render_hash(spec: EpisodeSpec, item, character_from: dict | None = None
     raw = json.dumps(
         {
             "shot": item.shot.model_dump(),
-            "character_from": character_from,
             "width": spec.width,
             "height": spec.height,
             "fps": spec.fps,
@@ -170,7 +167,6 @@ def render_episode_task(
     try:
         episode_spec = EpisodeSpec.model_validate(spec)
         timeline = build_timeline(episode_spec)
-        build_stage_payload(episode_spec, timeline)
     except Exception as exc:
         mark_failed(episode_id, node_run_id, f"invalid render spec: {exc}")
         raise
@@ -219,17 +215,11 @@ def render_shot_task(
         _assert_not_cancelled(episode_id)
         episode_spec = EpisodeSpec.model_validate(spec)
         timeline = build_timeline(episode_spec)
-        payload = build_stage_payload(episode_spec, timeline)
         item = timeline.shots[seq - 1]
         if item.shot.seq != seq:
             raise RuntimeError(f"shot seq mismatch: expected {seq}, got {item.shot.seq}")
-        shot_payload = next(
-            shot for shot in payload["shots"] if shot["shot_id"] == item.shot.shot_id
-        )
 
-        digest = shot_render_hash(
-            episode_spec, item, shot_payload.get("character_from")
-        )
+        digest = shot_render_hash(episode_spec, item)
         shots_dir = Path(out_dir) / "shots"
         segment = shots_dir / f"shot_{seq:04d}.mp4"
         first_frame = Path(out_dir) / "frames" / f"shot_{seq:04d}_first.png"
@@ -255,28 +245,17 @@ def render_shot_task(
             if episode_spec.remotion is not None
             else None
         )
-        if episode_spec.renderer == "remotion" and remotion_entry is not None:
-            segment, first_frame = render_shot_remotion(
-                episode_spec,
-                shot_id=item.shot.shot_id,
-                segment=segment,
-                first_frame=first_frame,
-                frame_count=item.frame_count,
+        if episode_spec.renderer != "remotion" or remotion_entry is None:
+            raise RuntimeError(
+                "Remotion code is not ready; Playwright rendering has been removed"
             )
-        else:
-            if settings.remotion_only:
-                raise RuntimeError(
-                    "Remotion code is not ready; Playwright rendering is disabled"
-                )
-            segment, first_frame = render_shot(
-                payload,
-                item,
-                Path(out_dir),
-                get_ffmpeg(),
-                episode_spec.width,
-                episode_spec.height,
-                episode_spec.fps,
-            )
+        segment, first_frame = render_shot_remotion(
+            episode_spec,
+            shot_id=item.shot.shot_id,
+            segment=segment,
+            first_frame=first_frame,
+            frame_count=item.frame_count,
+        )
         shots_dir.mkdir(parents=True, exist_ok=True)
         meta_path.write_text(
             json.dumps(

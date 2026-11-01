@@ -11,7 +11,6 @@ from pydantic import ValidationError
 from app.core.config import get_settings
 from app.models.core import Episode, EpisodeStatus, NodeRun, NodeStatus
 from app.render.models import EpisodeSpec
-from app.render.stage import build_stage_payload
 from app.render.timeline import build_timeline
 from app.workflow.outbox import enqueue_outbox
 
@@ -52,15 +51,14 @@ async def start_render(
 
     try:
         spec = EpisodeSpec.model_validate(episode.render_spec)
-        timeline = build_timeline(spec)
-        build_stage_payload(spec, timeline)  # fail fast on missing assets/cards
+        build_timeline(spec)
     except ValidationError as exc:
         raise RenderRequestError(f"invalid render_spec: {exc}") from exc
 
     if get_settings().remotion_only and spec.renderer != "remotion":
         raise RenderRequestError(
             "Remotion code is not ready for every shot; "
-            "Playwright rendering is disabled (REMOTION_ONLY=true)"
+            "Playwright rendering has been removed"
         )
 
     digest = spec_hash(spec)
@@ -116,9 +114,8 @@ async def start_auto_render(
 ) -> tuple[Episode, NodeRun]:
     """Queue the default render path for a freshly voiced episode.
 
-    Remotion is the only production renderer: codegen is queued first and the
-    render starts after it. Playwright remains available only for legacy tests
-    when ``REMOTION_ONLY=false``.
+    Remotion is the only renderer: codegen is queued first and the render
+    starts after it. Playwright is no longer available.
     """
     settings = get_settings()
     episode = await session.get(Episode, episode_id)
@@ -200,10 +197,9 @@ async def rerender_episode(
     if get_settings().remotion_only and spec.renderer != "remotion":
         raise RenderRequestError(
             "Remotion code is not ready for every shot; "
-            "Playwright rendering is disabled (REMOTION_ONLY=true)"
+            "Playwright rendering has been removed"
         )
-    timeline = build_timeline(spec)
-    build_stage_payload(spec, timeline)
+    build_timeline(spec)
     episode.render_spec = spec.model_dump()
     digest = spec_hash(spec)
 

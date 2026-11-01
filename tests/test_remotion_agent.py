@@ -478,6 +478,3 @@ async def test_render_spec_uses_remotion_when_meta_ready(
     base = shot_render_hash(spec, item)
     spec.remotion.shots[shot.id].code_hash = "def"
     assert shot_render_hash(spec, item) != base
-    spec.renderer = "playwright"
-    spec.remotion = None
-    assert shot_render_hash(spec, item) != base

@@ -74,7 +74,6 @@ from app.providers.llm import LLMError
 from app.publish.package import build_package, load_package
 from app.qc.service import QcConflict, QcRequestError, start_qc
 from app.render.models import EpisodeSpec
-from app.render.stage import build_stage_payload
 from app.render.timeline import build_timeline
 from app.schemas.core import (
     AssetAgentItem,
@@ -240,7 +239,7 @@ async def put_render_spec(
     if episode.status == EpisodeStatus.RENDERING:
         raise HTTPException(status_code=409, detail="episode is rendering")
     try:
-        build_stage_payload(spec, build_timeline(spec))
+        build_timeline(spec)
     except (FileNotFoundError, ValueError, TemplateNotFound) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     episode.render_spec = spec.model_dump()

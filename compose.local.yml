@@ -1,0 +1,29 @@
+name: roxy-local-min
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: roxy-local-min-redis
+    restart: unless-stopped
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--maxmemory",
+        "256mb",
+        "--maxmemory-policy",
+        "volatile-lru",
+      ]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6380}:6379"
+    volumes:
+      - roxy-min-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  roxy-min-redis-data:

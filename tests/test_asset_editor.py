@@ -24,7 +24,6 @@ async def test_upload_asset(client, tmp_path, monkeypatch):
     asset_root = _asset_root("upload_assets")
     monkeypatch.setattr(settings, "asset_root", str(asset_root))
     monkeypatch.setattr(settings, "asset_agent_tmp_dir", str(tmp_path / "uploads"))
-    monkeypatch.setattr(settings, "minio_upload_enabled", False)
     data = (PROJECT_ROOT / "character_packs/placeholder/background.png").read_bytes()
     try:
         response = await client.post(
@@ -61,7 +60,6 @@ async def test_seedream_mock_generates_candidate(client, tmp_path, monkeypatch):
     asset_root = _asset_root("seedream_assets")
     monkeypatch.setattr(settings, "asset_root", str(asset_root))
     monkeypatch.setattr(settings, "asset_agent_tmp_dir", str(tmp_path / "seedream"))
-    monkeypatch.setattr(settings, "minio_upload_enabled", False)
     monkeypatch.setattr(settings, "image_provider", "mock")
     try:
         response = await client.post(

@@ -1,19 +1,18 @@
 # Roxy Pipeline
 
 [![GitHub](https://img.shields.io/badge/GitHub-roxy--pipeline-181717?logo=github)](https://github.com/Tsuki11111/roxy-pipeline)
-[![Status](https://img.shields.io/badge/status-architecture-blue)]()
+[![Status](https://img.shields.io/badge/status-local-green)]()
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)]()
 [![FastAPI](https://img.shields.io/badge/FastAPI-framework-009688?logo=fastapi&logoColor=white)]()
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)]()
-[![RabbitMQ](https://img.shields.io/badge/RabbitMQ-4-FF6600?logo=rabbitmq&logoColor=white)]()
+[![SQLite](https://img.shields.io/badge/SQLite-local-003B57?logo=sqlite&logoColor=white)]()
 [![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)]()
-[![MinIO](https://img.shields.io/badge/MinIO-S3-C72E49?logo=minio&logoColor=white)]()
+[![Remotion](https://img.shields.io/badge/Remotion-renderer-0B84F3)]()
 [![LangGraph](https://img.shields.io/badge/LangGraph-AI%20subgraphs-1C3C3C)]()
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)]()
 
-**AI 科普视频自动生成 Agent 系统**：从文章导入、AI 拆解润色、分镜，到逐句 TTS、卡片/逐帧渲染、ffmpeg 拼接和质检的全自动流水线。
+**本地单机 AI 科普视频工具**：从文章导入、AI 拆解润色、分镜，到逐句 TTS、Remotion 逐镜头渲染、ffmpeg 拼接和质检的全自动流水线。默认 SQLite + 本地文件系统 + 单个 Redis，前端由 FastAPI 直接托管。
 
-**定位**：个人自用项目；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守[需求文档第 11 章](docs/AI科普视频Agent系统需求分析文档.md)。
+**定位**：个人自用、Windows 单机运行；洛琪希为《无职转生》角色，仅限非商业同人使用，遵守[需求文档第 11 章](docs/AI科普视频Agent系统需求分析文档.md)。
 **当前阶段**：M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产持久化/复用 + Asset Agent + M4.1 逐句配音 + M4.2 句级对齐（字级可选） + M4.3 规则/DeepSeek 多模态质检 + M5.1 局部修改/续跑/发布包 + Web 控制台 + 分镜时间线编辑器 + Remotion 逐镜头代码生成 Agent（唯一渲染器）已跑通；按主题自动生成脚本的功能已移除，下一步成本报表与监控。
 
 ---
@@ -24,36 +23,37 @@
 |---|---|
 | 语言 | Python 3.12 |
 | Web | FastAPI + Pydantic v2 + SQLAlchemy 2.0 + Alembic |
-| 数据库 | PostgreSQL 17 —— 状态、脚本、镜头、节点、成本、审计 |
-| 任务队列 | RabbitMQ 4 + Celery 5 —— 长任务、重试、DLQ |
-| 缓存/锁 | Redis 7 —— 缓存、分布式锁、限流、SSE 广播 |
-| 对象存储 | MinIO —— 角色/背景/音频/片段/成片 |
-| AI 子图 | LangGraph + PostgreSQL checkpointer —— 只做脚本/分镜/QC |
+| 数据库 | SQLite —— 状态、脚本、镜头、节点、成本、审计 |
+| 任务队列 | Redis 7 + Celery 5 —— 长任务、重试 |
+| 缓存/锁 | Redis 7 —— 缓存、SSE 广播 |
+| 文件存储 | 本地文件系统 —— `data/assets`、`output/` |
+| AI 子图 | LangGraph —— 只做脚本/分镜/QC |
 | 渲染 | Remotion（每镜头 LLM 生成 TSX，Docker 沙箱，唯一生产渲染器）+ ffmpeg |
 | 文本模型 | DeepSeek `deepseek-flash`（主）；火山方舟豆包 Pro（备选/A-B） |
-| TTS | 本地 IndexTTS2 zero-shot（Python 3.11 + torch 2.8 cu128，常驻服务） |
+| TTS | 本地 IndexTTS2 zero-shot（Python 3.11 + torch 2.8 cu128，可选组件） |
 | 图像生成 | 火山方舟 Seedream 5.0 Pro（背景/舞台/演示物件；角色立绘由用户提供） |
-| 前端 | React + Vite + TypeScript + Ant Design |
-| 部署 | Docker Compose + Nginx |
+| 前端 | React + Vite + TypeScript + Ant Design；构建后由 FastAPI 托管 |
+| 运行方式 | Windows 单机；Docker 仅用于 Redis 和 Remotion 沙箱 |
 | 可观测 | structlog + Prometheus/Grafana + Sentry（后续） |
 
 > 详细选型理由见 [架构选型方案](docs/AI科普视频Agent系统架构选型方案.md) 与 [ADR](docs/decisions-architecture.md)。
+> 2026-11-01 起移除 PostgreSQL、RabbitMQ、MinIO 和 VM 部署路径，只保留本地单机运行时；旧方案仅存在于历史文档。
 
 ## 架构
 
 ```text
-浏览器 ──HTTPS/SSE──> Nginx ──> FastAPI API
-                                  │
-              ┌───────────────────┼───────────────────┐
-              ▼                   ▼                   ▼
-         PostgreSQL          RabbitMQ + Redis         MinIO
-      状态/元数据/审计       任务/缓存/锁/广播      资产/产物/成片
-                                  │
-        ┌─────────────┬───────────┼─────────────┬─────────────┐
-        ▼             ▼           ▼             ▼             ▼
-   workflow       agent        media         asset         render
-   状态机      LangGraph      TTS/对齐      Seedream    Remotion
-   重试/补偿   脚本/分镜/QC   音频装配      素材候选      + ffmpeg
+浏览器 ──HTTP──> FastAPI API（静态前端 + /api）
+                          │
+          ┌───────────────┼───────────────┐
+          ▼               ▼               ▼
+       SQLite           Redis         本地文件系统
+   状态/元数据/审计   队列/缓存/广播   assets/output
+                          │
+    ┌─────────────┬───────┴───────┬─────────────┬─────────────┐
+    ▼             ▼               ▼             ▼             ▼
+workflow       agent           media         asset         render
+状态机      LangGraph         TTS/对齐      Seedream    Remotion
+重试/补偿   脚本/分镜/QC       音频装配      素材候选      + ffmpeg
 ```
 
 流水线：**文章导入 → AI 脚本/润色 → 分镜 → TTS → 对齐 → 卡片 → 镜头 → 拼接 → 质检 → 发布包**。
@@ -73,7 +73,7 @@
 | 架构选型 v1.3 + ADR-001～005 | ✅ 2026-10-26 |
 | 仓库初始化 + 文档规范化 | ✅ 2026-10-26 |
 | M1 渲染链路 + M1.1 API/DB | 🚧 渲染原型与 API/DB 骨架已跑通 |
-| M1.2 队列/状态机/render worker | ✅ outbox + Celery `render.shot` 并行 + `render.concat`；真实 RabbitMQ 验证 |
+| M1.2 队列/状态机/render worker | ✅ outbox + Celery `render.shot` 并行 + `render.concat`；Redis broker 验证 |
 | 文章导入/文稿优化 Agent | ✅ DeepSeek 理解长文、拆章节问题、生成台词、润色；不再按主题自动生成脚本 |
 | M3 分镜 Agent + 节奏规则 | ✅ `storyboard_graph` + 确定性节奏修复；半身反应镜头/章首滑入已接入，Seedream 素材按需生成 |
 | M3.1 资产持久化/复用 | ✅ `asset` 表 + `data/assets` + `reuse_key`；生成前查重，生成后入库 |
@@ -82,9 +82,9 @@
 | M4.1 逐句配音 + 音轨 | ✅ `line_audio` + media 任务 + 句级对齐 + 真实音轨成片 |
 | M4.2 对齐 | ✅ 默认句级，字幕整句显示；字级 wav2vec2 强制对齐可选 |
 | M4.3 质检与报告 | ✅ 规则前置 + DeepSeek 抽帧质检；review 表与 QC API |
-| M5.1 局部修改/续跑/发布包 | ✅ 单句修订、镜头缓存、通用续跑、stale reconciler、本地发布包、时间戳输出目录 + MinIO |
+| M5.1 局部修改/续跑/发布包 | ✅ 单句修订、镜头缓存、通用续跑、stale reconciler、本地发布包、时间戳输出目录 |
 | Web 控制台 | ✅ 总览、视频期流程动作、脚本/分镜/音频/QC/发布包、资产生成与审批、分镜时间线编辑器 |
-| M6 Remotion 代码生成 Agent | ✅ 每镜头 DeepSeek 生成自由 TSX + Docker 沙箱校验/渲染 + 镜头级缓存；Playwright 仅测试/历史 |
+| M6 Remotion 代码生成 Agent | ✅ 每镜头 DeepSeek 生成自由 TSX + Docker 沙箱校验/渲染 + 镜头级缓存；Playwright 已移除 |
 | M5.2 成本与监控 | ⏳ token/TTS 成本报表、告警与运维面板 |
 
 ## 界面预览
@@ -101,62 +101,45 @@
   <img src="docs/assets/showcase-editor.webp" alt="Roxy Pipeline 分镜时间线编辑器" width="100%" />
 </p>
 
-## 环境隔离
+## 运行方式
 
-- 本地：`ROXY_ENV=local`、`COMPOSE_PROJECT_NAME=roxy-local`，配置模板 `.env.example`（localhost + 映射端口）。
-- VM：`ROXY_ENV=vm`、`COMPOSE_PROJECT_NAME=roxy-vm`，配置模板 `.env.vm.example`（容器服务名 `postgres/rabbitmq/redis/minio`）。
-- 容器名、网络、数据卷按环境前缀隔离；后端所有服务地址只从 `Settings` / 环境变量读取，业务代码不写死地址。
+- Windows 单机运行；配置模板为 `.env.example`，真实值只放本地 `.env`。
+- 默认 SQLite + 本地文件系统 + 单个 Redis；Docker 只用于 Redis 和 Remotion 沙箱，不再提供 VM/Postgres/RabbitMQ/MinIO 部署路径。
+- 后端所有服务地址只从 `Settings` / 环境变量读取，业务代码不写死地址。
 
 ## 快速开始
 
-### M1 本地渲染（已可运行）
+### 安装
 
 ```bash
 git clone https://github.com/Tsuki11111/roxy-pipeline.git
 cd roxy-pipeline
 UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple uv sync
-uv run playwright install chromium
 uv run pytest -q
-uv run python scripts/demo/render_demo.py
 ```
 
-输出：`tmp/render_demo/demo_episode.mp4`（3 镜头、12 秒、1920×1080、25fps、H.264/AAC）。
-只出静帧调布局：
+Remotion 沙箱镜像见下文「Remotion 渲染（默认）」；前端构建见「Web 控制台」。
 
-```bash
-uv run python scripts/demo/render_demo.py --stills-only --still-ms 2000 --still-out tmp/render_demo/still_2s.png
-```
+### M1.1 API
 
-> 当前 demo 引用本地 `character_packs/roxy/` 与 `tmp/seedream_assets/`，这些素材不进公开仓库；公开复现需要后续补 placeholder pack。
-
-### M1.1 API / 基础设施
-
-本地无 Docker 时默认 SQLite：
+本地默认 SQLite（`data/db/roxy.db`），不依赖 Docker 即可启动 API：
 
 ```bash
 uv run alembic upgrade head
 uv run uvicorn app.api.main:app --reload --port 8000
-# http://localhost:8000/docs
+# http://127.0.0.1:8000/docs
 ```
 
-使用 compose 基础设施（默认 Postgres / RabbitMQ / Redis；MinIO 走 storage profile）：
+`web/dist` 存在时，`http://127.0.0.1:8000` 会直接打开构建好的前端；开发热重载用 `npm run dev`（见 Web 控制台）。
+
+### M1.2 队列渲染（需要 Redis）
 
 ```bash
-docker compose -f compose.infra.yml up -d
-# 把 .env 的 DATABASE_URL 改为 postgresql+asyncpg://roxy:roxy-dev@localhost:5433/roxy
-uv run alembic upgrade head
-```
-
-> MinIO 用 `docker compose -f compose.infra.yml --profile storage up -d`。RabbitMQ 4.4 通过 `infra/rabbitmq.conf` 允许 Celery pidbox 的临时非独占回复队列。
-
-### M1.2 队列渲染（需要 RabbitMQ / Redis）
-
-```bash
-docker compose -f compose.infra.yml up -d
-# .env 本机原生进程用 localhost：
-# DATABASE_URL=postgresql+asyncpg://roxy:roxy-dev@localhost:5433/roxy
-# RABBITMQ_URL=amqp://roxy:roxy-dev@localhost:5673//
+docker compose -f compose.local.yml up -d
+# .env 本地默认：
+# DATABASE_URL=sqlite+aiosqlite:///./data/db/roxy.db
 # REDIS_URL=redis://localhost:6380/0
+# CELERY_BROKER_URL=redis://localhost:6380/0
 uv run alembic upgrade head
 uv run uvicorn app.api.main:app --reload --port 8000
 ```
@@ -171,28 +154,14 @@ uv run celery -A app.workflow.celery_app worker -Q workflow,agent,render -l info
 uv run celery -A app.workflow.celery_app worker -Q media -l info -c 1
 ```
 
-> Windows 本机调试要加 `--pool=solo`（Celery prefork 在 Windows 不可用）；并行渲染在 Linux VM 上用默认 prefork `-c 2`。media worker 常驻 IndexTTS2 模型；默认句级对齐，开启 `ALIGN_LEVEL=char` 时才执行字级对齐，TTS 与字级对齐都必须单并发。
+> Windows 本机调试要加 `--pool=solo`（Celery prefork 在 Windows 不可用）；单机建议渲染并发 1。media worker 常驻 IndexTTS2 模型；默认句级对齐，开启 `ALIGN_LEVEL=char` 时才执行字级对齐，TTS 与字级对齐都必须单并发。
 
 > 16GB 本机默认 `TTS_UNLOAD_AFTER_VOICE=true`：配音结束停掉常驻 TTS，对齐前再兜底 `/shutdown`；每镜头渲染、对齐、QC、拼接结束都会回收内存，TTS 下次配音自动重启。
 
 > 每个镜头独立按自己的起点初始化渲染器；角色从最近侧屏幕外 280ms 冲入，旧角色 80ms 模糊让位，只预加载本镜头素材。卡片与字幕换镜时直接切换，不再从透明淡入。
 
 ```bash
-uv run celery -A app.workflow.celery_app beat -l info
-```
-
-触发一次完整链路（创建期 → 挂 render spec → outbox → RabbitMQ → render worker → 成片）：
-
-```bash
-uv run python scripts/demo/queue_demo_render.py --base-url http://localhost:8000
-```
-
-> 已在本机 Postgres + RabbitMQ + Redis 上实测：3 镜头 6.00 秒成片，outbox DISPATCHED、episode READY。
-
-公开占位素材可直接复现：
-
-```bash
-uv run python scripts/demo/render_demo.py --spec specs/demo_placeholder.json --out tmp/render_demo/placeholder.mp4
+uv run celery -A app.workflow.celery_app beat -l info -s data/celerybeat-schedule
 ```
 
 ### 文稿导入与润色
@@ -230,7 +199,7 @@ curl -X POST http://localhost:8000/api/v1/episodes/<episode_id>/actions/confirm-
 - 支持最多 30000 字；前端视频期页提供「导入文稿」按钮，可直接粘贴或上传 `.txt`/`.md`。
 - 导入后保持 series 的章节标签顺序，生成问题式小标题和逐句台词。
 - 自动跑脚本校验和可选润色；导入后进入 `SCRIPT_REVIEW`。校验不通过会标记 WARNING，`confirm-script` 仍会拦截，先修稿再确认。
-- 视频期列表和详情页都有「取消」，运行中状态也可 `POST /api/v1/episodes/{id}/actions/cancel`；「删除」只清数据库记录和关联行，不动 `output/` 和 MinIO 成片，运行中的期必须先取消再删。
+- 视频期列表和详情页都有「取消」，运行中状态也可 `POST /api/v1/episodes/{id}/actions/cancel`；「删除」只清数据库记录和关联行，不动 `output/` 成片，运行中的期必须先取消再删。
 
 ### M3 分镜生成
 
@@ -278,7 +247,7 @@ curl "http://localhost:8000/api/v1/assets?type=background&status=APPROVED"
 uv run python scripts/tools/generate_seedream_image.py --prompt "..." --out tmp/new_bg.png --asset-type background --reuse-key bg:paper:dark
 ```
 
-新图默认以 `CANDIDATE` 入库，人工筛选后调用 `POST /api/v1/assets/{id}/approve` 才会被复用。所有新入库/索引的图片会同时镜像到 MinIO 的 `MINIO_BUCKET_ASSETS`，对象路径为 `assets/<type>/<checksum前16位>.<ext>`，记录在 `asset.meta["minio"]`。
+新图默认以 `CANDIDATE` 入库，人工筛选后调用 `POST /api/v1/assets/{id}/approve` 才会被复用。所有新入库/索引的图片会复制到 `data/assets/<type>/`，路径记录在 `asset.path`，按 checksum 去重。
 
 ### 文本生成演示素材 Agent
 
@@ -295,7 +264,7 @@ curl -X POST http://localhost:8000/api/v1/assets/generate \
 - `IMAGE_PROVIDER=mock` 可本地跑通流程，不调用 Seedream。
 - 按整期文稿生成时用 `POST /episodes/{id}/actions/generate-assets`：Agent 读取 `script_line` 的章节和台词，生成结果记录 `episode_id`，不是脱离文稿的自由生成。
 
-### Windows 一键启动
+### Windows 一键启动（本地极简模式）
 
 双击仓库根目录的 `start-dev.bat`，或从 PowerShell 运行：
 
@@ -303,17 +272,17 @@ curl -X POST http://localhost:8000/api/v1/assets/generate \
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/start_all.ps1
 ```
 
-脚本会依次启动 Docker（含本机 socket 清理）、Postgres/RabbitMQ/Redis/MinIO、MinIO buckets、FastAPI、两个 Celery worker、beat 和 Vite 前端；已运行的服务会跳过。每个服务在独立 PowerShell 窗口，关闭窗口即停止对应服务。
+脚本会启动 Docker（含本机 socket 清理）、单个 Redis 容器（AOF 持久化）、FastAPI、两个 Celery worker 和 beat；前端由 FastAPI 直接托管构建好的 `web/dist`，不再需要 Vite。默认使用 SQLite `data/db/roxy.db` 和本地文件系统 `data/assets`、`output/`，不启动 Postgres/RabbitMQ/MinIO；已运行的服务会跳过。
+
+前端开发需要热重载时加 `-Dev`，会额外启动 Vite 到 5173：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/start_all.ps1 -Dev
+```
 
 ### Web 控制台
 
-```bash
-cd web
-npm install
-npm run dev
-```
-
-- 默认 `http://127.0.0.1:5173`，Vite 把 `/api` 和 `/health` 代理到 `http://127.0.0.1:8000`。
+运行模式下直接打开 `http://127.0.0.1:8000`；开发模式（`-Dev`）使用 `http://127.0.0.1:5173`，Vite 把 `/api` 和 `/health` 代理到 `http://127.0.0.1:8000`。
 - 页面：总览、视频期列表/详情、资产库。
 - 详情页可直接导入/润色文稿、生成与确认分镜、配音、对齐、QC、渲染、发布包和发布，运行中显示节点进度并支持取消。
 - 详情页「剪辑」tab 是分镜时间线编辑器：成片预览 + 镜头时间线 + 视觉属性面板；可改卡片类型/文案、角色立绘/位置、背景、动作和入场方向，保存后只重渲染受影响镜头。
@@ -335,12 +304,12 @@ npm run dev
 
 ### Remotion 渲染（默认）
 
-镜头画面只由 Remotion 渲染；`REMOTION_ONLY=true`，Playwright 仅保留测试/历史。
+镜头画面只由 Remotion 渲染；`REMOTION_ONLY=true`，Playwright 已移除。
 
 - 编辑器「Remotion 渲染」卡片点「生成 Remotion 代码」，或 `POST /api/v1/episodes/{id}/actions/generate-remotion`。
 - 每个镜头单独调用一次 DeepSeek，生成自由 TSX；Python 负责 `Root.tsx`、时长、素材映射和 Composition 注册。
 - 代码在 Docker 沙箱里 `tsc` + `remotion compositions` 校验，失败自动带编译错误重试一次。
-- 全部镜头 READY 后 `remotion_meta.enabled=true`，后续 `POST /actions/rerender` 自动走 Remotion；新期在配音/对齐完成后会**自动排队 Remotion codegen 再渲染**（`REMOTION_AUTO_CODEGEN=true`），失败或未全部 READY 时标记失败、不渲染（Playwright 已禁用）。
+- 全部镜头 READY 后 `remotion_meta.enabled=true`，后续 `POST /actions/rerender` 自动走 Remotion；新期在配音/对齐完成后会**自动排队 Remotion codegen 再渲染**（`REMOTION_AUTO_CODEGEN=true`），失败或未全部 READY 时标记失败、不渲染（不再有 Playwright 回退）。
 - 生成过程中可在编辑器点「取消生成」，或调用 `POST /api/v1/episodes/{id}/actions/cancel-remotion`；已就绪的旧代码会保留。
 - 渲染缓存键包含 renderer、Remotion 版本、镜像 digest 和该镜头 code hash，只失效受影响的镜头。
 
@@ -360,7 +329,7 @@ docker build -f infra/remotion/Dockerfile -t roxy-remotion:4.0.539 .
 - 改动 `app/agents/remotion/templates/` 后需要重新构建镜像，沙箱才会使用新组件。
 - Remotion 许可：个人/非商业项目免费；商用需另行获得 Remotion 授权。
 
-### 成片输出与 MinIO
+### 成片输出
 
 每次渲染完成，成片会复制到时间戳目录：
 
@@ -370,10 +339,9 @@ output/20261029-185432_8c7ade6b/
 └─ metadata.json
 ```
 
-- `OUTPUT_ROOT=./output`（VM 为 `/data/output`）。
-- `MINIO_UPLOAD_ENABLED=true` 时同时上传到 `MINIO_BUCKET_OUTPUT`，对象路径为 `episodes/<输出目录名>/episode.mp4`。
-- 本地 MinIO 未启动时默认只记录 `minio_error`，不阻塞成片；VM 设置 `MINIO_REQUIRED=true` 后上传失败会判定渲染失败。
-- `episode.output_path` 指向 output 目录，`episode.output_meta` 记录本地路径和 MinIO URI。
+- `OUTPUT_ROOT=./output`，只写本地文件系统。
+- `episode.output_path` 指向该目录，`episode.output_meta` 记录本地路径和导出时间。
+- 没有对象存储副本；备份时同时保留 `data/db`、`data/assets` 和 `output/`。
 
 ### 模型校验
 
@@ -383,7 +351,7 @@ cp .env.example .env
 uv run python scripts/tools/check_llm.py --live
 ```
 
-Celery/RabbitMQ worker 已在快速开始中给出启动命令；Web 控制台见上一节。
+Celery/Redis worker 已在快速开始中给出启动命令；Web 控制台见上一节。
 
 ## 模型配置
 

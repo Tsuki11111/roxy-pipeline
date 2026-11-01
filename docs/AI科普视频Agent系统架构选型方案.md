@@ -2,15 +2,17 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | v1.20 |
-| 文档状态 | 初稿，核心方案已确认 |
-| 日期 | 2026-10-31 |
+| 文档版本 | v1.21 |
+| 文档状态 | 本地单机方案已确认 |
+| 日期 | 2026-11-01 |
 | 关联文档 | [需求分析文档](AI科普视频Agent系统需求分析文档.md)；[架构决策记录](decisions-architecture.md) |
-| 已确认约束 | 现有 Ubuntu VM 先跑；LLM 国内为主；TTS 用本地 IndexTTS2，不做付费云 TTS；视觉质检统一用 `deepseek-flash` 多模态；`deepseek-flash` 文本主模型 + 火山方舟备选/图像 |
+| 已确认约束 | Windows 单机运行；LLM 国内为主；TTS 用本地 IndexTTS2（可选组件），不做付费云 TTS；视觉质检统一用 `deepseek-flash` 多模态；`deepseek-flash` 文本主模型 + 火山方舟备选/图像 |
 | 推荐方案 | 方案 A：Python 模块化单体 + 进程级拆分 + Celery；AI 子图用 LangGraph |
-| 变更说明 | v1.20：Remotion 成为唯一生产渲染器（`REMOTION_ONLY=true`），Playwright 仅保留测试/历史；新期配音/对齐后自动 codegen 再渲染，codegen 失败不再回退；v1.19：新期在配音/对齐完成后自动触发 Remotion codegen 再渲染（`REMOTION_AUTO_CODEGEN`），失败回退 Playwright；脚本单句上限 25→50 字；v1.18：Remotion 卡片、背景、字幕统一改为 Claude 暖纸风格（`PaperCard` 六种纸卡 × 四种纸色，暖纸舞台，纸墨字幕），删除终端卡/旧卡片组件；v1.17：Remotion 卡片改为 `TerminalCard` 二次元终端/代码块（terminal/editor/hud/console/snippet/chat × navy/purple/mint/rose），Python 按镜头排期约 1/3 纯演示、其余指定样式与切换配方（slide/zoom/flip/drop/reveal/push）；v1.16：Remotion 改为长段 `Board` 板书卡 + `<Sequence>` 演示分段，卡片切换使用大幅位移/缩放/旋转；禁用 `Card`/`Label`/`Caption` 作为画面文字；v1.15：新增 M6 Remotion 逐镜头代码生成 Agent，Remotion 取代 Playwright 成为默认镜头渲染器（Playwright 保留回退），新增 Docker 沙箱、镜头级 code hash 与 `remotion_shot` 表；v1.14：编辑器新增独立贴图层、图片上传与 Seedream 生成（DeepSeek 写提示词）；v1.13：新增分镜时间线编辑器、成片视频流与视觉编辑重渲染接口，`PATCH /shots` 支持卡片文案与逐镜头背景；v1.12：默认改为句级对齐（`ALIGN_LEVEL=sentence`），字幕整句显示，字级 wav2vec2 对齐改为可选；v1.11：移除按主题生成脚本（`script_graph` / topic 模块 / confirm-topic / retry-script / regenerate-script），脚本唯一来源改为文章导入 + 可选润色；新增取消/删除期接口；v1.10：新增文稿生活化润色 Agent 与 Web 控制台；v1.9：新增半身反应镜头与角色滑入、输出时间戳目录与 MinIO 上传；v1.8：新增 Asset Agent（文本→无文字演示素材，reuse_key 复用，暂不引入 RAG）；v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
+| 变更说明 | v1.21：移除 PostgreSQL、RabbitMQ、MinIO 和 VM 部署，改为 SQLite + 单 Redis（Celery broker）+ 本地文件系统，前端由 FastAPI 托管；v1.20：Remotion 成为唯一生产渲染器（`REMOTION_ONLY=true`），Playwright 仅保留测试/历史；新期配音/对齐后自动 codegen 再渲染，codegen 失败不再回退；v1.19：新期在配音/对齐完成后自动触发 Remotion codegen 再渲染（`REMOTION_AUTO_CODEGEN`），失败回退 Playwright；脚本单句上限 25→50 字；v1.18：Remotion 卡片、背景、字幕统一改为 Claude 暖纸风格（`PaperCard` 六种纸卡 × 四种纸色，暖纸舞台，纸墨字幕），删除终端卡/旧卡片组件；v1.17：Remotion 卡片改为 `TerminalCard` 二次元终端/代码块（terminal/editor/hud/console/snippet/chat × navy/purple/mint/rose），Python 按镜头排期约 1/3 纯演示、其余指定样式与切换配方（slide/zoom/flip/drop/reveal/push）；v1.16：Remotion 改为长段 `Board` 板书卡 + `<Sequence>` 演示分段，卡片切换使用大幅位移/缩放/旋转；禁用 `Card`/`Label`/`Caption` 作为画面文字；v1.15：新增 M6 Remotion 逐镜头代码生成 Agent，Remotion 取代 Playwright 成为默认镜头渲染器（Playwright 保留回退），新增 Docker 沙箱、镜头级 code hash 与 `remotion_shot` 表；v1.14：编辑器新增独立贴图层、图片上传与 Seedream 生成（DeepSeek 写提示词）；v1.13：新增分镜时间线编辑器、成片视频流与视觉编辑重渲染接口，`PATCH /shots` 支持卡片文案与逐镜头背景；v1.12：默认改为句级对齐（`ALIGN_LEVEL=sentence`），字幕整句显示，字级 wav2vec2 对齐改为可选；v1.11：移除按主题生成脚本（`script_graph` / topic 模块 / confirm-topic / retry-script / regenerate-script），脚本唯一来源改为文章导入 + 可选润色；新增取消/删除期接口；v1.10：新增文稿生活化润色 Agent 与 Web 控制台；v1.9：新增半身反应镜头与角色滑入、输出时间戳目录与 MinIO 上传；v1.8：新增 Asset Agent（文本→无文字演示素材，reuse_key 复用，暂不引入 RAG）；v1.7：新增 M5.1 局部修改、镜头缓存、续跑与发布包；v1.6：新增 M4.3 规则 + DeepSeek 多模态质检与 review 报告；v1.5：新增 M4.2 字级强制对齐与字幕时间锚点；v1.4：TTS 改为本地 IndexTTS2 zero-shot（ADR-007）；v1.3：按实测调整模型路由（flash 主模型），新增 Seedream 素材生成与 HTML 卡片边界；v1.2：补充 LLM 账号约束；v1.1：补充 LangGraph；v1.0：初版 |
 
 > 本文档回答“用什么做、怎么拆、怎么部署、接口长什么样”。需求编号（F-xx / N-xx / A-xx）沿用需求分析文档，不重复展开。
+
+> **2026-11-01 运行时变更（当前有效）**：项目改为 Windows 单机、一键安装方向，已移除 PostgreSQL、RabbitMQ、MinIO 和 VM 部署。当前实现为 SQLite + 单 Redis（Celery broker）+ 本地文件系统，前端由 FastAPI 托管 `web/dist`。本文以下涉及上述组件的部署、端口和接口设计保留为历史方案，当前落地以 README/HANDOFF 为准。
 
 ---
 
@@ -20,20 +22,20 @@
 |---|---|---|
 | 主语言 | Python 3.12 | LLM、TTS、强制对齐、视觉质检、ffmpeg 封装的主生态都在 Python，避免 Java/Python 双语言桥接 |
 | 架构形态 | 模块化单体 + 进程级拆分 | 一套代码库，按进程拆成 api / workflow / agent / media / render，先不付微服务成本 |
-| 工作流 | PostgreSQL 状态机 + Celery | 需求的状态机、断点续跑、局部重跑用“数据库状态 + 幂等节点 + 内容寻址缓存”即可；Temporal 作为规模化备选 |
-| AI 子图编排 | LangGraph + PostgreSQL checkpointer | 分镜/QC 的循环、条件分支和局部中断用图表达；脚本导入/润色是单次结构化调用，媒体流水线仍由 DB 状态机 + Celery 负责 |
+| 工作流 | SQLite 状态机 + Celery | 需求的状态机、断点续跑、局部重跑用“数据库状态 + 幂等节点 + 内容寻址缓存”即可；Temporal 作为规模化备选 |
+| AI 子图编排 | LangGraph + MemorySaver | 分镜/QC 的循环、条件分支和局部中断用图表达；本地进程内 checkpoint，脚本导入/润色是单次结构化调用 |
 | 素材生成 | 火山方舟 Seedream（可替换） | 原创角色/背景/装饰用 AI 生成候选，人工筛选后固定资产化；含文字卡片仍用 HTML |
-| 渲染 | Remotion（每镜头 LLM 生成 TSX，Docker 沙箱）+ ffmpeg | 唯一生产渲染器；Playwright 仅保留测试/历史 |
-| 存储 | PostgreSQL + MinIO | 元数据进 DB，大文件走 S3 兼容对象存储；本地文件系统只用于测试 |
+| 渲染 | Remotion（每镜头 LLM 生成 TSX，Docker 沙箱）+ ffmpeg | 唯一渲染器；Playwright 已移除 |
+| 存储 | SQLite + 本地文件系统 | 元数据进 SQLite，大文件写 `data/assets` 和 `output/`；没有对象存储 |
 | 前端 | React + Vite + Ant Design | 内部运营/审片后台，表格、表单、编辑器密集，AntD 最省事 |
-| 部署 | Docker Compose 单机 | 现有 VM 可直接跑；渲染 worker 后续可横向加机器 |
+| 部署 | Windows 单机 | Docker 只跑 Redis 和 Remotion 沙箱，不依赖 VM/云主机 |
 
-**推荐方案 A。** 决定性理由：这个系统真正的难点是 TTS、强制对齐、视觉质检和逐帧渲染，它们都在 Python 生态里；如果为了“编排”再引入 Java，双语言契约、序列化、两套 CI 的成本会明显高于收益。现有 VM 用 Docker Compose 就能起步，渲染 worker 再加机器即可扩展。
+**推荐方案 A。** 决定性理由：这个系统真正的难点是 TTS、强制对齐、视觉质检和逐帧渲染，它们都在 Python 生态里；如果为了“编排”再引入 Java，双语言契约、序列化、两套 CI 的成本会明显高于收益。当前目标是一台 Windows 机器上跑通并一键安装，渲染 worker 仍保留按进程扩展的余地。
 
 **在开工前需要先解决的现实约束：**
 
-1. 现有 VM 根分区约 18GB，放不下 Postgres + MinIO + 中间产物；必须先挂一块 ≥200GB 的数据盘（推荐 500GB）。
-2. 该 VM 已运行 ItsMyGo / rag_helper 联合栈，CPU、内存、端口都会竞争；本项目使用 8080/8443 和 MinIO 9100/9101，避开已占用的 8088/8001/8002/8003/9000/9002。
+1. 本机磁盘要给程序、模型和产物留足空间：程序 + 依赖约 5GB，TTS 模型/venv 约 16GB，生成产物另计，建议至少预留 30GB。
+2. 单机 16GB 内存 + 8GB 显存可跑，但 TTS、Remotion 渲染和浏览器需要错峰；渲染并发固定为 1。
 3. 云 TTS 的字级时间戳能力、并发配额和计费方式必须在选型阶段实测，不能只看产品页。
 
 ---
@@ -61,12 +63,12 @@
 
 ### 方案 A：Python 模块化单体 + 进程级拆分 + Celery（推荐）
 
-- **技术栈**：Python 3.12 + FastAPI + Pydantic v2 + SQLAlchemy 2.0 + PostgreSQL 17 + RabbitMQ + Redis + Celery + MinIO + Remotion（Node 22，Docker 沙箱）+ Playwright/Chromium（回退）+ ffmpeg + Jinja2 + LangGraph（仅 AI 子图）；前端 React + Vite + TypeScript + Ant Design；Nginx + Docker Compose。
+- **技术栈**：Python 3.12 + FastAPI + Pydantic v2 + SQLAlchemy 2.0 + SQLite + Redis + Celery + 本地文件系统 + Remotion（Node 22，Docker 沙箱）+ ffmpeg + Jinja2 + LangGraph（仅 AI 子图）；前端 React + Vite + TypeScript + Ant Design，构建后由 FastAPI 托管。
 - **为什么适合**：LLM、TTS、对齐、视觉质检、ffmpeg 都在 Python 侧；一套代码库、一套依赖、一套测试；按进程拆成 api / workflow / agent / media / render，哪一段慢就扩哪一段，不需要先做微服务。
-- **开发难度 / 维护成本**：中等。个人或 1–2 人可维护；Docker Compose 一把起；主要成本在渲染调优和状态机纪律，不在基础设施。
-- **目标地区能否顺利使用**：可以。LLM/TTS 全部接国内云服务，渲染和存储本地化，不依赖跨境网络。
-- **你得自己管的东西**：各家 API Key、VM 补丁、Postgres 备份、MinIO 数据盘、RabbitMQ/Redis 可用性、账号权限、TLS 证书。
-- **主要风险**：单机 CPU/磁盘成为瓶颈；Celery + DB 状态机需要严格的幂等设计；没有高可用，VM 挂了就停。
+- **开发难度 / 维护成本**：低。单机运行，Docker 只负责 Redis 和 Remotion 沙箱；主要成本在渲染调优和状态机纪律。
+- **目标地区能否顺利使用**：可以。AI 推理走国内云 API，渲染、存储和队列都在本机。
+- **你得自己管的东西**：各家 API Key、Docker Desktop、Redis 容器、`data/` 和 `output/` 备份、可选 TTS 模型。
+- **主要风险**：SQLite 单写者、单机 CPU/磁盘成为瓶颈；没有高可用，机器挂了就停。
 
 ### 方案 B：Java 编排层 + Python AI/渲染 Worker
 
@@ -88,11 +90,11 @@
 
 ### 推荐：方案 A
 
-决定性理由：**核心复杂度在媒体与 AI 生态，不在 Web 框架。** 用 Python 一套语言覆盖 LLM、TTS、对齐、视觉质检、Playwright 和 ffmpeg，能把“跨语言”这个长期成本直接消掉；进程级拆分已经足够支撑 2 期并行和后续加渲染机器。渲染表现力后来成为主要瓶颈，因此 M6 引入 Remotion 作为默认渲染器（Node 22 固定在 Docker 沙箱内，不改变主进程技术栈），Playwright 保留回退；工作流编排仍不引入 Temporal。
+决定性理由：**核心复杂度在媒体与 AI 生态，不在 Web 框架。** 用 Python 一套语言覆盖 LLM、TTS、对齐、视觉质检、视频编码和 ffmpeg，能把“跨语言”这个长期成本直接消掉；进程级拆分已经足够支撑单机串行和后续扩展。渲染表现力后来成为主要瓶颈，因此 M6 引入 Remotion 作为唯一渲染器（Node 22 固定在 Docker 沙箱内，不改变主进程技术栈），Playwright 已移除；工作流编排仍不引入 Temporal。
 
 **仍会改变推荐的待定问题：**
 
-- 现有 VM 的实际 CPU/内存/磁盘规格，以及能否挂数据盘。如果只能给 4 核/8GB/18GB，方案 A 仍可行，但只能单期串行、渲染会慢，需要先扩容。
+- 本机实际 CPU/内存/磁盘规格；4 核/8GB 只能单期串行，推荐 16GB 内存并预留 30GB 以上磁盘。
 - 云 TTS 是否能稳定提供字级时间戳。如果不能，需要 WhisperX/ctc-forced-aligner 兜底，CPU 对齐会额外增加时间。
 - Web 界面是否要暴露到公网。只在局域网内，认证和 TLS 可以简化；要公网，必须加 TLS、强认证、限流和审计。
 
@@ -109,7 +111,7 @@
 **推荐 A 的边界规则：**
 
 1. `episode.status` 是唯一业务事实来源；LangGraph 的 checkpoint 只是“图运行状态”，不是业务状态。
-2. 每个阶段一个短生命周期子图：`storyboard_graph`、`qc_repair_graph`；图跑完就把结果写回业务表/MinIO，然后结束，不跨人工闸口长期挂起。
+2. 每个阶段一个短生命周期子图：`storyboard_graph`、`qc_repair_graph`；图跑完就把结果写回业务表/本地文件系统，然后结束，不跨人工闸口长期挂起。
 3. 主人工闸口（脚本确认）由 episode 状态机 + API 动作管理；图内 `interrupt` 只用于局部决策，例如“分镜重排 2 次仍违规，请人工选一版”。
 4. 图节点不直接跑 Chromium/ffmpeg；需要媒体任务时只写业务表并投递 Celery，由图外的 workflow 推进。
 5. `graph_version` 进入 agent 节点的缓存键；升级图定义后不复用旧 checkpoint，避免反序列化到不兼容状态。
@@ -127,12 +129,12 @@
 | Web 框架 | FastAPI + Uvicorn | 最新稳定版 | 异步、OpenAPI 自动生成、Pydantic 原生 | Litestar |
 | 数据校验 | Pydantic v2 | 2.x | 请求/响应/LLM 结构化输出共用一套模型 | attrs + cattrs |
 | ORM/迁移 | SQLAlchemy 2.0 + Alembic | 2.x | 成熟、异步支持、迁移可控 | Django ORM（不推荐，绑定太重） |
-| 数据库 | PostgreSQL | 17（16 亦可） | JSONB、事务、advisory lock、成熟备份 | MySQL 8（JSON 能力弱） |
-| 任务队列 | RabbitMQ + Celery | RabbitMQ 4.x / Celery 5.x | 持久化、ack、DLQ、优先级、生态成熟 | Redis Streams、Dramatiq |
-| 缓存/锁 | Redis | 7.x（或 Valkey 8） | 缓存、分布式锁、限流、SSE 广播 | KeyDB |
-| 对象存储 | MinIO | 最新稳定版 | S3 兼容、可本地部署、预签名 URL | 本地 FS（仅测试）、云 OSS |
-| 工作流 | DB 状态机 + Celery | 自研薄层 | 媒体流水线状态机简单可控；避免 Temporal 运维成本 | Temporal、Prefect |
-| Agent 子图编排 | LangGraph + PostgreSQL checkpointer | 最新稳定版 | 条件边、循环、interrupt、checkpoint 适合分镜/QC | 自研图、直接函数编排 |
+| 数据库 | SQLite | 3.x（aiosqlite） | 单机零依赖、文件备份简单；单写者，适合单用户 | 无（Postgres 已随完整栈移除） |
+| 任务队列 | Redis + Celery | Redis 7 / Celery 5.x | 单容器、部署简单；ack/重试够用 | 无（RabbitMQ 已移除） |
+| 缓存/锁 | Redis | 7.x（或 Valkey 8） | 缓存、SSE 广播；单机不依赖分布式锁 | KeyDB |
+| 文件存储 | 本地文件系统 | `data/assets`、`output/` | 零依赖，直接备份目录 | 外部对象存储（未启用） |
+| 工作流 | SQLite 状态机 + Celery | 自研薄层 | 媒体流水线状态机简单可控 | Temporal（过重） |
+| Agent 子图编排 | LangGraph + MemorySaver | 最新稳定版 | 条件边、循环、interrupt；本地进程内 checkpoint | 自研图、直接函数编排 |
 | Agent 可观测 | OpenTelemetry + 结构化日志（Langfuse 可选） | 最新稳定版 | 不新增重型依赖；需要图级 trace 时再评估自建 Langfuse | LangSmith（跨境，需评估） |
 | LLM | 国内 OpenAI-compatible API + 薄适配层 | DeepSeek `deepseek-flash`（文本/代码主模型）+ 火山方舟豆包 Pro（备选/A-B） | 按实际体验 flash 文本能力强；豆包 Pro 不阻塞主流程 | 其他国内厂商（备选） |
 | 结构化输出 | Pydantic + instructor | 最新稳定版 | Schema 校验、失败重试、模型无关 | 手写 JSON 解析 + 重试 |
@@ -140,12 +142,12 @@
 | 字级对齐（可选） | TTS 原生句级时间优先，WhisperX 兜底 | WhisperX 最新稳定版 | 需要逐字字幕/卡拉 OK 时使用 | ctc-forced-aligner |
 | 视觉质检 | DOM/几何规则前置 + `deepseek-flash` 多模态 | 图片资产直接读图；视频按镜头/时间点抽帧送模型 | 文字溢出、裁切先用 DOM 规则；语义与画面问题用 DeepSeek 判定 | 纯规则 |
 | 图像生成 | 火山方舟 Seedream（或 OpenAI-compatible 图像 API） | Seedream 5.x | 原创角色/背景/装饰候选；固定参考图/seed；人工筛选后入库 | 其他图像 API |
-| 渲染 | Remotion + ffmpeg | 版本全部钉死 | 动画表现力强、可按镜头缓存 | Playwright 仅测试 |
+| 渲染 | Remotion + ffmpeg | 版本全部钉死 | 动画表现力强、可按镜头缓存 | Playwright 已移除 |
 | 前端 | React + Vite + TypeScript + Ant Design 5 | 最新稳定版 | 后台表格/表单密集，AntD 组件全 | Next.js（不需要 SSR） |
-| 反向代理 | Nginx | 1.27+ | 静态资源、API 代理、SSE 关闭缓冲 | Caddy |
-| 容器 | Docker + Compose | Docker 29 / Compose 2.40 | 与现有 VM 环境一致 | Podman |
+| 反向代理 | Nginx（可选） | 1.27+ | 仅局域网访问时需要；本地默认 FastAPI 直接托管 | Caddy |
+| 容器 | Docker + Compose | Docker 29 / Compose 2.40 | 只跑 Redis 和 Remotion 沙箱 | Podman |
 | 可观测 | structlog + Prometheus + Grafana + Sentry | 最新稳定版 | 先解决日志、指标、异常三件事 | Loki/Tempo（后续） |
-| 测试 | pytest + Testcontainers + Vitest + Playwright | 最新稳定版 | 后端集成测试、前端单测、E2E | unittest |
+| 测试 | pytest + SQLite/Redis + Vitest | 最新稳定版 | 后端集成测试、前端单测 | unittest |
 | 包管理 | uv（后端）+ pnpm（前端） | 最新稳定版 | 安装快、锁文件可靠 | Poetry + npm |
 | CI | GitHub Actions 或 GitLab CI | — | 与代码托管一致 | 本地脚本 |
 
@@ -162,23 +164,20 @@
 │                         浏览器（局域网/内网）                          │
 │           React + Vite + AntD：文稿导入、脚本编辑、分镜编辑、审片          │
 └───────────────────────────────┬──────────────────────────────────────┘
-                                │ HTTPS / SSE
+                                │ HTTP / SSE
 ┌───────────────────────────────▼──────────────────────────────────────┐
-│                              Nginx                                    │
-│        静态资源 / API 反代 / SSE（proxy_buffering off）                │
+│              FastAPI API（静态前端 + REST + SSE）                     │
 └───────────────┬───────────────────────────────────┬──────────────────┘
                 │                                   │
 ┌───────────────▼──────────────┐       ┌────────────▼──────────────────┐
-│        FastAPI API           │       │        MinIO（S3 兼容）        │
-│ 认证、REST、SSE、人工闸口      │       │ 角色/背景/卡片/音频/片段/成片   │
+│            SQLite            │       │        本地文件系统           │
+│ 状态/元数据/节点/成本/审计     │       │ data/assets、output/          │
 └───────┬──────────────┬───────┘       └───────────────────────────────┘
         │              │
         │ 读写          │ 发布任务 / 消费事件
 ┌───────▼───────┐  ┌───▼───────────────────────────────────────────────┐
-│ PostgreSQL    │  │              RabbitMQ + Redis                     │
-│ 状态/元数据/  │  │  任务队列、优先级、DLQ、缓存、锁、SSE 广播          │
-│ 节点/成本/审计 │  └───┬───────────────┬───────────────┬───────────────┘
-└───────────────┘      │               │               │
+│     Redis     │  │        任务队列、缓存、SSE 广播                   │
+└───────────────┘  └───┬───────────────┬───────────────┬───────────────┘
                 ┌──────▼──────┐ ┌──────▼──────┐ ┌──────▼─────────────┐
                 │ workflow    │ │ agent       │ │ media              │
                 │ worker      │ │ worker      │ │ worker             │
@@ -231,7 +230,7 @@ TTS（逐句合成，IndexTTS2 常驻服务）
 2. **一切中间产物可寻址。** 每个节点产物按 `cache_key` 存储；节点重跑先查产物，命中就直接复用。
 3. **镜头是缓存与并行的最小单位。** 全片 200 个镜头，任何一个镜头可独立渲染、独立重跑、独立质检。
 4. **人工闸口是状态，不是按钮。** 脚本确认是显式状态；API 只能由有权限的人推进。
-5. **队列传任务，数据库传状态。** worker 之间不互相 HTTP 调用；所有状态以 PostgreSQL 为准，队列只是投递手段。
+5. **队列传任务，数据库传状态。** worker 之间不互相 HTTP 调用；所有状态以 SQLite 业务表为准，队列只是投递手段。
 6. **失败是常态。** 每个节点有超时、重试、心跳和死信；卡住的节点由 reconciler 发现，而不是靠人盯。
 
 ---
@@ -263,7 +262,7 @@ TTS（逐句合成，IndexTTS2 常驻服务）
 - `render` 不读数据库里的业务状态，只接收一个完整的 `ShotRenderSpec`；这样渲染可以独立测试和水平扩展。
 - `qc` 不修改产物，只产出 `review`；自动修复由 `workflow` 根据 review 决定是否重跑节点。
 - `agent-graph` 只做 AI 决策：图节点可以调用 LLM/视觉模型，但不直接跑 Chromium、ffmpeg 或 TTS；需要媒体任务时写业务表并投递队列。
-- LangGraph checkpoint 不是业务状态；领域模块仍只读写 PostgreSQL 业务表。
+- LangGraph checkpoint 不是业务状态；领域模块仍只读写 SQLite 业务表。
 
 ---
 
@@ -284,7 +283,7 @@ TTS（逐句合成，IndexTTS2 常驻服务）
 | scheduler | `celery beat` 或 APScheduler | 无 | 1 | 256MB | 候选抓取、清理、reconciler、成本汇总 |
 | web | Nginx + 静态文件 | 无 | 1 | 128MB | SPA 与反向代理 |
 
-**本地开发**：Postgres、RabbitMQ、Redis、MinIO 用 Compose 起；api 和 worker 在 Windows/WSL 里原生跑，热重载快。渲染相关测试使用 Linux 容器里的 Chromium，避免 Windows/Linux 字体和渲染差异。
+**本地运行**：`compose.local.yml` 只起 Redis；api / worker / beat 在 Windows 原生运行，前端由 FastAPI 托管 `web/dist`。SQLite 单写者，渲染并发固定为 1。
 
 ### 6.2 队列拓扑
 
@@ -300,7 +299,7 @@ TTS（逐句合成，IndexTTS2 常驻服务）
 | `roxy.render.shot` | workflow | render-worker | 镜头逐帧 → MP4 片段 |
 | `roxy.render.concat` | workflow | render-worker | 视频拼接、封面、封装 |
 | `roxy.asset.imagegen` | workflow / asset | asset-worker | 生成原创角色/背景候选，后处理与入库 |
-| `roxy.dlq` | RabbitMQ | 人工/告警 | 死信，保留原始消息与堆栈 |
+| 失败任务 | Celery 重试/人工 | 人工/告警 | 超过重试上限后标记 FAILED，保留错误与堆栈 |
 
 **队列纪律：**
 
@@ -313,7 +312,7 @@ TTS（逐句合成，IndexTTS2 常驻服务）
 
 - 团队规模小，服务边界还在变化；过早拆会把重构成本放大。
 - 当前只有渲染需要独立扩容，进程级拆分已经能做到。
-- 共享 PostgreSQL 和领域模型，事务简单；微服务会把“状态机 + 产物索引”的一致性变成分布式问题。
+- 共享 SQLite 和领域模型，事务简单；微服务会把“状态机 + 产物索引”的一致性变成分布式问题。
 - 等出现明确的独立部署/独立团队/独立权限需求，再按 6.4 的触发条件拆。
 
 ### 6.4 拆分触发条件
@@ -332,12 +331,11 @@ TTS（逐句合成，IndexTTS2 常驻服务）
 
 | 中间件 | 角色 | 为什么选它 | 备选/注意 |
 |---|---|---|---|
-| PostgreSQL 17 | 唯一事实来源：状态、脚本、镜头、节点、成本、审计 | 事务、JSONB、advisory lock、成熟备份与迁移 | 不要把大文件存进 DB；JSONB 只放结构化配置 |
-| LangGraph checkpointer | AI 子图运行状态（Postgres） | 支持中断/恢复、时间旅行；与业务表分 schema | 只存图状态，不作为业务事实来源；阶段成功后清理 |
-| RabbitMQ 4.x | 任务队列、优先级、DLQ | 持久化、ack、路由灵活、Celery 原生支持 | Kafka 对这类低吞吐任务过重；Redis 作为 broker 的持久化弱 |
-| Redis 7 | 缓存、分布式锁、限流、SSE 广播 | 简单、快、生态成熟 | 许可证敏感时用 Valkey 8；不要把它当唯一状态存储 |
-| MinIO | 角色/背景/卡片/音频/片段/成片 | S3 API、预签名 URL、本地部署 | 单机 MinIO 无副本；数据盘要做 RAID/备份 |
-| Nginx | 静态资源、API 反代、SSE | 稳定、配置透明 | SSE 必须 `proxy_buffering off`，否则进度会延迟 |
+| SQLite | 唯一事实来源：状态、脚本、镜头、节点、成本、审计 | 单机零依赖、文件备份简单 | 单写者、无行锁；不要开多个写 worker |
+| LangGraph MemorySaver | AI 子图运行状态 | 本地进程内 checkpoint，零依赖 | 进程重启丢图状态；需要持久化时再评估 |
+| Redis 7 | Celery broker + result backend + SSE 广播 | 单容器、部署简单、生态成熟 | 开启 AOF；不要把它当唯一业务状态存储 |
+| 本地文件系统 | 角色/背景/音频/片段/成片 | 零依赖、直接备份 | 无副本；需要手动备份 `data/` 和 `output/` |
+| Nginx（可选） | 静态资源、API 反代、SSE | 需要局域网访问时再加 | 本地默认由 FastAPI 直接托管，不需要 Nginx |
 | Temporal（可选） | 持久化工作流 | 长流程、重试、signal、版本化 | 运维重；MVP 不引入，作为 6.4 的升级路径 |
 | LiteLLM Proxy（可选） | 统一 LLM 网关 | 多厂商、成本、限流 | 先用 SDK 薄适配层；厂商超过 3 家再上网关 |
 | Prometheus + Grafana | 指标与看板 | 与 Python/Celery 集成成熟 | 单机可先只上 Prometheus + Grafana；日志先用 Sentry |
@@ -347,28 +345,28 @@ TTS（逐句合成，IndexTTS2 常驻服务）
 
 ## 8. 数据与存储设计
 
-### 8.1 PostgreSQL 核心表
+### 8.1 SQLite 核心表
 
 在需求文档 6.1 的基础上补充工作流、成本和审计表。
 
 | 表 | 关键字段 | 说明 |
 |---|---|---|
-| `series` | id, name, voice_profile JSONB, section_labels JSONB, character_pack_id, watermark, template_version, non_commercial | 系列配置根；配置变更要版本化 |
-| `episode` | id, series_id, topic_id, title, target_duration_s, status, health, current_node, output_path, version, render_spec JSONB, script_meta JSONB, storyboard_meta JSONB, audio_path, audio_meta JSONB, qc_meta JSONB, output_meta JSONB, created_at | `version` 做乐观锁；`health` 表示 OK/WARNING/BLOCKED；`render_spec` 是 M1.2 手工渲染 spec 的临时桥，M3 后由 shot 表生成；`script_meta`/`storyboard_meta` 存生成与校验快照；`audio_meta` 存句级/字级对齐；`qc_meta` 存 QC 汇总；`output_meta` 存最终输出与 MinIO 位置 |
-| `topic_candidate` | id, series_id, source, title, hook, audience, fit_score, est_sections, raw JSONB, status | 抓取原文放 `raw`，只作数据，不作指令 |
+| `series` | id, name, voice_profile JSON, section_labels JSON, character_pack_id, watermark, template_version, non_commercial | 系列配置根；配置变更要版本化 |
+| `episode` | id, series_id, topic_id, title, target_duration_s, status, health, current_node, output_path, version, render_spec JSON, script_meta JSON, storyboard_meta JSON, audio_path, audio_meta JSON, qc_meta JSON, output_meta JSON, created_at | `version` 做乐观锁；`health` 表示 OK/WARNING/BLOCKED；`render_spec` 是 M1.2 手工渲染 spec 的临时桥，M3 后由 shot 表生成；`script_meta`/`storyboard_meta` 存生成与校验快照；`audio_meta` 存句级/字级对齐；`qc_meta` 存 QC 汇总；`output_meta` 存最终输出与 MinIO 位置 |
+| `topic_candidate` | id, series_id, source, title, hook, audience, fit_score, est_sections, raw JSON, status | 抓取原文放 `raw`，只作数据，不作指令 |
 | `script_line` | id, episode_id, seq, speaker, section, text, char_count, version | `seq` 唯一且连续；`char_count` 由服务端计算 |
 | `line_audio` | id, episode_id, script_line_id, line_version, speaker, text_hash, voice_key, provider, model, ref_audio, path, duration_ms, sample_rate, checksum | `(script_line_id, text_hash, voice_key)` 唯一；文本或音色变化时重合成，否则复用 |
-| `shot` | id, episode_id, script_line_id, seq, duration_ms, card_type, card_payload JSONB, character_image, character_position, bg, transition, cache_key, template_version | `cache_key` 唯一索引；`script_line_id` 允许 1:N（MVP 默认 1:1） |
+| `shot` | id, episode_id, script_line_id, seq, duration_ms, card_type, card_payload JSON, character_image, character_position, bg, transition, cache_key, template_version | `cache_key` 唯一索引；`script_line_id` 允许 1:N（MVP 默认 1:1） |
 | `asset` | id, type, name, reuse_key, path, mime, width, height, checksum, tags, license, source, provider, model, prompt, seed, reference, status | 角色/背景/物件/字体/BGM/模板；`reuse_key` 唯一，用于生成前查重；`checksum` 去重；`path` 内容寻址（本机 `data/assets`，VM `/data/assets`）；AI 生成资产记录来源与 prompt/seed；`status` = CANDIDATE/APPROVED/REJECTED |
 | `node_run` | id, episode_id, node_key, parent_id, status, input_hash, cache_key, attempt, error, started_at, finished_at, heartbeat_at, output_ref | 幂等与续跑的核心表 |
 | `render_job` | id, episode_id, node_run_id, kind, status, progress, worker, error, started_at, finished_at | 渲染进度与 worker 归属 |
-| `review` | id, episode_id, check_item, level, detail JSONB, evidence_path, resolved_by, resolved_at | `level` = 通过/自动修复/人工介入 |
+| `review` | id, episode_id, check_item, level, detail JSON, evidence_path, resolved_by, resolved_at | `level` = 通过/自动修复/人工介入 |
 | `model_call_log` | id, episode_id, node_run_id, provider, model, prompt_hash, prompt_tokens, completion_tokens, cost, latency_ms, status | 成本与审计；不要存完整 Prompt |
 | `tts_call_log` | id, episode_id, line_id, provider, voice_id, chars, cost, latency_ms, status | 按句统计 |
 | `prompt_version` | id, name, version, hash, content_path, created_at | Prompt 文件化，Git 管理，DB 只存版本索引 |
-| `outbox_event` | id, episode_id, event_type, payload JSONB, status, attempts, available_at, created_at, dispatched_at, error | 状态变更与任务投递的可靠桥梁；M1.2 先按 episode 聚合，跨聚合事件出现后再加 aggregate_type/aggregate_id |
+| `outbox_event` | id, episode_id, event_type, payload JSON, status, attempts, available_at, created_at, dispatched_at, error | 状态变更与任务投递的可靠桥梁；M1.2 先按 episode 聚合，跨聚合事件出现后再加 aggregate_type/aggregate_id |
 | `user` | id, email, hashed_password, role, is_active | 角色：operator / reviewer / admin / service |
-| `audit_log` | id, actor_id, action, target_type, target_id, before JSONB, after JSONB, created_at | 人工闸口、编辑、删除、重跑都要记 |
+| `audit_log` | id, actor_id, action, target_type, target_id, before JSON, after JSON, created_at | 人工闸口、编辑、删除、重跑都要记 |
 
 LangGraph 的 checkpoint 表由 checkpointer 自动创建，放在独立 schema `agent_checkpoints`（通过连接串 `search_path` 或独立数据库隔离），不混入上面的业务表；`thread_id = episode_id:stage:run_id`，阶段成功后 30 天清理。
 
@@ -407,11 +405,11 @@ s3://roxy-output/                       # 最终交付
 
 **规则：**
 
-- 最终视频先落本地 `output/YYYYMMDD-HHMMSS_<episode_id8>/episode.mp4`，同目录写 `metadata.json`；`episode.output_path` 指向该文件，`episode.output_meta` 记录 MinIO URI。
-- 图片资产入库时同步镜像到 `roxy-assets/assets/<type>/<checksum前16位>.<ext>`，对象信息写 `asset.meta["minio"]`；已有 APPROVED 资产在下次 ingest 时补传。
-- MinIO 上传对象为 `episodes/<目录名>/episode.mp4`；本地开发 `MINIO_UPLOAD_ENABLED=true` 但 MinIO 不在线时只记录 `minio_error`，VM 用 `MINIO_REQUIRED=true` 强制成功。
+- 最终视频先落本地 `output/YYYYMMDD-HHMMSS_<episode_id8>/episode.mp4`，同目录写 `metadata.json`；`episode.output_path` 指向该文件，`episode.output_meta` 记录本地路径和导出时间。
+- 图片资产入库时复制到 `data/assets/<type>/`，路径写 `asset.path`，按 checksum 去重；已有 APPROVED 资产直接复用。
+- 本地文件系统是唯一副本，没有对象存储镜像；备份时同时保留 `data/` 和 `output/`。
 - 原始逐帧 PNG 不长期保存。渲染 worker 把帧直接管道给 ffmpeg 编码成镜头 MP4；只保留失败镜头的首帧/中间帧作为证据。
-- 所有产物写入使用“临时文件 + 原子 rename”或 MinIO 的 multipart 完成语义，避免半成品被下游读到。
+- 所有产物写入使用“临时文件 + 原子 rename”，避免半成品被下游读到。
 - 成片与元数据保留 ≥1 年；中间产物 90 天；日志 90 天；成本日志可保留 1 年（聚合后）。
 - 预签名 URL 有效期 15–30 分钟；不要把 MinIO 凭据发给前端。
 
@@ -541,7 +539,7 @@ PUBLISHED（已发布）
 
 **续跑：**
 
-- worker 崩溃：RabbitMQ 未 ack 的消息会重新投递；`node_run` 仍是 RUNNING，任务重新执行时命中幂等。
+- worker 崩溃：Redis 未 ack 的消息会重新投递；`node_run` 仍是 RUNNING，任务重新执行时命中幂等。
 - 任务丢失：`outbox_event` 记录“应投递但未确认”的事件，dispatcher 每 30 秒补投。
 - 节点卡住：每个长任务每 10 秒更新 `heartbeat_at`；reconciler 扫描超过 2 分钟无心跳的 RUNNING 节点，标记 RETRY 或 FAILED。
 
@@ -594,7 +592,7 @@ COMMIT
         │
         ▼
 dispatcher 轮询 outbox_event（status=PENDING）
-  → 发布 RabbitMQ 消息
+  → 发布 Redis 消息
   → 标记 DISPATCHED
         │
         ▼
@@ -676,8 +674,7 @@ templates/
 
 ### 10.2 信息卡片渲染
 
-- Remotion 镜头使用 `PaperCard`（文字由 React 渲染，仍保证 100% 准确）；Playwright 旧链路仅用于测试/历史。
-- 用 Jinja2 渲染 HTML，Playwright 打开本地 `file://` 或临时 HTTP 页面，截图保存 PNG。
+- Remotion 镜头使用 `PaperCard`（文字由 React 渲染，仍保证 100% 准确）。
 - 卡片按 2 倍像素密度渲染，再缩放到舞台中的目标尺寸，保证文字边缘清晰。
 - 卡片内文字设硬上限和自动缩放：先按字号阶梯缩小，低于最小字号仍溢出则判定失败，交回分镜/QC。
 - 卡片模板必须内置 DOM 检测钩子：`scrollWidth/scrollHeight` 超过容器即溢出，`getBoundingClientRect()` 用于裁切检测。
@@ -720,7 +717,7 @@ window.renderAt = function (tMs) {
 
 ### 10.3.1 Remotion 渲染（默认）与代码生成 Agent
 
-M6 起，镜头画面只由 Remotion 渲染（`REMOTION_ONLY=true`）；§10.3 的 Playwright 逐帧链路仅保留测试/历史。
+M6 起，镜头画面只由 Remotion 渲染（`REMOTION_ONLY=true`）；Playwright 逐帧链路已移除。
 
 **代码生成：**
 
@@ -738,10 +735,10 @@ M6 起，镜头画面只由 Remotion 渲染（`REMOTION_ONLY=true`）；§10.3 �
 
 **渲染接入：**
 
-- `EpisodeSpec.renderer: "remotion" | "playwright"`；`remotion_meta.enabled` 且每镜头 READY 时用 Remotion，否则 Playwright。
+- `EpisodeSpec.renderer` 固定为 `"remotion"`；`remotion_meta.enabled` 且每镜头 READY 才能渲染。
 - `shot_render_hash` 包含 renderer、Remotion 版本、镜像 digest、该镜头 code hash；单个镜头代码变化只失效该镜头。
 - Remotion 输出经 ffmpeg 归一化为 1920×1080/25fps/H.264/yuv420p/CRF18，帧数与时间线一致，保证 `-c copy` 拼接。
-- `REMOTION_ONLY=true` 时禁止 Playwright：codegen 未全部 READY 或渲染失败即期次失败，不切换旧渲染器。Playwright 仅用于测试/历史。
+- codegen 未全部 READY 或单镜头渲染失败即期次失败，不切换其他渲染器。
 
 **质量约束（写进 Skill）：**
 
@@ -752,7 +749,7 @@ M6 起，镜头画面只由 Remotion 渲染（`REMOTION_ONLY=true`）；§10.3 �
 - 角色必须有动效：入场冲入（offsetX ±400–600、opacity/scale/rotate）、呼吸轻摆、至少一次手势/让位；静态 `<Character>` 会被生成检查拒绝。
 - 卡片切换用大幅运动：位移 ≥240px、缩放 0.72–0.82→1、旋转 ±4°–8°，spring 允许过冲；文本卡与演示段错开 3–8 帧。
 - 视觉风格必须服务内容：先判断主题再选色调、材质、线条和图形语言；同一期保持统一，禁止与内容无关的赛博霓虹/故障/机器人装饰。
-- 字幕由 Python 生成 `Root.tsx` 时统一叠加 `SubtitleTrack`：句级 chunks 转为镜头内相对时间，样式沿用旧 Playwright 字幕条；生成代码不画字幕。
+- 字幕由 Python 生成 `Root.tsx` 时统一叠加 `SubtitleTrack`：句级 chunks 转为镜头内相对时间，暖纸字幕条；生成代码不画字幕。
 - 画面长段文本由生成代码的 `PaperCard` 组件渲染，Python 只加载底部字幕；文本长度和分段由模型决定，优先直接用 `narration`/`card.text` 的长段。
 - 输入有 `character` 时必须出现 Roxy。
 - 禁止随机、时间、CSS 动画与外部资源，保证确定性。
@@ -833,7 +830,7 @@ ffmpeg -i video.mp4 -i audio_norm.wav \
 | 网络 | 舞台页面禁止外部请求；图片、字体全部本地 |
 | 时区/locale | 容器固定 `TZ=Asia/Shanghai`、`LANG=C.UTF-8` |
 | 浮点布局 | 统一使用整数像素或固定小数位；避免不同平台的亚像素差异 |
-| 依赖 | ffmpeg、Playwright、Python 版本全部锁文件/镜像固定 |
+| 依赖 | ffmpeg、Remotion 镜像、Python 版本全部锁文件/镜像固定 |
 
 **测试方式：** 固定 3 个镜头的 golden fixture，在 CI 中重复渲染两次，比较像素差异；目标为逐帧一致，至少做到 SSIM ≥ 0.999 且无结构性差异。
 
@@ -1099,7 +1096,7 @@ class TTSProvider(Protocol):
 **执行与恢复：**
 
 - `agent-worker` 的 Celery 任务调用 `graph.invoke()` 或 `graph.astream_events()`。
-- Checkpointer 用 Postgres，schema `agent_checkpoints`；`thread_id = episode_id:stage:run_id`。
+- Checkpointer 当前用 `MemorySaver`（进程内）；`thread_id = episode_id:stage:run_id`，进程重启后图状态不保留。
 - `storyboard_graph` 当前用 `MemorySaver` 保证图可运行并支持同进程重试；Postgres checkpointer 待接入，届时用 `run_id` 恢复同一 thread。
 - 节点内部失败按 provider 重试策略处理；图级 repair 循环最多 2 次，超过则写 `review` 转人工。
 - 进度回调：节点开始/结束事件写 Redis pub/sub，API 的 SSE 转发给前端。
@@ -1400,149 +1397,59 @@ Content-Type: application/json
 
 ---
 
-## 13. 部署架构
+## 13. 部署架构（2026-11-01 本地单机版）
 
-### 13.1 开发环境（Windows 11）
+### 13.1 运行形态
 
 ```text
 Windows 11
-├─ Docker Desktop（WSL2）：Postgres、RabbitMQ、Redis、MinIO
-├─ Python 3.12 + uv：api / workflow / agent / media 原生运行
-├─ Node 20 + pnpm：Vite 前端
-└─ render 相关：在 Linux 容器里跑（与生产一致），避免字体/Chromium 差异
+├─ Docker Desktop：单个 Redis 容器 + Remotion 渲染沙箱
+├─ Python 3.12 + uv：FastAPI / workflow / agent / media 原生运行
+├─ web/dist：构建后由 FastAPI 在 8000 端口托管
+└─ 可选：NVIDIA GPU 8GB + IndexTTS2 语音组件
 ```
 
-- 项目代码放 WSL2 文件系统（如 `~/code/roxy_pipeline`）以获得更好的文件性能；Windows 侧只做编辑。
-- `docker compose -f compose.infra.yml up -d` 起中间件；`uv run uvicorn app.api:app --reload` 起 API。
-- 渲染调试用 `docker compose -f compose.render.yml run --rm render-worker python -m app.render.cli --shot 42`。
-- 测试用 Testcontainers 自动起 Postgres/MinIO；LLM/TTS 用 fake provider 或录制回放，不依赖真实计费。
+- 本地栈只有 `compose.local.yml`（Redis），不再启动 Postgres/RabbitMQ/MinIO，也不再提供 VM 部署。
+- `start-dev.bat` 一键启动 Docker、Redis、API、两个 worker 和 beat；`-Dev` 额外启动 Vite 5173。
+- 所有服务地址从 `.env` / `Settings` 读取，业务代码不写死地址。
 
-### 13.2 生产环境（现有 Ubuntu VM）
+### 13.2 资源规划
 
-```text
-Ubuntu 24.04 VM（itsmygo-vm 或独立 VM）
-├─ /data（独立数据盘，≥200GB，推荐 500GB）
-│   ├─ postgres/
-│   ├─ minio/
-│   └─ backup/
-├─ Docker Compose
-│   ├─ nginx            8080/8443（对外）
-│   ├─ api              internal 8000
-│   ├─ workflow-worker
-│   ├─ agent-worker
-│   ├─ media-worker
-│   ├─ render-worker ×N
-│   ├─ scheduler
-│   ├─ postgres         internal 5432
-│   ├─ rabbitmq         internal 5672
-│   ├─ redis            internal 6379
-│   └─ minio            9100/9101（仅局域网）
-└─ 可选：prometheus / grafana / sentry-agent
-```
-
-**端口规划（避开现有 ItsMyGo/rag_helper 占用）：**
-
-| 服务 | 端口 | 暴露范围 |
-|---|---|---|
-| Nginx | 8080 / 8443 | 局域网 |
-| API | 8000 | 仅 Docker 网络 |
-| PostgreSQL | 5432 | 仅 Docker 网络 |
-| RabbitMQ | 5672 / 15672 | 仅 Docker 网络（管理台可临时映射） |
-| Redis | 6379 | 仅 Docker 网络 |
-| MinIO API | 9100 | 局域网（预签名 URL 需要） |
-| MinIO Console | 9101 | 仅局域网/临时 |
-| Prometheus/Grafana | 9090 / 3000 | 仅局域网 |
-
-> 现有 VM 已占用 8088/8001/8002/8003/9000/9002；MinIO 默认 9000/9001 会冲突，必须改到 9100/9101。
->
-> 后端访问 MinIO 用内部地址 `http://minio:9000`；生成给浏览器的预签名 URL 必须用外部地址 `http://<VM 主机>:9100`。在存储适配层区分 `MINIO_INTERNAL_ENDPOINT` 与 `MINIO_PUBLIC_ENDPOINT`，否则浏览器会拿到无法解析的 `minio:9000` 链接。
-
-### 13.3 资源规划
-
-| 场景 | CPU | 内存 | 磁盘 | 能力 |
+| 场景 | CPU | 内存 | 磁盘 | 说明 |
 |---|---|---|---|---|
-| 最低可跑（1 期串行） | 4 vCPU | 8GB | 200GB 数据盘 | 1 个 render worker，1080p 全片约 25–45 分钟 |
-| 推荐（2 期并行） | 8–16 vCPU | 32GB | 500GB SSD | 4 个 render worker，单期约 6–12 分钟 |
-| 自建 TTS/对齐 | +GPU | +16GB | +200GB | CosyVoice 2 + WhisperX；渲染仍吃 CPU |
+| 仅脚本/分镜/画面 | 4 核 | 8GB | 30GB | 不起 TTS，渲染串行 |
+| 完整单机（含 TTS） | 8 核+ | 16GB | 50GB+ | IndexTTS2 venv/模型约 16GB，需要 8GB 显存 |
+| Remotion 单镜头沙箱 | 2 CPU | 3GB | — | 同一时间只跑一个 |
 
-**单 worker 资源：**
+- SQLite 单写者：本地渲染并发固定为 1，不要同时开多个 render worker。
+- TTS 是可选组件；没有 GPU 或模型时跳过配音，不影响脚本、分镜、资产和画面流程。
 
-- render-worker：2 vCPU / 2GB（Chromium 0.5–1GB + ffmpeg 0.5GB）。
-- media-worker：1 vCPU / 1GB（TTS 是网络等待；对齐若跑本地模型需更多）。
-- agent-worker：0.5 vCPU / 0.5–1GB。
-- Postgres：1–2 vCPU / 2GB；MinIO：0.5 vCPU / 1GB；RabbitMQ/Redis：各 0.5GB。
+### 13.3 配置与密钥
 
-**现有 VM 的现实建议：**
+- 配置模板 `.env.example`，真实值只放本地 `.env`；`.env` 已在 `.gitignore`。
+- 本地默认：`DATABASE_URL=sqlite+aiosqlite:///./data/db/roxy.db`、`REDIS_URL=redis://localhost:6380/0`、`CELERY_BROKER_URL=redis://localhost:6380/0`。
+- LLM/图像/质检仍调用云端 API：`DEEPSEEK_API_KEY`、`ARK_API_KEY` 等只存 `.env`，不写日志、不提交。
+- TTS 配置：`TTS_PROVIDER=indextts2`（可选）；模型、参考音与隔离环境由 `TTS_INDEXTTS_*` 注入。
+- 密钥一旦出现在聊天、日志或截图中，视为泄露：立即吊销/重置并更新 `.env`。
 
-- 先确认 VM 的实际 CPU/内存；如果与 ItsMyGo/rag_helper 共用且只有 8GB，先只开 1 个 render worker，并把 Compose 资源上限写死。
-- 根分区 18GB 绝对不能放 MinIO 数据；挂数据盘并把 `PGDATA`、`MINIO_DATA`、备份都指到 `/data`。
-- 如果 2 期并行是硬指标，建议单独开一台渲染机器接入同一 RabbitMQ/MinIO；不要和现有栈抢 CPU。
+### 13.4 网络与安全
 
-### 13.4 配置与密钥
+- API 监听 `127.0.0.1:8000`；Vite 开发端口 5173；Redis 映射 `127.0.0.1:6380`。
+- 不暴露公网；Remotion 容器使用 `--network none`、只读根文件系统、非 root 和资源上限。
+- 生成的 Remotion 代码只在 Docker 沙箱执行，不在宿主机直接 `npm run`。
 
-- 配置分三层：`config/base.yaml`（非敏感）、环境变量（部署差异）、数据库（series/episode 配置）。
-- 环境隔离：本地与 VM 使用不同 `COMPOSE_PROJECT_NAME`（`roxy-local` / `roxy-vm`）和 `ROXY_ENV`；容器名、网络、数据卷不共用。本地用 `.env.example`，VM 用 `.env.vm.example`，禁止互相复制。
-- 服务地址全部经环境变量注入（`DATABASE_URL`、`RABBITMQ_URL`、`REDIS_URL`、`MINIO_INTERNAL_ENDPOINT` / `MINIO_PUBLIC_ENDPOINT`）；业务代码不得写死 `localhost`、VM IP 或容器名。
-- LangGraph 配置：`LANGGRAPH_CHECKPOINT_SCHEMA=agent_checkpoints`、`LANGGRAPH_CHECKPOINT_RETENTION_DAYS=30`；checkpoint 表随 Postgres 备份，但不参与业务恢复。
-- LLM 配置：`DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL=https://api.deepseek.com`、`DEEPSEEK_MODEL=deepseek-flash`；`ARK_API_KEY`、`ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3`、`ARK_MODEL_STRONG`（备选/A-B）、`ARK_MODEL_VISION`（可选）。
-- 图像生成配置：`IMAGE_PROVIDER=ark|mock|openai-compatible`、`ARK_IMAGE_MODEL`（如 `doubao-seedream-5-0-pro-260628`，需在方舟控制台开通）、`IMAGE_SIZE=1080x1920`、`IMAGE_CANDIDATES=4`。
-- TTS 配置：`TTS_PROVIDER=indextts2`；模型、参考音与隔离环境由 `TTS_INDEXTTS_*` 注入（python/repo/model_dir/ref_audio/url）；IndexTTS2 常驻 `127.0.0.1:8765`。云端 TTS 凭据只在切换到备选方案时需要。
-- 基础设施密钥：`POSTGRES_PASSWORD`、`MINIO_ROOT_USER/PASSWORD`、`APP_SECRET_KEY`、`JWT_SECRET`。
-- `.env` 加入 `.gitignore`；仓库只提交 `.env.example`。
-- 所有密钥支持轮换；日志和 Sentry 上报前脱敏（API Key、Cookie、Prompt 全文）。
-- 密钥一旦出现在聊天、日志或截图中，视为泄露：立即吊销/重置，更新 `.env`，并检查调用日志。
-- 生产不使用默认密码；MinIO Console 不暴露公网。
+### 13.5 备份与恢复
 
-### 13.5 网络与安全
+- 需要手动备份：`data/db/roxy.db`、`data/assets/`、`output/`、`.env`。
+- SQLite 可在 API 停止时直接复制文件，或用 Python `sqlite3` backup API 在线备份。
+- 升级/重装前先备份；恢复后用 `/health` 和最近一期成片验证。
+- 没有对象存储副本，也没有数据库集群；单机数据丢失不可恢复。
 
-- 只暴露 Nginx 8080/8443；Postgres/Redis/RabbitMQ/API 不映射到宿主。
-- MinIO 9100 仅局域网；如果必须公网访问，走 Nginx 反代 + TLS + 鉴权，不直接暴露 Console。
-- 防火墙只放行局域网网段；SSH 仅密钥登录。
-- Nginx 加安全头：HSTS（有域名时）、X-Content-Type-Options、X-Frame-Options、Referrer-Policy。
-- 如果只在局域网，可先用自签证书；有域名则用 Let's Encrypt。
+### 13.6 发布与升级
 
-### 13.6 扩展路径
-
-```text
-阶段 1（MVP）：单机 Compose，1 个 render worker
-阶段 2：同一台机器加 render worker 副本（资源允许时）
-阶段 3：新增一台渲染机器，接入同一 RabbitMQ/MinIO/Postgres
-阶段 4：渲染机器 > 2 台或需要隔离故障域 → Docker Swarm / K3s
-阶段 5：工作流节点变复杂 → Temporal；厂商 > 3 家 → LiteLLM Gateway
-```
-
-- 渲染 worker 是无状态的：只需要 `RABBITMQ_URL`、`MINIO_*`、`DATABASE_URL`（只读/有限写）和镜像。
-- 不要把渲染中间产物写本地磁盘长期保存；临时目录用 `/tmp` 并限制大小。
-
-### 13.7 备份与恢复
-
-- 每日 `pg_dump` 到 `/data/backup/postgres/`，保留 14 天；每周全量保留 8 周。
-- MinIO 的 `roxy-output` 每日增量同步到 NAS/另一块盘；`roxy-assets` 每周同步。
-- 每月做一次恢复演练：新目录恢复 Postgres + MinIO，启动 API，能读出最近一期成片。
-- 迁移前先备份；Alembic 迁移采用 expand/contract，避免回滚时丢列。
-
-### 13.8 CI/CD
-
-```text
-push / PR
-  ├─ ruff + mypy（后端）
-  ├─ pytest（单元 + Testcontainers 集成）
-  ├─ tsc + vitest（前端）
-  ├─ 构建 api / worker / render / web 镜像
-  ├─ Trivy 镜像扫描 + gitleaks 密钥扫描
-  └─ 产物推送私有 Registry
-        │
-        ▼
-部署（手动或 tag 触发）
-  ├─ 备份数据库
-  ├─ docker compose pull
-  ├─ 一次性迁移容器：alembic upgrade head
-  ├─ docker compose up -d
-  └─ /admin/health + 一次 30 秒 smoke episode
-```
-
-- 镜像 tag 用 git sha；回滚就是切回上一个 tag。
-- 迁移与应用版本兼容：先加列/加表，再切流量，最后删旧列。
+- GitHub Release 提供 Windows zip（源码 + `web/dist` + 安装脚本），模型不进 Release。
+- 升级保留 `data/`、`output/` 和 `.env`，执行 `uv sync`、`alembic upgrade head`、必要时重建 Remotion 镜像。
+- Remotion 镜像可预构建为 tar 资产，安装时 `docker load`，失败再回退到本地 `docker build`。
 - 不在 CI 里调用真实 LLM/TTS；用 fixture/fake provider。
 
 ---
@@ -1673,10 +1580,10 @@ push / PR
 | 单元测试 | pytest | 字数/句长/章节校验、节奏规则、缓存键、状态转换 |
 | Graph 测试 | pytest + fake LLM | LangGraph 状态转移、条件边、repair 上限、interrupt/resume |
 | 契约测试 | pytest + Pydantic | LLM/TTS/视觉输出 Schema；Provider 适配层 |
-| 集成测试 | Testcontainers | Postgres/RabbitMQ/Redis/MinIO；节点执行与幂等 |
-| 渲染 golden | pytest + Playwright + 图像比较 | 固定输入两次渲染一致；模板回归 |
+| 集成测试 | pytest + SQLite + Redis | 节点执行与幂等、队列投递 |
+| 渲染回归 | pytest + Remotion 固定 fixture | 固定输入两次渲染一致；镜头代码/字幕回归 |
 | 前端 | Vitest + Testing Library | 脚本编辑、分镜预览、QC 列表 |
-| E2E | Playwright + fake providers | 30 秒成片全流程；局部修改；断点续跑 |
+| E2E | pytest + fake providers | 30 秒成片全流程；局部修改；断点续跑 |
 | 负载 | Locust/k6 + 多 worker | 2 期并行、队列积压、渲染吞吐 |
 | 安全 | gitleaks/Trivy/pip-audit + 手工 | 密钥、依赖、SSRF、上传、权限 |
 

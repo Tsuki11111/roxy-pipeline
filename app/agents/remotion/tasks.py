@@ -136,7 +136,7 @@ async def _run(
                 if get_settings().remotion_only:
                     await _mark_no_render(
                         episode_id,
-                        f"Remotion codegen failed; Playwright disabled: {exc}",
+                        f"Remotion codegen failed; no Playwright fallback: {exc}",
                     )
                 else:
                     await _queue_render(episode_id)
@@ -166,7 +166,7 @@ async def _run(
             ):
                 await _mark_no_render(
                     episode_id,
-                    "Remotion code is not READY for every shot; Playwright disabled",
+                    "Remotion code is not READY for every shot; no Playwright fallback",
                 )
             else:
                 await _queue_render(episode_id)

@@ -5,8 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.assets.registry import resolve_background, resolve_floor
 from app.models.core import Episode, Series
 from app.render.models import EpisodeSpec, RemotionRenderSpec, RemotionShotSpec
-from app.render.stage import build_stage_payload
-from app.render.timeline import build_timeline
 from app.agents.storyboard.loaders import load_script_lines, load_shots
 from app.agents.storyboard.spec_builder import build_episode_spec
 
@@ -33,7 +31,7 @@ async def build_episode_render_spec(
     )
     floor = await resolve_floor(session)
     remotion = None
-    renderer = "playwright"
+    renderer = "remotion"
     meta = episode.remotion_meta or {}
     if meta.get("enabled"):
         shot_meta = meta.get("shots") or {}
@@ -67,5 +65,4 @@ async def build_episode_render_spec(
         renderer=renderer,
         remotion=remotion,
     )
-    build_stage_payload(spec, build_timeline(spec))
     return spec

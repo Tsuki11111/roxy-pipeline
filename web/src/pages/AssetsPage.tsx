@@ -120,7 +120,7 @@ export default function AssetsPage() {
         <div>
           <Typography.Title level={2}>资产库</Typography.Title>
           <Typography.Paragraph type="secondary">
-            背景、道具、图标和封面；入库自动镜像到 MinIO，按 reuse_key 复用。
+            背景、道具、图标和封面；入库保存到本地 data/assets，按 reuse_key 复用。
           </Typography.Paragraph>
         </div>
         <Space>
@@ -192,19 +192,6 @@ export default function AssetsPage() {
                   {status}
                 </Tag>
               ),
-            },
-            {
-              title: "MinIO",
-              dataIndex: "meta",
-              width: 90,
-              render: (meta) =>
-                meta?.minio?.uri ? (
-                  <Tag color="blue">已上传</Tag>
-                ) : meta?.minio_error ? (
-                  <Tag color="red">失败</Tag>
-                ) : (
-                  <Tag>未上传</Tag>
-                ),
             },
             {
               title: "来源",
