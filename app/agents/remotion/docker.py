@@ -6,6 +6,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
+from uuid import uuid4
 
 from app.core.config import get_settings
 from app.storage.paths import PROJECT_ROOT
@@ -73,6 +74,19 @@ def _mount(source: Path, target: str, *, read_only: bool = False) -> list[str]:
     return ["-v", f"{source.resolve()}:{target}:{mode}"]
 
 
+def _remove_container(name: str) -> None:
+    try:
+        subprocess.run(
+            [_docker(), "rm", "-f", name],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            env={**os.environ, "MSYS_NO_PATHCONV": "1"},
+        )
+    except (OSError, subprocess.SubprocessError):
+        logger.warning("failed to remove sandbox container %s", name)
+
+
 def _run(
     workdir: Path,
     script: str,
@@ -83,22 +97,30 @@ def _run(
     settings = get_settings()
     out_dir = workdir / "out"
     out_dir.mkdir(parents=True, exist_ok=True)
+    container_name = f"roxy-remotion-{uuid4().hex[:12]}"
     command = [
         _docker(),
         "run",
         "--rm",
+        "--init",
+        "--name",
+        container_name,
+        "--label",
+        "roxy.pipeline=remotion",
         "--network",
         "none",
         "--read-only",
         "--tmpfs",
-        "/tmp",
+        "/tmp:rw,size=1g,mode=1777",
         "--tmpfs",
-        "/app/node_modules/.cache",
+        "/app/node_modules/.cache:rw,size=512m",
         "--user",
         "10001",
         "--cpus",
         "2",
         "-m",
+        "3g",
+        "--memory-swap",
         "3g",
         "--pids-limit",
         "256",
@@ -124,11 +146,16 @@ def _run(
             env=env,
         )
     except subprocess.TimeoutExpired as exc:
+        _remove_container(container_name)
         raise RemotionDockerError(
             f"Remotion sandbox timed out after {timeout:.0f}s"
         ) from exc
     except OSError as exc:
+        _remove_container(container_name)
         raise RemotionDockerError(f"cannot run docker: {exc}") from exc
+    except BaseException:
+        _remove_container(container_name)
+        raise
     output = (result.stdout or "") + (result.stderr or "")
     if result.returncode != 0:
         raise RemotionDockerError(output.strip()[-5000:] or "Remotion failed")

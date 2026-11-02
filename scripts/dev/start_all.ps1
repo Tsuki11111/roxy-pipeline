@@ -79,6 +79,15 @@ function Start-Docker {
     throw 'Docker engine did not start within 180s.'
 }
 
+function Clear-StaleSandboxContainers {
+    $ids = @(docker ps -aq --filter "label=roxy.pipeline=remotion" --filter "status=exited" 2>$null)
+    foreach ($containerId in $ids) {
+        if ($containerId) {
+            docker rm -f $containerId *> $null
+        }
+    }
+}
+
 function Start-ServiceWindow([string]$Title, [string]$Command, [string]$Slug) {
     $script = "`$Host.UI.RawUI.WindowTitle = '$Title'; $Command"
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
@@ -109,6 +118,7 @@ function Close-StaleServiceWindows {
 
 if (-not (Test-Docker)) { Start-Docker }
 Write-Host '[1/4] Docker ready'
+Clear-StaleSandboxContainers
 
 docker compose -f compose.local.yml up -d
 if ($LASTEXITCODE -ne 0) { throw 'docker compose -f compose.local.yml up failed' }

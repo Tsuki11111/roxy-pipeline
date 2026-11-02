@@ -335,4 +335,4 @@ def render_concat_task(
         mark_failed(episode_id, node_run_id, f"concat failed: {exc}")
         raise
     finally:
-        release_memory()
+        release_memory(trim_os=True)

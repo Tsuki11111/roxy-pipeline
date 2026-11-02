@@ -110,12 +110,12 @@ Remotion（Node 22，Docker 沙箱，唯一渲染器）+ ffmpeg + LangGraph（�
 ### 5. 运行环境
 
 - 开发机：Windows 11 + Git Bash；Python 可用；Docker Desktop 已可用。本地默认 `compose.local.yml` 只起 Redis；Docker 仅用于 Redis 和 Remotion 沙箱。
-- **Remotion 沙箱**：需要 Docker；镜像 `docker build -f infra/remotion/Dockerfile -t roxy-remotion:4.0.539 .`，tag 与 `REMOTION_IMAGE` 一致。生成代码在 `tmp/remotion/`；镜像 digest + 版本进入镜头缓存键。Windows Git Bash 挂载路径需 `MSYS_NO_PATHCONV=1`。
+- **Remotion 沙箱**：需要 Docker；优先用 `scripts/dev/build_remotion.ps1` 构建镜像（构建后清理悬空镜像和 7 天前 Build Cache），tag 与 `REMOTION_IMAGE` 一致（默认 `roxy-remotion:4.0.539`）。沙箱容器带 `--init`、内存/swap 上限和限容 tmpfs，超时会主动删除；生成代码在 `tmp/remotion/`；镜像 digest + 版本进入镜头缓存键。Windows Git Bash 挂载路径需 `MSYS_NO_PATHCONV=1`。
 - **IndexTTS2 独立环境**：主项目 Python 3.12；IndexTTS2 固定在 `data/tools/indextts-venv`（Python 3.11 + torch 2.8 cu128），由 `scripts/runtime/indextts_server.py` 常驻 `127.0.0.1:8765`；模型在 `data/assets/voice/indextts2/`（gitignore）。8GB 显存下用 fp16，并把 Wav2Vec2-BERT 放 CPU 做一次性音色编码。TTS 是可选组件，未安装时跳过配音。
 - **对齐**：默认句级对齐（`ALIGN_LEVEL=sentence`），配音本身产出每句起止时间，字幕整句显示，不加载对齐模型。字级对齐为可选（`ALIGN_LEVEL=char`）：同一 Python 3.11 环境运行 `scripts/runtime/align_words.py`，中文模型在 `data/assets/voice/align/wav2vec2-chinese/`；`align.episode` 与 `voice.episode` 都在 media 队列，TTS 并发固定 1。
 - **内存自动回收**：配音结束停掉 IndexTTS2（`TTS_UNLOAD_AFTER_VOICE=true`），对齐前再兜底 `/shutdown`（`ALIGN_STOP_TTS=true`）；每个镜头渲染后、对齐/QC/拼接结束都调用 `release_memory()`。TTS 下次配音自动重启。16GB 本机不要关闭这些行为。
 - **最终视频输出**：渲染完成后写到 `output/YYYYMMDD-HHMMSS_<episode_id8>/episode.mp4`，同目录写 `metadata.json`；`episode.output_path` 指向该文件，只写本地文件系统。
-- **单机资源**：数据目录为 `data/`、`output/`、`tmp/`；它们都在 gitignore 中，升级/重装前手动备份。
+- **单机资源**：数据目录为 `data/`、`output/`、`tmp/`；它们都在 gitignore 中，升级/重装前手动备份。`workflow.cleanup` 每日清理过期 `tmp/remotion`（30 天）、`tmp/renders`（7 天）、`tmp/qc`（3 天）；成片默认保留最新 `OUTPUT_KEEP_VERSIONS=2` 版，QC 只保留 review 证据帧。`output/` 当前版本、`data/assets`、`data/tools` 不自动删除。
 - **后端禁止写死服务地址**：数据库、Redis、API 地址全部从环境变量 / `Settings` 读取；业务模块不出现 `localhost` 或容器名。地址只出现在 `.env` 和 compose 的环境变量里。
 - 磁盘建议：程序 + 依赖约 5GB；TTS 模型/venv 约 16GB；生成产物另计，建议至少预留 30GB。
 - 端口：API 8000、Vite 5173、Redis 6380；Remotion 沙箱只在 Docker 内部运行。

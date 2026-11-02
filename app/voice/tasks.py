@@ -336,4 +336,4 @@ def voice_episode_task(self, episode_id: str, node_run_id: str):
     finally:
         if get_settings().tts_unload_after_voice and request_tts_shutdown():
             logger.info("stopped IndexTTS2 server after voice episode=%s", episode_id)
-        release_memory()
+        release_memory(trim_os=True)

@@ -166,7 +166,7 @@ async def _align_episode(episode_id: str, node_run_id: str) -> None:
             _run_aligner, input_path, output_path, model_dir
         )
     finally:
-        release_memory()
+        release_memory(trim_os=True)
 
     aligned = json.loads(output_path.read_text(encoding="utf-8"))
     by_id = {item["id"]: item for item in aligned.get("lines", [])}

@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6380/0"
 
     output_root: str = "./output"
+    output_keep_versions: int = 2
     frontend_dist_dir: str = "./web/dist"
 
     app_secret_key: str = "dev-only-change-me"
@@ -105,6 +106,10 @@ class Settings(BaseSettings):
     # M5 ops: mark RUNNING nodes without heartbeat as failed so they can resume.
     reconciler_stale_s: int = 1800
     reconciler_interval_s: int = 60
+    cleanup_interval_s: int = 86400
+    tmp_renders_retention_days: int = 7
+    tmp_remotion_retention_days: int = 30
+    tmp_qc_retention_days: int = 3
     package_dir: str = "./tmp/packages"
 
     celery_task_always_eager: bool = False

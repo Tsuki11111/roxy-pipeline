@@ -2,6 +2,9 @@
 #   docker build -f infra/remotion/Dockerfile -t roxy-remotion:4.0.539 .
 FROM node:22-bookworm-slim
 
+LABEL roxy.pipeline="remotion"
+LABEL roxy.component="sandbox"
+
 RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' \
        /etc/apt/sources.list.d/debian.sources \
     && apt-get update \
@@ -13,7 +16,8 @@ RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' \
 
 WORKDIR /app
 COPY infra/remotion/template/package.json infra/remotion/template/package-lock.json ./
-RUN npm ci --ignore-scripts --no-audit --no-fund
+RUN npm ci --ignore-scripts --no-audit --no-fund \
+    && npm cache clean --force
 COPY infra/remotion/template/ ./
 
 RUN useradd -u 10001 -m appuser \

@@ -332,12 +332,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/stop_all.ps1 -Ke
 
 构建沙箱镜像（仓库根目录）：
 
-```bash
-docker build -f infra/remotion/Dockerfile -t roxy-remotion:4.0.539 .
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/build_remotion.ps1
 ```
 
+- 脚本会构建镜像、清理本项目悬空镜像，并清理 7 天前的 Build Cache（支持时再限制到 2GB）；加 `-SkipCachePrune` 可跳过缓存裁剪。
 - Docker 必须可用；镜像 tag 与 `REMOTION_IMAGE` 一致（默认 `roxy-remotion:4.0.539`）。
 - 沙箱无网络、只读根文件系统、非 root、限制 CPU/内存/PID；生成代码只写 `tmp/remotion/<episode_id>/`，不进仓库。
+- 运行容器带 `--init`、内存/swap 上限和限容 tmpfs；超时会主动删除容器，启动脚本会清理已退出的沙箱容器。
 - 生成代码受 Skill 约束：单镜头 ≤9000 字符、浅底深字、有角色必须出现；画面文字用 `PaperCard` Claude 暖纸卡（6 种样式、4 种纸色），约 1/3 镜头纯演示不放卡；切换配方在 slide/zoom/flip/drop/reveal/push 中轮换，位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°。
 - 背景与字幕：背景使用 Claude 纸墨语言（暖纸舞台 + 底部浅阴影）；字幕为深色半透明底、白字圆角字幕条。
 - 有角色的镜头必须有动效：从屏幕外冲入、呼吸轻摆、至少一次手势/让位；静态 `<Character>` 会被生成检查拦下。
@@ -356,7 +358,8 @@ output/20261029-185432_8c7ade6b/
 └─ metadata.json
 ```
 
-- `OUTPUT_ROOT=./output`，只写本地文件系统。
+- `OUTPUT_ROOT=./output`，只写本地文件系统；默认每期保留最新 `OUTPUT_KEEP_VERSIONS=2` 个版本。
+- `workflow.cleanup` 每日清理过期 `tmp/remotion`、`tmp/renders`、`tmp/qc`；QC 只保留 review 证据帧。
 - `episode.output_path` 指向该目录，`episode.output_meta` 记录本地路径和导出时间。
 - 没有对象存储副本；备份时同时保留 `data/db`、`data/assets` 和 `output/`。
 

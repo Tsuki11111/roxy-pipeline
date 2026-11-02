@@ -12,6 +12,7 @@ from app.models.core import Episode, EpisodeStatus, NodeRun, NodeStatus
 from app.workflow.celery_app import celery_app
 from app.db.task import run_async, task_session
 from app.workflow.outbox import dispatch_pending
+from app.workflow.cleanup import cleanup_temp_dirs
 
 logger = get_task_logger(__name__)
 
@@ -72,3 +73,18 @@ def dispatch_outbox_task(limit: int = 50):
     if dispatched:
         logger.info("dispatched %d outbox events", len(dispatched))
     return {"dispatched": dispatched}
+
+
+@celery_app.task(name="workflow.cleanup")
+def cleanup_temp_task():
+    async def _cleanup():
+        async with task_session() as session:
+            return await cleanup_temp_dirs(session)
+
+    result = run_async(_cleanup())
+    logger.info(
+        "temp cleanup removed %d dir(s), skipped %d",
+        len(result.get("deleted", [])),
+        len(result.get("skipped", [])),
+    )
+    return result

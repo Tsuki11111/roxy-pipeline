@@ -28,6 +28,7 @@ celery_app.conf.update(
     task_routes={
         "workflow.dispatch_outbox": {"queue": "workflow"},
         "workflow.reconcile_nodes": {"queue": "workflow"},
+        "workflow.cleanup": {"queue": "workflow"},
         "storyboard.generate": {"queue": "agent"},
         "remotion.generate": {"queue": "agent"},
         "voice.episode": {"queue": "media"},
@@ -51,6 +52,7 @@ celery_app.conf.update(
     task_annotations={
         "workflow.dispatch_outbox": {"soft_time_limit": 60, "time_limit": 120},
         "workflow.reconcile_nodes": {"soft_time_limit": 60, "time_limit": 120},
+        "workflow.cleanup": {"soft_time_limit": 600, "time_limit": 660},
         "storyboard.generate": {"soft_time_limit": 300, "time_limit": 330},
         "remotion.generate": {"soft_time_limit": 3600, "time_limit": 3900},
         "voice.episode": {"soft_time_limit": 3600, "time_limit": 3900},
@@ -68,6 +70,10 @@ celery_app.conf.update(
         "reconcile-nodes": {
             "task": "workflow.reconcile_nodes",
             "schedule": settings.reconciler_interval_s,
+        },
+        "cleanup-temp": {
+            "task": "workflow.cleanup",
+            "schedule": settings.cleanup_interval_s,
         },
     },
 )

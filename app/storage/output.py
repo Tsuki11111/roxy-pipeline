@@ -3,18 +3,74 @@
 from __future__ import annotations
 
 import json
+import logging
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
 from app.core.config import get_settings
 
+logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_OUTPUT_DIR_RE = re.compile(r"^\d{8}-\d{6}_([0-9a-f]{8})(?:-\d{6})?$")
 
 
 def _resolve(value: str) -> Path:
     path = Path(value).expanduser()
     return path if path.is_absolute() else (PROJECT_ROOT / path).resolve()
+
+
+def prune_episode_outputs(
+    episode_id: str,
+    current_path: str | Path,
+    *,
+    keep: int | None = None,
+) -> list[str]:
+    """Delete superseded timestamped output directories for one episode."""
+    settings = get_settings()
+    root = _resolve(settings.output_root)
+    current = Path(current_path).expanduser()
+    if not current.is_absolute():
+        current = (PROJECT_ROOT / current).resolve()
+    else:
+        current = current.resolve()
+    if not current.is_relative_to(root):
+        return []
+
+    prefix = episode_id[:8]
+    candidates: list[Path] = []
+    if root.is_dir():
+        for child in root.iterdir():
+            if not child.is_dir() or not (child / "episode.mp4").is_file():
+                continue
+            match = _OUTPUT_DIR_RE.match(child.name)
+            if match is None or match.group(1) != prefix:
+                continue
+            candidates.append(child.resolve())
+    candidates.sort(key=lambda path: path.name, reverse=True)
+    keep_count = max(1, int(settings.output_keep_versions if keep is None else keep))
+    kept: list[Path] = []
+    if current.parent in candidates:
+        kept.append(current.parent)
+    for child in candidates:
+        if len(kept) >= keep_count:
+            break
+        if child not in kept:
+            kept.append(child)
+
+    deleted: list[str] = []
+    for child in candidates:
+        if child in kept:
+            continue
+        try:
+            shutil.rmtree(child)
+            deleted.append(child.name)
+        except OSError:
+            logger.exception("failed to prune output directory %s", child)
+    if deleted:
+        logger.info("pruned superseded outputs episode=%s dirs=%s", episode_id, deleted)
+    return deleted
 
 
 def export_episode_video(

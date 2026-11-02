@@ -35,6 +35,36 @@ logger = logging.getLogger(__name__)
 
 
 
+def _prune_qc_frames(qc_root: Path, issues: list[dict]) -> int:
+    """Keep only evidence frames referenced by review rows."""
+    frames_dir = qc_root / "frames"
+    if not frames_dir.is_dir():
+        return 0
+    keep = {
+        Path(str(issue["evidence_path"])).resolve()
+        for issue in issues
+        if issue.get("evidence_path")
+    }
+    removed = 0
+    for path in frames_dir.rglob("*"):
+        if path.is_file() and path.resolve() not in keep:
+            path.unlink(missing_ok=True)
+            removed += 1
+    for path in sorted(frames_dir.rglob("*"), reverse=True):
+        if path.is_dir():
+            try:
+                path.rmdir()
+            except OSError:
+                pass
+    try:
+        qc_root.rmdir()
+    except OSError:
+        pass
+    if removed:
+        logger.info("pruned %d unreferenced QC frame(s) under %s", removed, qc_root)
+    return removed
+
+
 async def _mark_failed(episode_id: str, node_run_id: str, error: str) -> None:
     async with task_session() as session:
         node = await session.get(NodeRun, node_run_id)
@@ -190,6 +220,11 @@ async def _qc_episode(episode_id: str, node_run_id: str) -> None:
             await transition_episode(session, episode_id, EpisodeStatus.READY)
             await session.commit()
 
+    try:
+        _prune_qc_frames(qc_root, issues)
+    except Exception:
+        logger.exception("QC frame pruning failed episode=%s", episode_id)
+
     logger.info(
         "qc done episode=%s level=%s errors=%d warnings=%d frames=%d",
         episode_id,
@@ -214,4 +249,4 @@ def qc_episode_task(self, episode_id: str, node_run_id: str):
         run_async(_mark_failed(episode_id, node_run_id, str(exc)))
         raise
     finally:
-        release_memory()
+        release_memory(trim_os=True)
