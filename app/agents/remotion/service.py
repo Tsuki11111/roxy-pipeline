@@ -147,6 +147,64 @@ def _check_layering(code: str) -> None:
                 )
 
 
+def _check_layout(code: str, payload: dict) -> None:
+    character = payload.get("character")
+    side = character.get("position") if character else None
+    if side not in {"left", "right", "center"}:
+        return
+
+    def numeric(attrs: str, name: str) -> int | None:
+        match = re.search(rf"\b{name}=\{{(-?\d+)\}}", attrs)
+        if match:
+            return int(match.group(1))
+        match = re.search(rf"\b{name}=['\"](-?\d+)['\"]", attrs)
+        return int(match.group(1)) if match else None
+
+    def violation(x: int | None, width: int | None) -> str | None:
+        if x is None:
+            return None
+        right = x + width if width is not None else None
+        if side == "left" and x < 840:
+            return f"内容 x={x} 进入角色区域；角色在左时所有卡片/图示必须 x ≥ 840"
+        if side == "right" and right is not None and right > 1080:
+            return (
+                f"内容右边界 {right} 进入角色区域；"
+                "角色在右时所有卡片/图示右边界必须 ≤ 1080"
+            )
+        if side == "right" and right is None and x > 1080:
+            return f"内容 x={x} 进入角色区域；角色在右时必须 x ≤ 1080"
+        if side == "center":
+            overlaps = (
+                (right is not None and x < 1300 and right > 620)
+                or (right is None and 620 <= x <= 1300)
+            )
+            if overlaps:
+                return (
+                    f"内容 x={x}–{right} 与中间角色重叠；"
+                    "角色居中时卡片/图示必须放在左侧 x ≤ 600 或右侧 x ≥ 1320"
+                )
+        return None
+
+    card_blocks = re.findall(r"<PaperCard\b([\s\S]*?)/>", code)
+    for attrs in card_blocks:
+        left = numeric(attrs, "left")
+        width = numeric(attrs, "width")
+        issue = violation(left if left is not None else 120, width or 1040)
+        if issue:
+            raise RemotionPolicyError(issue + "；角色与卡片不得有任何交集。")
+
+    for match in re.finditer(r"<([A-Z][A-Za-z0-9]*)\b([^>]*?)/?>", code):
+        tag, attrs = match.group(1), match.group(2)
+        if tag in {"Character", "Stage", "Sequence", "PaperCard", "AbsoluteFill"}:
+            continue
+        x = numeric(attrs, "x")
+        if x is None:
+            x = numeric(attrs, "left")
+        issue = violation(x, numeric(attrs, "width"))
+        if issue:
+            raise RemotionPolicyError(issue + "；角色与卡片不得有任何交集。")
+
+
 def _check_continuity(code: str, payload: dict) -> str | None:
     continuity = payload.get("continuity") or {}
     scene = continuity.get("scene") or {}
@@ -485,6 +543,7 @@ async def _generate_one(
         )
     _check_character_motion(code, payload)
     _check_layering(code)
+    _check_layout(code, payload)
     style = payload.get("card_style")
     if style is None:
         if "components/PaperCard" in code:

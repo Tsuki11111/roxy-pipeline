@@ -8,6 +8,7 @@ from sqlalchemy import select
 from app.agents.remotion.service import (
     RemotionPolicyError,
     _check_layering,
+    _check_layout,
     _generate_one,
     generate_remotion_code,
     start_remotion_codegen,
@@ -136,6 +137,25 @@ def test_check_layering_requires_card_above_character():
         _check_layering('<PaperCard text="x" zIndex={4} />')
     with pytest.raises(RemotionPolicyError):
         _check_layering('<PaperCard text="x" style={{zIndex: 2}} />')
+
+
+def test_check_layout_forbids_character_card_overlap():
+    left = {"character": {"position": "left"}}
+    with pytest.raises(RemotionPolicyError):
+        _check_layout('<PaperCard left={600} width={790} />', left)
+    _check_layout('<PaperCard left={900} width={790} />', left)
+    with pytest.raises(RemotionPolicyError):
+        _check_layout('<DimPanel x={560} />', left)
+
+    right = {"character": {"position": "right"}}
+    with pytest.raises(RemotionPolicyError):
+        _check_layout('<PaperCard left={600} width={790} />', right)
+    _check_layout('<PaperCard left={200} width={790} />', right)
+
+    center = {"character": {"position": "center"}}
+    with pytest.raises(RemotionPolicyError):
+        _check_layout('<PaperCard left={800} width={600} />', center)
+    _check_layout('<PaperCard left={200} width={300} />', center)
 
 
 def test_generate_one_rejects_caption():
