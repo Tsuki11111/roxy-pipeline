@@ -300,7 +300,7 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - 布局约束：Remotion 不做关键词标签；画面文字用 `PaperCard` Claude 暖纸卡（variant：note/quote/index/letter/sticky/specimen；tone：cream/sand/peach/sage；transition：slide/zoom/flip/drop/reveal/push）。Python 按镜头序号排期：约 1/3 镜头 `card_style=null` 做纯演示，其余给卡并指定样式/动效；切换位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°。
 - 镜头分组：`shot_line` 关联 1–4 句连续台词，单镜 3–20 秒；详细讲解保持一个镜头，用 `<Sequence>` 演分子动画；章节台词 ≥4 句时至少一个多句镜头。
 - 视觉连续性：`continuity_group` + `scene`（setting/entities）同组共享；Remotion 同组按 seq 串行生成，后一镜 payload 带 `previous.code`，实体节点必须带 `data-entity="<id>"`，缺失重试一次后失败。
-- 角色层级：`Character` 通过 React Portal 进入 `Stage` 的 zIndex 1 背景层，SVG/PaperCard/文字在 zIndex 2 内容层；渲染前会把 `infra/remotion/template/src/components` 同步到现有 workdir，`renderer_version=m6.3-layer-fix` 使旧片段缓存失效。
+- 角色层级：`Stage` 使用 `isolation:isolate` 建立层叠上下文，`Character` 固定 `zIndex:-1`，所有 SVG/PaperCard/文字在其上方；渲染前会把 `infra/remotion/template/src/components` 同步到现有 workdir，`renderer_version=m6.4-layer-css` 使旧片段缓存失效。
 - 角色动效：有 `character` 的镜头必须有入场（offsetX ±400–600、opacity 0→1、scale 0.94→1、rotate ±2°）、呼吸轻摆和至少一次手势/让位；生成检查会拒绝只有 `src/side/height` 的静态 `<Character>`。
 - 背景与字幕：`Stage` 统一渲染 Claude 暖纸背景（纸纹 + 底部浅阴影 + 手绘星），不再使用旧纸纹/木地板资产；`SubtitleTrack` 改为暖纸底 + 墨字 + 陶土短线。
 - 改动 `infra/remotion/template/` 后必须重建镜像 `roxy-remotion:4.0.539`，否则沙箱仍用旧组件。

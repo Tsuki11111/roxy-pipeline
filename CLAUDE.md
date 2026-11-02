@@ -79,7 +79,7 @@ Remotion（Node 22，Docker 沙箱，唯一渲染器）+ ffmpeg + LangGraph（�
 - **新期自动 codegen**：配音/对齐完成后 `start_auto_render` 先排队 `remotion.generate`（`REMOTION_AUTO_CODEGEN=true`），成功后自动进入渲染；codegen 失败或未全部 READY 时标记失败，不回退到其他渲染器。不要只在编辑器手动点生成。生成中可调用 `POST /actions/cancel-remotion` 取消，已就绪的旧代码保留。
 - **每镜头一个 Composition**：LLM 只生成 `src/shots/shot_<seq>.tsx`；Root、Composition ID、时长、尺寸、素材映射由 Python 生成，LLM 不得改。
 - **视觉连续性**：分镜输出 `continuity_group` 与 `scene`（setting + entities）；同组共享背景和实体设定，codegen 按组串行，后一镜复用前一镜实体造型；实体节点必须带 `data-entity="<id>"`，缺失会重试并失败。
-- **角色层级**：`Character` 由 `Stage` 自动 portal 到 zIndex 1 的背景层，所有 SVG 图示、PaperCard 和文字都在 zIndex 2 内容层；生成代码不得把 Character 包进动画/变换容器，角色 zIndex ≤5、PaperCard ≥8。
+- **角色层级**：`Stage` 用 `isolation:isolate` 建立独立层叠上下文；`Character` 固定 `zIndex:-1`，所有 SVG 图示、PaperCard 和文字都在角色上方。生成代码不得把 Character 包进动画/变换容器，角色 zIndex ≤5、PaperCard ≥8。
 - 生成代码只能在 **Docker 沙箱**执行（`--network none --read-only --user 10001 --cpus 2 -m 3g --pids-limit 256`），禁止在宿主机直接 `npm run`。
 - 生成代码只写 `tmp/remotion/<episode_id>/`，不进主仓库；固定依赖宇宙（react/remotion/@remotion/*/模板组件），不得新增 npm 依赖、外链或 Node 内置模块。
 - 全部镜头代码 READY 才启用 Remotion；单镜头失败即失败，不切换渲染器。缓存键必须包含 renderer、Remotion 版本、镜像 digest 和该镜头 code hash。

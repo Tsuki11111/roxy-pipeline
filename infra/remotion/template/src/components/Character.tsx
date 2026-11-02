@@ -1,7 +1,5 @@
 import {Img, staticFile} from 'remotion';
 import type {CSSProperties} from 'react';
-import {createPortal} from 'react-dom';
-import {useCharacterLayer} from './Stage';
 
 const assetSrc = (value: string) =>
   value.startsWith('/') || value.startsWith('http') ? value : staticFile(value);
@@ -39,8 +37,7 @@ export const Character = ({
       ? `translateX(calc(-50% + ${offsetX}px))`
       : `translateX(${offsetX}px)`;
 
-  const layer = useCharacterLayer();
-  const image = (
+  return (
     <Img
       src={assetSrc(src)}
       style={{
@@ -58,11 +55,9 @@ export const Character = ({
         )}px)`,
         willChange: 'transform, opacity, filter',
         ...style,
-        // 角色永远在卡片下方，避免生成代码用 style/zIndex 把卡片文字盖住。
-        zIndex: Math.min(zIndex, Number(style?.zIndex) || zIndex, 5),
+        // 角色固定在内容下方；Stage 的 isolation 保证它仍在舞台背景之上。
+        zIndex: Math.min(zIndex, -1),
       }}
     />
   );
-  // 角色统一进 Stage 的背景层，SVG 图示、卡片等所有内容层永远在它上方。
-  return layer ? createPortal(image, layer) : image;
 };
