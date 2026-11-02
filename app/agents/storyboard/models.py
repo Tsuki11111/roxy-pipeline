@@ -1,3 +1,5 @@
+"""分镜草稿与节奏报告模型。"""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field

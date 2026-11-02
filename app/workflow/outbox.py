@@ -1,3 +1,5 @@
+"""Outbox 事件入队与派发。"""
+
 from __future__ import annotations
 
 from collections.abc import Callable

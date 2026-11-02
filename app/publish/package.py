@@ -1,3 +1,5 @@
+"""构建本地发布包与 manifest。"""
+
 from __future__ import annotations
 
 import json

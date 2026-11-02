@@ -1,3 +1,5 @@
+"""渲染、Remotion 生成/取消与 Remotion 查询接口。"""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status

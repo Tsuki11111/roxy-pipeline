@@ -1,3 +1,5 @@
+"""加载资产规划 Prompt。"""
+
 from __future__ import annotations
 
 from functools import lru_cache

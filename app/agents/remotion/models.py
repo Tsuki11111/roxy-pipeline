@@ -1,3 +1,5 @@
+"""Remotion 代码生成的数据模型。"""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field

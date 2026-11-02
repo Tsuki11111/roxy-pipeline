@@ -1,3 +1,5 @@
+"""失败/中断任务的续跑。"""
+
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession

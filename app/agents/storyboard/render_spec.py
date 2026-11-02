@@ -1,3 +1,5 @@
+"""从数据库与资产构建 EpisodeSpec。"""
+
 from __future__ import annotations
 
 from sqlalchemy import select

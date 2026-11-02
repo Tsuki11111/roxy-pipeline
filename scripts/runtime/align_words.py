@@ -1,3 +1,5 @@
+"""字级对齐运行时脚本。"""
+
 from __future__ import annotations
 
 import argparse

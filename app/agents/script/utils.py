@@ -1,3 +1,5 @@
+"""脚本读取、校验与快照存储工具。"""
+
 from __future__ import annotations
 
 from sqlalchemy import select

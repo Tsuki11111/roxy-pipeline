@@ -1,3 +1,5 @@
+"""分镜校验、节奏存储与读取辅助。"""
+
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession

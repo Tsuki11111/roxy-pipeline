@@ -1,3 +1,5 @@
+"""资产入库、去重与复用查询。"""
+
 from __future__ import annotations
 
 from pathlib import Path

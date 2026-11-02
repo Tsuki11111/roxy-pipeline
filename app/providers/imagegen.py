@@ -1,3 +1,5 @@
+"""图像生成 Provider（Seedream/Mock）。"""
+
 from __future__ import annotations
 
 import base64

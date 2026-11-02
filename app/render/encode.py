@@ -1,3 +1,5 @@
+"""ffmpeg 编码、拼接与响度处理。"""
+
 from __future__ import annotations
 
 import subprocess

@@ -1,3 +1,5 @@
+"""IndexTTS2 常驻 HTTP 服务。"""
+
 from __future__ import annotations
 
 import argparse

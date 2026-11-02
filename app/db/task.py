@@ -1,3 +1,5 @@
+"""Celery 任务的独立数据库会话。"""
+
 from __future__ import annotations
 
 import asyncio

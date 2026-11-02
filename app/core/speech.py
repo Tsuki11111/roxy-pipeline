@@ -1,3 +1,5 @@
+"""中文口播时长估算。"""
+
 from __future__ import annotations
 
 from collections.abc import Iterable

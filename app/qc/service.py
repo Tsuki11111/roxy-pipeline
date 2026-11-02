@@ -1,3 +1,5 @@
+"""启动质检任务。"""
+
 from __future__ import annotations
 
 import hashlib

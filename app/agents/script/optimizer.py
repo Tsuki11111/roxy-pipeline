@@ -1,3 +1,5 @@
+"""文稿润色：口语化改写并保持内容完整。"""
+
 from __future__ import annotations
 
 import json

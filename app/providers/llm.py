@@ -1,3 +1,5 @@
+"""LLM Provider 与 JSON 调用封装。"""
+
 from __future__ import annotations
 
 import asyncio

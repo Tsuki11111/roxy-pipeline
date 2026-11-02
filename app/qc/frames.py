@@ -1,3 +1,5 @@
+"""从成片中抽帧。"""
+
 from __future__ import annotations
 
 import subprocess

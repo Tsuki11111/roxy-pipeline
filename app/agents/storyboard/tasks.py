@@ -1,3 +1,5 @@
+"""Celery 任务：storyboard.generate。"""
+
 from __future__ import annotations
 
 import logging

@@ -1,3 +1,5 @@
+"""SQLAlchemy 数据模型。"""
+
 from app.models.core import (
     Asset,
     AssetStatus,

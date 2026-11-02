@@ -1,3 +1,5 @@
+"""系列 CRUD 接口。"""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status

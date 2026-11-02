@@ -1,3 +1,5 @@
+"""调用 Docker 渲染 Remotion 镜头并归一化。"""
+
 from __future__ import annotations
 
 import subprocess

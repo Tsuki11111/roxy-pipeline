@@ -1,3 +1,5 @@
+"""资产文件哈希、图片信息与复制。"""
+
 from __future__ import annotations
 
 import hashlib

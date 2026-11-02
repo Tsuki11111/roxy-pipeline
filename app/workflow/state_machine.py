@@ -1,3 +1,5 @@
+"""视频期状态机与合法转换。"""
+
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession

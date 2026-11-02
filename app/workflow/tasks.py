@@ -1,3 +1,5 @@
+"""Celery 任务：outbox 派发与 stale 节点回收。"""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone

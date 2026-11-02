@@ -1,3 +1,5 @@
+"""DeepSeek 多模态视觉检查。"""
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -1,3 +1,5 @@
+"""单句修订与受影响镜头重跑。"""
+
 from __future__ import annotations
 
 from sqlalchemy import delete

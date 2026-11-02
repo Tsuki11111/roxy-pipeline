@@ -1,3 +1,5 @@
+"""启动句级/字级对齐任务。"""
+
 from __future__ import annotations
 
 import hashlib

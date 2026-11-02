@@ -1,3 +1,5 @@
+"""视频期 CRUD、视频文件与删除。"""
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -1,3 +1,5 @@
+"""健康检查接口。"""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends

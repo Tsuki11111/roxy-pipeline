@@ -1,3 +1,5 @@
+"""脚本结构、句长与润色完整性校验。"""
+
 from __future__ import annotations
 
 import re

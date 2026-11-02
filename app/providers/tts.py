@@ -1,3 +1,5 @@
+"""IndexTTS2 本地 TTS 服务适配。"""
+
 from __future__ import annotations
 
 import atexit

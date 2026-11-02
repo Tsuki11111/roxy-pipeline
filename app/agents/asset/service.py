@@ -1,3 +1,5 @@
+"""文本→无文字演示素材的规划、复用与生成。"""
+
 from __future__ import annotations
 
 import re

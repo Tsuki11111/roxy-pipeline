@@ -1,3 +1,5 @@
+"""分镜生成、校验、确认与 render spec 接口。"""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status

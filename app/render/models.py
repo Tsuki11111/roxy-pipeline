@@ -1,3 +1,5 @@
+"""EpisodeSpec、ShotSpec 等渲染模型。"""
+
 from __future__ import annotations
 
 from typing import Literal

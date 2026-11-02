@@ -1,3 +1,5 @@
+"""资产规划 Agent 的数据模型。"""
+
 from __future__ import annotations
 
 from typing import Literal

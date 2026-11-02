@@ -1,3 +1,5 @@
+"""Celery 任务：remotion.generate。"""
+
 from __future__ import annotations
 
 import logging

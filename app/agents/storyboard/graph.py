@@ -1,3 +1,5 @@
+"""LangGraph 分镜图：台词分组与镜头编排。"""
+
 from __future__ import annotations
 
 import json

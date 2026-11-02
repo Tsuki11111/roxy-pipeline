@@ -1,3 +1,5 @@
+"""启动配音任务与音色标识。"""
+
 from __future__ import annotations
 
 import hashlib

@@ -1,3 +1,5 @@
+"""脚本导入、润色、校验与确认接口。"""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status

@@ -1,3 +1,5 @@
+"""每镜头 Remotion TSX 生成、校验与持久化。"""
+
 from __future__ import annotations
 
 import asyncio

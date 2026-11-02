@@ -1,3 +1,5 @@
+"""分镜场景归一化与视觉连续性辅助。"""
+
 from __future__ import annotations
 
 

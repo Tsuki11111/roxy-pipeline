@@ -1,3 +1,5 @@
+"""加载 Remotion 提示词与 Skill。"""
+
 from __future__ import annotations
 
 import hashlib

@@ -1,3 +1,5 @@
+"""应用配置与环境变量。"""
+
 from __future__ import annotations
 
 from functools import lru_cache

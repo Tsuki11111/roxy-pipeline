@@ -1,3 +1,5 @@
+"""成片输出到时间戳目录。"""
+
 from __future__ import annotations
 
 import json

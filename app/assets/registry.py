@@ -1,3 +1,5 @@
+"""背景/地板等资产解析与复用键映射。"""
+
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession

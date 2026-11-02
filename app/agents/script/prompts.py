@@ -1,3 +1,5 @@
+"""加载脚本生成与润色 Prompt。"""
+
 from __future__ import annotations
 
 from functools import lru_cache

@@ -1,3 +1,5 @@
+"""音轨装配与响度归一化。"""
+
 from __future__ import annotations
 
 import hashlib

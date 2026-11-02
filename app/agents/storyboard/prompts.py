@@ -1,3 +1,5 @@
+"""加载分镜 Prompt 与图版本。"""
+
 from __future__ import annotations
 
 import hashlib

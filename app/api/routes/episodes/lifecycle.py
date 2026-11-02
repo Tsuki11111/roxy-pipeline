@@ -1,3 +1,5 @@
+"""视频期生命周期动作：取消、发布、发布包、续跑与单句修订。"""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status

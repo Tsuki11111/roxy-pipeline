@@ -1,3 +1,5 @@
+"""启动分镜生成任务。"""
+
 from __future__ import annotations
 
 import hashlib

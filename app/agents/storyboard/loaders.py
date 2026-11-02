@@ -1,3 +1,5 @@
+"""分镜阶段的数据加载器。"""
+
 from __future__ import annotations
 
 from sqlalchemy import select

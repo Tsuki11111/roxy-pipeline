@@ -1,3 +1,5 @@
+"""FastAPI 应用入口，托管 API 与前端构建产物。"""
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager

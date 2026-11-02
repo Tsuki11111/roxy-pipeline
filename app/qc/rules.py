@@ -1,3 +1,5 @@
+"""确定性质检规则：时长、字幕、音量与画面。"""
+
 from __future__ import annotations
 
 import re

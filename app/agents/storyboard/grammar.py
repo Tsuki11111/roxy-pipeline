@@ -1,3 +1,5 @@
+"""分镜视觉语法、资源目录与时长估算。"""
+
 from __future__ import annotations
 
 import json

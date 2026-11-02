@@ -1,3 +1,5 @@
+"""Celery 任务：render.episode/shot/concat。"""
+
 from __future__ import annotations
 
 import asyncio

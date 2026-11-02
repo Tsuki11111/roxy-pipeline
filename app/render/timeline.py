@@ -1,3 +1,5 @@
+"""镜头时间线与字幕分块。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

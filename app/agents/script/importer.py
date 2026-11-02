@@ -1,3 +1,5 @@
+"""文章导入：理解长文并生成结构化口播脚本。"""
+
 from __future__ import annotations
 
 import json

@@ -1,3 +1,5 @@
+"""项目根目录与路径解析。"""
+
 from __future__ import annotations
 
 from pathlib import Path

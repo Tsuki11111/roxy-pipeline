@@ -1,3 +1,5 @@
+"""单句脚本编辑接口。"""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException

@@ -1,3 +1,5 @@
+"""Celery 应用、路由与 beat 调度。"""
+
 from __future__ import annotations
 
 from celery import Celery

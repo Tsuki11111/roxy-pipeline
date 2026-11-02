@@ -1,3 +1,5 @@
+"""资产库 API：上传、审批、生成与文件访问。"""
+
 from __future__ import annotations
 
 import base64

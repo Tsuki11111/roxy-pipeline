@@ -1,3 +1,5 @@
+"""视频期路由包。"""
+
 from __future__ import annotations
 
 from fastapi import APIRouter

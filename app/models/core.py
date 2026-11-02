@@ -1,3 +1,5 @@
+"""核心 ORM 模型：系列、视频期、脚本、镜头、资产与节点。"""
+
 from __future__ import annotations
 
 import enum

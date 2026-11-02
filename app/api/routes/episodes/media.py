@@ -1,3 +1,5 @@
+"""配音、对齐、质检与素材生成动作。"""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status

@@ -1,3 +1,5 @@
+"""任务取消与取消检查。"""
+
 from __future__ import annotations
 
 from sqlalchemy import select

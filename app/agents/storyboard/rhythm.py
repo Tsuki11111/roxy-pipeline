@@ -1,3 +1,5 @@
+"""分镜节奏规则校验与确定性修复。"""
+
 from __future__ import annotations
 
 from collections.abc import Sequence

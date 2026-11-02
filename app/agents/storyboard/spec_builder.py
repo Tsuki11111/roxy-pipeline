@@ -1,3 +1,5 @@
+"""把 Shot/ShotLine 转换成渲染 spec。"""
+
 from __future__ import annotations
 
 import hashlib

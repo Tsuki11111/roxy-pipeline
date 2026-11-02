@@ -1,3 +1,5 @@
+"""API 数据库引擎与会话。"""
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator

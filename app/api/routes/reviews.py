@@ -1,3 +1,5 @@
+"""质检 review 查询接口。"""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone

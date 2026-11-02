@@ -1,3 +1,5 @@
+"""启动渲染、自动渲染与重渲染。"""
+
 from __future__ import annotations
 
 import hashlib
