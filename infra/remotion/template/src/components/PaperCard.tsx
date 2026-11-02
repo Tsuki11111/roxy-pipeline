@@ -175,7 +175,14 @@ export const PaperCard = ({
   };
 
   return (
-    <div style={{...common, ...style}}>
+    <div
+      style={{
+        ...common,
+        ...style,
+        // 卡片永远盖在角色和演示图形上方，保证文字不被遮挡。
+        zIndex: Math.max(zIndex, Number(style?.zIndex) || 0, 8),
+      }}
+    >
       <div style={texture} />
 
       {variant === 'specimen' && (

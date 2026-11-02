@@ -119,6 +119,34 @@ def _check_character_motion(code: str, payload: dict) -> None:
     )
 
 
+def _check_layering(code: str) -> None:
+    character_blocks = re.findall(r"<Character\b[\s\S]*?/>", code)
+    for block in character_blocks:
+        for value in re.findall(r"zIndex=\{(-?\d+)\}", block):
+            if int(value) > 5:
+                raise RemotionPolicyError(
+                    "角色 zIndex 不能超过 5；卡片必须盖在角色上方，"
+                    "否则会遮挡卡片文字。"
+                )
+        for value in re.findall(r"zIndex\s*:\s*(-?\d+)", block):
+            if int(value) > 5:
+                raise RemotionPolicyError(
+                    "角色 style.zIndex 不能超过 5；卡片必须盖在角色上方。"
+                )
+    card_blocks = re.findall(r"<PaperCard\b[\s\S]*?/>", code)
+    for block in card_blocks:
+        for value in re.findall(r"zIndex=\{(-?\d+)\}", block):
+            if int(value) < 8:
+                raise RemotionPolicyError(
+                    "PaperCard zIndex 不能低于 8；卡片必须盖在角色上方。"
+                )
+        for value in re.findall(r"zIndex\s*:\s*(-?\d+)", block):
+            if int(value) < 8:
+                raise RemotionPolicyError(
+                    "PaperCard style.zIndex 不能低于 8；卡片必须盖在角色上方。"
+                )
+
+
 def _check_continuity(code: str, payload: dict) -> str | None:
     continuity = payload.get("continuity") or {}
     scene = continuity.get("scene") or {}
@@ -456,6 +484,7 @@ async def _generate_one(
             "（note/quote/index/letter/sticky/specimen，Claude 纸卡风格）。"
         )
     _check_character_motion(code, payload)
+    _check_layering(code)
     style = payload.get("card_style")
     if style is None:
         if "components/PaperCard" in code:

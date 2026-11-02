@@ -121,11 +121,11 @@ description: 为单个分镜生成可编译的 Remotion/React 镜头组件（自
 
 ## 角色与动效（强约束）
 
-- 输入 JSON 有 `character` 时必须画出 Roxy，并且**整镜不能静止**；`<Character>` 不能只写 `src/side/height`。
+- 输入 JSON 有 `character` 时必须画出 Roxy，并且**整镜不能静止**；`<Character>` 不能只写 `src/side/height`。Character 必须直接放在 `<Stage>` 下，不要包在动画/变换容器里；它会自动进入背景层，所有 SVG/卡片/图示都在它上方。
 - 入场：从角色所在侧屏幕外冲入，280–360ms；`offsetX` 从 ±(400–600) 回到 0，`opacity` 0→1，`scale` 0.94→1，`rotate` ±2°→0；用 spring（damping 12–16）。
 - 停留：保留呼吸/轻摆，`offsetX` 用 `Math.sin(frame / 18) * (4–10)`，`scale` 1±0.008；不要整镜定死。
 - 动作节点：卡片或关键图形出现时，至少做一次手势/前倾/让位，例如 `offsetX` 再偏 ±(20–60) 或 `scale` 1.01–1.04，持续 8–16 帧。
-- 角色默认 zIndex 3，卡片 zIndex 8；角色可以被卡片局部遮挡，但不能盖住卡片文字，也不要和卡片抢同一侧。
+- 角色默认 zIndex 3，卡片 zIndex 8；角色可以被卡片局部遮挡，但不能盖住卡片文字，也不要和卡片抢同一侧。角色 `zIndex` 必须 ≤5，`PaperCard` 必须 ≥8，禁止用 `style` 绕过；卡片文字区域上方不得再放角色/SVG/装饰。
 - 同一镜头只用一张角色图；换姿势靠不同镜头的 asset，不要在同一镜里切换 src。
 - 只有输入 `character` 为 `null` 时才允许纯图形镜头。
 

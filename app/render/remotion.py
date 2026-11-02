@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -79,6 +80,19 @@ def _first_frame(segment: Path, out: Path) -> Path:
     return out
 
 
+def _sync_template_components(workdir: Path) -> None:
+    """Apply the latest shared components to an existing episode workdir."""
+    template = PROJECT_ROOT / "infra" / "remotion" / "template" / "src"
+    if not template.is_dir() or not workdir.is_dir():
+        return
+    shutil.copytree(
+        template / "components",
+        workdir / "src" / "components",
+        dirs_exist_ok=True,
+    )
+    shutil.copy2(template / "theme.ts", workdir / "src" / "theme.ts")
+
+
 def render_shot_remotion(
     spec: EpisodeSpec,
     *,
@@ -93,6 +107,7 @@ def render_shot_remotion(
     if entry is None:
         raise RuntimeError(f"no remotion composition for shot {shot_id}")
     workdir = _workdir(spec)
+    _sync_template_components(workdir)
     settings = get_settings()
     raw_name = f"{entry.composition_id}.mp4"
     raw = docker.render_shot(workdir, entry.composition_id, raw_name)

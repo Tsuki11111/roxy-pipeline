@@ -45,10 +45,11 @@ $error_feedback
 - 动效幅度下限：位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°；spring 允许过冲。
 - 卡片文本 20–90 字，优先用 `narration`/`card.text`，用 `lines` 拆成 2–4 行；不得扩写原文，不新增事实/数字/结论。
 - 卡片不要遮挡角色脸/手，不要压到 y 940–1080 字幕区；底部字幕由 Python 统一叠加，不要 import `Subtitle`。
+- 层级硬规则：`Character` 的 `zIndex` 必须 ≤5，`PaperCard` 必须 ≥8；不得通过 `style` 覆盖。卡片文字区域上方不得再放角色、SVG、图形或任何装饰元素。
 
 ## 角色动效硬规则
 
-- 输入有 `character` 时必须画出 Roxy 并让它动起来；`<Character>` 不能只有 `src/side/height`。
+- 输入有 `character` 时必须画出 Roxy 并让它动起来；`<Character>` 不能只有 `src/side/height`。Character 必须直接放在 `<Stage>` 下，不要包在动画/变换容器里；所有动效写在 Character props 上（它会自动进入背景层）。
 - 入场从角色侧屏幕外冲入，280–360ms：`offsetX` ±(400–600)→0、`opacity` 0→1、`scale` 0.94→1、`rotate` ±2°→0，用 spring。
 - 停留要有呼吸/轻摆（`offsetX` 用 `Math.sin(frame/18)*(4–10)`）；卡片或关键图形出现时至少做一次手势/前倾/让位（offsetX ±20–60 或 scale 1.01–1.04）。
 - 角色可以被卡片局部遮挡，但不能盖住卡片文字；同一镜头只用一张角色图。

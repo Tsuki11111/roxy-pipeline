@@ -9,6 +9,7 @@ from app.providers.llm import LLMClient, LLMError
 SYSTEM = (
     "你是严格的视频质检员。只输出 JSON，不要解释、不要 Markdown。"
     "重点检查：角色是否被裁切或明显变形、字幕/卡片文字是否溢出或遮挡、"
+    "角色身体/头发/手/道具是否盖住卡片内任何文字（即使只遮住一两个字也要报）、"
     "画面是否与台词语义明显不符、是否有水印或生成伪影。"
     "底部字幕条是按时间分块显示的，可能只显示整句的一部分，句末标点出现在下一块是正常的；"
     "不要因为字幕只显示半句或缺少句末标点就判定溢出。"
@@ -18,7 +19,7 @@ SYSTEM = (
 )
 
 FRAME_SCHEMA = (
-    '{"issues":[{"frame_index":1,"shot_seq":1,"type":"character_crop",'
+    '{"issues":[{"frame_index":1,"shot_seq":1,"type":"character_crop|card_overlap",'
     '"severity":"warning|error","detail":"具体问题","suggestion":"修复建议",'
     '"confidence":0.8}]}。没有问题时输出 {"issues":[]}。'
 )
@@ -31,6 +32,7 @@ def _frame_context(frames: list[dict]) -> str:
         lines.append(
             f"{index}. 第{frame['seq']}镜头，{frame['section']}，"
             f"{frame['time_ms']}ms，卡片 {frame.get('card_type', '')}，"
+            f"角色 {'有' if frame.get('has_character') else '无'}，"
             f"台词：{narration}"
         )
     return "\n".join(lines)
@@ -94,14 +96,16 @@ async def check_frames(
                 index = 0
             frame = batch[min(max(index, 0), len(batch) - 1)]
             severity = str(item.get("severity", "warning")).lower()
+            issue_type = str(item.get("type", "frame"))
+            blocking_type = issue_type in {"text_occlusion", "card_overlap"}
             level = (
                 "ERROR"
-                if blocking and severity == "error"
+                if blocking_type or (blocking and severity == "error")
                 else "WARNING"
             )
             issues.append(
                 {
-                    "check_item": f"vision.{item.get('type', 'frame')}",
+                    "check_item": f"vision.{issue_type}",
                     "level": level,
                     "message": str(item.get("detail", "视觉质检发现问题")),
                     "evidence_path": frame["path"],

@@ -28,6 +28,7 @@ def _frame_times(spec: EpisodeSpec, per_shot: int) -> list[dict]:
                     "section": shot.section,
                     "narration": shot.narration,
                     "card_type": shot.card.type if shot.card else "",
+                    "has_character": shot.character is not None,
                     "time_ms": cursor + round(duration * fraction),
                     "frame_index": index,
                 }

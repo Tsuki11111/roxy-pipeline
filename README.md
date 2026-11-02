@@ -321,6 +321,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/stop_all.ps1 -Ke
 - 编辑器「Remotion 渲染」卡片点「生成 Remotion 代码」，或 `POST /api/v1/episodes/{id}/actions/generate-remotion`。
 - 每个镜头单独调用一次 DeepSeek，生成自由 TSX；Python 负责 `Root.tsx`、时长、素材映射和 Composition 注册。
 - 分镜可为镜头指定 `continuity_group` 与 `scene`（setting + entities）；同组共享背景和实体设定，codegen 按组串行，后一镜复用前一镜实体造型，实体节点必须带 `data-entity` 标记。
+- 角色由 `Stage` 自动放到背景层，所有 SVG 图示、PaperCard 和文字始终在角色上方；角色不能遮挡卡片/图示文字。
 - 代码在 Docker 沙箱里 `tsc` + `remotion compositions` 校验，失败自动带编译错误重试一次。
 - 全部镜头 READY 后 `remotion_meta.enabled=true`，后续 `POST /actions/rerender` 自动走 Remotion；新期在配音/对齐完成后会**自动排队 Remotion codegen 再渲染**（`REMOTION_AUTO_CODEGEN=true`），失败或未全部 READY 时标记失败、不渲染（不再有 Playwright 回退）。
 - 生成过程中可在编辑器点「取消生成」，或调用 `POST /api/v1/episodes/{id}/actions/cancel-remotion`；已就绪的旧代码会保留。

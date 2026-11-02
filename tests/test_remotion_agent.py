@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app.agents.remotion.service import (
     RemotionPolicyError,
+    _check_layering,
     _generate_one,
     generate_remotion_code,
     start_remotion_codegen,
@@ -119,6 +120,22 @@ class WrongVariantLLM:
             ),
             "summary": "wrong style",
         }
+
+
+def test_check_layering_rejects_character_above_card():
+    with pytest.raises(RemotionPolicyError):
+        _check_layering('<Character src="x" zIndex={20} />')
+    with pytest.raises(RemotionPolicyError):
+        _check_layering('<Character src="x" style={{zIndex: 9}} />')
+    _check_layering('<Character src="x" zIndex={3} />')
+
+
+def test_check_layering_requires_card_above_character():
+    _check_layering('<PaperCard text="x" zIndex={8} />')
+    with pytest.raises(RemotionPolicyError):
+        _check_layering('<PaperCard text="x" zIndex={4} />')
+    with pytest.raises(RemotionPolicyError):
+        _check_layering('<PaperCard text="x" style={{zIndex: 2}} />')
 
 
 def test_generate_one_rejects_caption():
