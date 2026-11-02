@@ -38,7 +38,7 @@ function Test-Process([string]$Pattern) {
 }
 
 function Test-Docker {
-    docker info *> $null
+    cmd /c "docker info >nul 2>&1"
     return $LASTEXITCODE -eq 0
 }
 
