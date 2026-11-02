@@ -391,20 +391,6 @@ export default function EpisodeDetailPage() {
             ),
           },
           {
-            key: "editor",
-            label: "剪辑",
-            children: (
-              <EpisodeEditorTab
-                episode={episode}
-                refreshKey={refreshKey}
-                onChanged={refresh}
-                focusShotSeq={focusShotSeq}
-                focusIssue={focusIssue}
-                onIssueHandled={() => setFocusIssue(null)}
-              />
-            ),
-          },
-          {
             key: "audio",
             label: "配音与对齐",
             children: <AudioTab episode={episode} refreshKey={refreshKey} />,
@@ -422,6 +408,20 @@ export default function EpisodeDetailPage() {
                   setFocusIssue(issue);
                   setActiveTab("editor");
                 }}
+              />
+            ),
+          },
+          {
+            key: "editor",
+            label: "剪辑",
+            children: (
+              <EpisodeEditorTab
+                episode={episode}
+                refreshKey={refreshKey}
+                onChanged={refresh}
+                focusShotSeq={focusShotSeq}
+                focusIssue={focusIssue}
+                onIssueHandled={() => setFocusIssue(null)}
               />
             ),
           },
