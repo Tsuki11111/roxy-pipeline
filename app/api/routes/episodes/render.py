@@ -13,6 +13,7 @@ from app.agents.remotion.service import (
     RemotionRequestError,
     cancel_remotion_codegen,
     start_remotion_codegen,
+    start_remotion_revision,
 )
 from app.db.session import get_session
 from app.models.core import Episode, EpisodeStatus, RemotionShot, Shot
@@ -30,6 +31,7 @@ from app.schemas.core import (
     RemotionCodeRead,
     RemotionEpisodeRead,
     RemotionGenerateRequest,
+    RemotionReviseRequest,
     RemotionShotRead,
 )
 
@@ -159,6 +161,41 @@ async def cancel_remotion_action(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RemotionConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await session.commit()
+    await session.refresh(episode)
+    return EpisodeActionAccepted(
+        episode_id=episode.id,
+        status=episode.status,
+        node_key=node.node_key,
+        operation_id=node.id,
+    )
+
+
+@router.post(
+    "/{episode_id}/remotion/shots/{shot_id}/revise",
+    response_model=EpisodeActionAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def revise_remotion_shot(
+    episode_id: str,
+    shot_id: str,
+    payload: RemotionReviseRequest,
+    session: AsyncSession = Depends(get_session),
+) -> EpisodeActionAccepted:
+    try:
+        episode, node = await start_remotion_revision(
+            session,
+            episode_id,
+            shot_id,
+            payload.instruction,
+            auto_render=True,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RemotionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except RemotionRequestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     await session.commit()
     await session.refresh(episode)
     return EpisodeActionAccepted(

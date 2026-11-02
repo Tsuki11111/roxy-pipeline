@@ -212,6 +212,20 @@ async def test_patch_shot_and_build_render_spec(client, episode, session):
     assert overlay["opacity"] == 0.8
     assert overlay["blend"] == "multiply"
 
+    response = await client.patch(
+        f"/api/v1/shots/{shot.id}",
+        json={
+            "character_height": 900,
+            "character_scale": 0.92,
+            "character_bottom": 80,
+        },
+    )
+    assert response.status_code == 200, response.text
+    character_payload = response.json()["shot"]["card_payload"]
+    assert character_payload["character_height"] == 900
+    assert character_payload["character_scale"] == 0.92
+    assert character_payload["character_bottom"] == 80
+
     response = await client.post(
         f"/api/v1/episodes/{ep['id']}/actions/build-render-spec"
     )
@@ -220,6 +234,9 @@ async def test_patch_shot_and_build_render_spec(client, episode, session):
     assert spec["title"] == "M1.2 测试期"
     assert len(spec["shots"]) == 21
     assert spec["shots"][0]["card"]["text"] == "编辑后的卡片文案"
+    assert spec["shots"][0]["character"]["height_px"] == 900
+    assert spec["shots"][0]["character"]["scale"] == 0.92
+    assert spec["shots"][0]["character"]["bottom"] == 80
     assert spec["shots"][0]["overlay"]["image"] == (
         "character_packs/placeholder/background.png"
     )

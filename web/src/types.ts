@@ -176,6 +176,16 @@ export interface QcReport {
   reviews: Review[];
 }
 
+export interface QcFocusIssue {
+  reviewId: string;
+  seq: number;
+  checkItem: string;
+  level: Review["level"];
+  message: string;
+  suggestion: string;
+  evidencePath: string | null;
+}
+
 export interface Asset {
   id: string;
   type: string;

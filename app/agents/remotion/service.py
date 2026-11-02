@@ -361,6 +361,7 @@ def _shot_payload(
             "static_file": mapped[shot.character.image],
             "position": shot.character.position,
             "height_px": shot.character.height_px,
+            "bottom": shot.character.bottom,
             "anchor_y": shot.character.anchor_y,
             "scale": shot.character.scale,
         }
@@ -488,6 +489,8 @@ async def _generate_one(
     payload: dict[str, Any],
     skill: str,
     error_feedback: str = "",
+    instruction: str = "",
+    current_code: str = "",
 ) -> ShotCodeOutput:
     prompt = load_prompt(
         "generate_shot.md",
@@ -502,6 +505,15 @@ async def _generate_one(
         error_feedback=error_feedback or "无",
         component_name=payload["component_name"],
     )
+    if instruction:
+        prompt = (
+            f"{prompt}\n\n## 修改现有镜头\n"
+            "这不是从零生成，而是在下面的当前 TSX 上做定向修改。"
+            "保留 component_name、可用资产、整体布局和未涉及的视觉连续性，"
+            "只落实修改要求；输出完整更新后的 TSX。\n\n"
+            f"当前 TSX：\n```tsx\n{current_code}\n```\n\n"
+            f"修改要求：\n{instruction}\n"
+        )
     raw = await llm.chat_json(
         load_system_prompt(),
         prompt,
@@ -684,6 +696,7 @@ async def generate_remotion_code(
     node_run_id: str,
     *,
     shot_ids: list[str] | None = None,
+    instructions: dict[str, str] | None = None,
     cancel_check=None,
 ) -> dict:
     settings = get_settings()
@@ -750,6 +763,18 @@ async def generate_remotion_code(
             checksums=checksums,
             previous_tail=previous_tail,
         )
+        instruction = (instructions or {}).get(item.shot.shot_id)
+        if instruction:
+            row = existing.get(item.shot.shot_id)
+            current_code = ""
+            if row is not None and row.code_path:
+                path = (workdir / row.code_path).resolve()
+                if path.is_relative_to(workdir.resolve()) and path.is_file():
+                    current_code = path.read_text(encoding="utf-8", errors="replace")
+            payload["revision"] = {
+                "instruction": instruction,
+                "current_code": current_code,
+            }
         if requested is None or item.shot.shot_id in requested:
             payloads.append(payload)
         previous_tail = item.shot.narration[-40:]
@@ -765,6 +790,7 @@ async def generate_remotion_code(
     skill = load_skill()
 
     async def _generate_with_retry(payload: dict, error_feedback: str | None = None):
+        revision = payload.get("revision") or {}
         try:
             return await _generate_one(
                 llm,
@@ -772,6 +798,8 @@ async def generate_remotion_code(
                 payload=payload,
                 skill=skill,
                 error_feedback=error_feedback,
+                instruction=str(revision.get("instruction") or ""),
+                current_code=str(revision.get("current_code") or ""),
             )
         except RemotionPolicyError as exc:
             try:
@@ -781,6 +809,8 @@ async def generate_remotion_code(
                     payload=payload,
                     skill=skill,
                     error_feedback=str(exc),
+                    instruction=str(revision.get("instruction") or ""),
+                    current_code=str(revision.get("current_code") or ""),
                 )
             except Exception as retry_exc:
                 raise RemotionPolicyError(str(retry_exc)) from retry_exc
@@ -832,7 +862,9 @@ async def generate_remotion_code(
             async with semaphore:
                 try:
                     result = await _generate_with_retry(payload)
-                    if continuity and continuity.get("index", 1) > 1:
+                    if continuity and (
+                        continuity.get("index", 1) > 1 or payload.get("revision")
+                    ):
                         issue = _check_continuity(result.code, payload)
                         if issue:
                             result = await _generate_with_retry(
@@ -1105,6 +1137,7 @@ async def start_remotion_codegen(
     *,
     shot_ids: list[str] | None = None,
     auto_render: bool = False,
+    instructions: dict[str, str] | None = None,
 ) -> tuple[Episode, NodeRun]:
     settings = get_settings()
     if not settings.remotion_enabled:
@@ -1176,7 +1209,45 @@ async def start_remotion_codegen(
             "node_run_id": node.id,
             "shot_ids": shot_ids,
             "auto_render": auto_render,
+            "instructions": instructions or None,
         },
         episode_id=episode_id,
     )
     return episode, node
+
+
+async def start_remotion_revision(
+    session: AsyncSession,
+    episode_id: str,
+    shot_id: str,
+    instruction: str,
+    *,
+    auto_render: bool = True,
+) -> tuple[Episode, NodeRun]:
+    """Revise one existing shot from a user instruction, then rerender."""
+    episode = await session.get(Episode, episode_id)
+    if episode is None:
+        raise LookupError(f"episode not found: {episode_id}")
+    shot = await session.get(Shot, shot_id)
+    if shot is None or shot.episode_id != episode_id:
+        raise LookupError(f"shot not found: {shot_id}")
+    row = await session.scalar(
+        select(RemotionShot).where(
+            RemotionShot.episode_id == episode_id,
+            RemotionShot.shot_id == shot_id,
+        )
+    )
+    if row is None or row.status != "READY":
+        raise RemotionRequestError(
+            "该镜头还没有可修改的 Remotion 代码，请先生成 Remotion 代码"
+        )
+    text = instruction.strip()
+    if not text:
+        raise RemotionRequestError("修改说明不能为空")
+    return await start_remotion_codegen(
+        session,
+        episode_id,
+        shot_ids=[shot_id],
+        auto_render=auto_render,
+        instructions={shot_id: text},
+    )

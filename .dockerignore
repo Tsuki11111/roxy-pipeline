@@ -1,0 +1,8 @@
+# Remotion 构建只需要 infra/remotion/template；不要把 data/output/tmp 和依赖目录送进 Docker。
+**
+!infra
+!infra/remotion
+!infra/remotion/Dockerfile
+!infra/remotion/template
+!infra/remotion/template/**
+infra/remotion/template/node_modules

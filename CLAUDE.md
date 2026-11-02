@@ -78,6 +78,7 @@ Remotion（Node 22，Docker 沙箱，唯一渲染器）+ ffmpeg + LangGraph（�
 - **Remotion 是唯一渲染器**；Playwright 已移除，不再有回退路径。
 - **新期自动 codegen**：配音/对齐完成后 `start_auto_render` 先排队 `remotion.generate`（`REMOTION_AUTO_CODEGEN=true`），成功后自动进入渲染；codegen 失败或未全部 READY 时标记失败，不回退到其他渲染器。不要只在编辑器手动点生成。生成中可调用 `POST /actions/cancel-remotion` 取消，已就绪的旧代码保留。
 - **每镜头一个 Composition**：LLM 只生成 `src/shots/shot_<seq>.tsx`；Root、Composition ID、时长、尺寸、素材映射由 Python 生成，LLM 不得改。
+- **镜头级 Agent 修改**：编辑器「镜头属性」提供修改说明输入框，`POST /episodes/{id}/remotion/shots/{shot_id}/revise` 把当前 TSX + 说明交给 Agent 只重生成该镜头，成功后自动重渲染；质检「去修复」会把问题、建议和证据帧带入输入框。仍走同一套 Docker 校验、缓存键和 READY 闸口。
 - **视觉连续性**：分镜输出 `continuity_group` 与 `scene`（setting + entities）；同组共享背景和实体设定，codegen 按组串行，后一镜复用前一镜实体造型；实体节点必须带 `data-entity="<id>"`，缺失会重试并失败。
 - **角色层级**：`Stage` 用 `isolation:isolate` 建立独立层叠上下文；`Character` 固定 `zIndex:-1`，所有 SVG 图示、PaperCard 和文字都在角色上方。生成代码不得把 Character 包进动画/变换容器，角色 zIndex ≤5、PaperCard ≥8。
 - 生成代码只能在 **Docker 沙箱**执行（`--network none --read-only --user 10001 --cpus 2 -m 3g --pids-limit 256`），禁止在宿主机直接 `npm run`。
@@ -87,7 +88,7 @@ Remotion（Node 22，Docker 沙箱，唯一渲染器）+ ffmpeg + LangGraph（�
 - 生成质量约束：单镜头代码 ≤7000 字符/180 行；浅底深字、白字必须有深色实底；有 `character` 必须出现 Roxy；禁止随机/时间/CSS 动画。
 - 布局约束：Remotion 不做关键词标签；画面文字用 `PaperCard` Claude 暖纸卡（variant：note/quote/index/letter/sticky/specimen；tone：cream/sand/peach/sage；transition：slide/zoom/flip/drop/reveal/push）。Python 按镜头排期：约 1/3 镜头 `card_style=null` 做纯演示，其余给卡并指定样式/动效；切换位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°。
 - 角色动效：有 `character` 的镜头必须有入场（offsetX ±400–600、opacity 0→1、scale 0.94→1、rotate ±2°）、呼吸轻摆和至少一次手势/让位；禁止只有 `src/side/height` 的静态 `<Character>`，生成服务会检查并重试。
-- 背景与字幕：`Stage` 统一渲染 Claude 暖纸背景（纸纹 + 底部浅阴影 + 手绘星），不要再用旧纸纹/木地板资产；`SubtitleTrack` 为暖纸底 + 墨字 + 陶土短线。
+- 背景与字幕：`Stage` 统一渲染 Claude 暖纸背景（纸纹 + 底部浅阴影 + 手绘星），不要再用旧纸纹/木地板资产；`SubtitleTrack` 为深色半透明底 + 白字圆角字幕条。
 - 风格约束：视觉风格必须服务内容；先判断主题再选色调/材质/线条/图形语言，同一期保持统一；禁止与内容无关的赛博霓虹、故障扫描线、机器人装饰。
 - 字幕：由 Python 生成 Root 时统一叠加 `SubtitleTrack`（句级 chunks、镜头内相对时间），生成代码不画字幕；字幕层变化要提升 `renderer_version` 失效镜头缓存。
 - 画面长段文本由生成代码的 `PaperCard` 组件渲染（Claude 暖纸/墨字/陶土），Python 只叠加底部字幕；文本长度和分段由模型决定，优先直接用 `narration`/`card.text` 的长段。`TerminalCard`/`Card`/`Label`/`Caption`/`Board` 禁止用于新镜头。

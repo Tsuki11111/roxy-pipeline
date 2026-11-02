@@ -298,7 +298,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/stop_all.ps1 -Ke
 - 页面：总览、视频期列表/详情、资产库。
 - 详情页可直接导入/润色文稿、生成与确认分镜、配音、对齐、QC、渲染、发布包和发布，运行中显示节点进度并支持取消。
 - 详情页「剪辑」tab 是分镜时间线编辑器：成片预览 + 镜头时间线 + 视觉属性面板；可改卡片类型/文案、角色立绘/位置、背景、动作和入场方向，保存后只重渲染受影响镜头。
+- 「镜头属性」顶部可直接写修改说明交给 Remotion Agent，只重生成当前镜头代码并自动重渲染；质检 Tab 的「去修复」会把问题、建议和证据帧自动带入这个输入框。
 - 资产库支持按文稿生成素材、审批/拒绝、DeepSeek 图片检查。
+- 质检 Tab 显示问题证据帧；带镜头号的问题可直接「去修复」跳到剪辑 Tab 对应镜头，调整角色高度/缩放/底部距离后保存并重渲染。
 - 生产构建：`npm run build`，产物在 `web/dist/`。
 
 ### 分镜编辑器（视觉属性）
@@ -325,6 +327,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/stop_all.ps1 -Ke
 - 代码在 Docker 沙箱里 `tsc` + `remotion compositions` 校验，失败自动带编译错误重试一次。
 - 全部镜头 READY 后 `remotion_meta.enabled=true`，后续 `POST /actions/rerender` 自动走 Remotion；新期在配音/对齐完成后会**自动排队 Remotion codegen 再渲染**（`REMOTION_AUTO_CODEGEN=true`），失败或未全部 READY 时标记失败、不渲染（不再有 Playwright 回退）。
 - 生成过程中可在编辑器点「取消生成」，或调用 `POST /api/v1/episodes/{id}/actions/cancel-remotion`；已就绪的旧代码会保留。
+- 单镜头修改：`POST /api/v1/episodes/{id}/remotion/shots/{shot_id}/revise`，把当前 TSX 和修改说明交给 Agent，只重生成该镜头并在成功后自动重渲染；编辑器里的「提交修改并重渲染」用的就是这个接口。
 - 渲染缓存键包含 renderer、Remotion 版本、镜像 digest 和该镜头 code hash，只失效受影响的镜头。
 
 构建沙箱镜像（仓库根目录）：
@@ -336,7 +339,7 @@ docker build -f infra/remotion/Dockerfile -t roxy-remotion:4.0.539 .
 - Docker 必须可用；镜像 tag 与 `REMOTION_IMAGE` 一致（默认 `roxy-remotion:4.0.539`）。
 - 沙箱无网络、只读根文件系统、非 root、限制 CPU/内存/PID；生成代码只写 `tmp/remotion/<episode_id>/`，不进仓库。
 - 生成代码受 Skill 约束：单镜头 ≤9000 字符、浅底深字、有角色必须出现；画面文字用 `PaperCard` Claude 暖纸卡（6 种样式、4 种纸色），约 1/3 镜头纯演示不放卡；切换配方在 slide/zoom/flip/drop/reveal/push 中轮换，位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°。
-- 背景与字幕也使用 Claude 纸墨语言：暖纸舞台 + 底部浅阴影，字幕为暖纸底、墨字、陶土短线。
+- 背景与字幕：背景使用 Claude 纸墨语言（暖纸舞台 + 底部浅阴影）；字幕为深色半透明底、白字圆角字幕条。
 - 有角色的镜头必须有动效：从屏幕外冲入、呼吸轻摆、至少一次手势/让位；静态 `<Character>` 会被生成检查拦下。
 - 视觉风格必须服务内容：同一期统一色调、材质、线条和图形语言；禁止与主题无关的赛博霓虹/故障/机器人装饰。
 - 字幕由 Python 生成 Root 时统一叠加 `SubtitleTrack`，按句级时间轴显示；生成代码不画字幕。

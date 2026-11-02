@@ -14,6 +14,7 @@ class CharacterSpec(BaseModel):
     image: str
     position: Position = "left"
     height_px: int = 1000
+    bottom: int = Field(default=52, ge=0, le=400)
     motion: Literal["none", "idle_breathe"] = "idle_breathe"
     move: Literal[
         "none",

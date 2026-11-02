@@ -7,6 +7,7 @@ import {
   Descriptions,
   Empty,
   Form,
+  Image,
   Input,
   InputNumber,
   Modal,
@@ -32,6 +33,7 @@ import { api } from "../api";
 import type {
   Episode,
   EpisodeAudioRead,
+  QcFocusIssue,
   QcReport,
   ScriptLine,
   ScriptRead,
@@ -78,6 +80,9 @@ export default function EpisodeDetailPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [focusShotSeq, setFocusShotSeq] = useState<number | null>(null);
+  const [focusIssue, setFocusIssue] = useState<QcFocusIssue | null>(null);
   const [activeSince, setActiveSince] = useState<number | null>(null);
   const [tick, setTick] = useState(0);
 
@@ -365,6 +370,8 @@ export default function EpisodeDetailPage() {
 
       <Tabs
         className="detail-tabs"
+        activeKey={activeTab}
+        onChange={setActiveTab}
         items={[
           {
             key: "overview",
@@ -387,7 +394,14 @@ export default function EpisodeDetailPage() {
             key: "editor",
             label: "剪辑",
             children: (
-              <EpisodeEditorTab episode={episode} refreshKey={refreshKey} onChanged={refresh} />
+              <EpisodeEditorTab
+                episode={episode}
+                refreshKey={refreshKey}
+                onChanged={refresh}
+                focusShotSeq={focusShotSeq}
+                focusIssue={focusIssue}
+                onIssueHandled={() => setFocusIssue(null)}
+              />
             ),
           },
           {
@@ -398,7 +412,18 @@ export default function EpisodeDetailPage() {
           {
             key: "qc",
             label: "质检",
-            children: <QcTab episode={episode} refreshKey={refreshKey} onChanged={refresh} />,
+            children: (
+              <QcTab
+                episode={episode}
+                refreshKey={refreshKey}
+                onChanged={refresh}
+                onFix={(issue) => {
+                  setFocusShotSeq(issue.seq);
+                  setFocusIssue(issue);
+                  setActiveTab("editor");
+                }}
+              />
+            ),
           },
           {
             key: "package",
@@ -856,10 +881,12 @@ function QcTab({
   episode,
   refreshKey,
   onChanged,
+  onFix,
 }: {
   episode: Episode;
   refreshKey: number;
   onChanged: () => void;
+  onFix: (issue: QcFocusIssue) => void;
 }) {
   const { message } = App.useApp();
   const [data, setData] = useState<QcReport | null>(null);
@@ -911,20 +938,68 @@ function QcTab({
             {
               title: "详情",
               dataIndex: "detail",
-              render: (detail) => detail?.message ?? JSON.stringify(detail),
+              render: (detail) => (
+                <Space direction="vertical" size={2}>
+                  <span>{detail?.message ?? JSON.stringify(detail)}</span>
+                  {detail?.suggestion ? (
+                    <Typography.Text type="secondary">
+                      建议：{detail.suggestion}
+                    </Typography.Text>
+                  ) : null}
+                </Space>
+              ),
+            },
+            {
+              title: "证据",
+              dataIndex: "evidence_path",
+              width: 130,
+              render: (path) =>
+                path ? (
+                  <Image
+                    width={100}
+                    src={`/api/v1/episodes/${episode.id}/qc/evidence?path=${encodeURIComponent(path)}`}
+                  />
+                ) : (
+                  "—"
+                ),
             },
             {
               title: "处理",
-              width: 120,
+              width: 220,
               render: (_, row) =>
                 row.level === "PASS" ? (
                   <Typography.Text type="secondary">—</Typography.Text>
                 ) : row.resolved_at ? (
                   <Tag color="green">已处理</Tag>
                 ) : (
-                  <Button size="small" onClick={() => resolve(row.id)}>
-                    标记处理
-                  </Button>
+                  <Space>
+                    {row.detail?.shot_seq || row.detail?.seq ? (
+                      <Button
+                        size="small"
+                        type="primary"
+                        onClick={() => {
+                          const seq = Number(
+                            row.detail?.shot_seq ?? row.detail?.seq,
+                          );
+                          if (!Number.isFinite(seq)) return;
+                          onFix({
+                            reviewId: row.id,
+                            seq,
+                            checkItem: row.check_item,
+                            level: row.level,
+                            message: row.detail?.message ?? "",
+                            suggestion: row.detail?.suggestion ?? "",
+                            evidencePath: row.evidence_path,
+                          });
+                        }}
+                      >
+                        去修复
+                      </Button>
+                    ) : null}
+                    <Button size="small" onClick={() => resolve(row.id)}>
+                      标记处理
+                    </Button>
+                  </Space>
                 ),
             },
           ]}

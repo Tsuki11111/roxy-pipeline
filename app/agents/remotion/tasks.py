@@ -11,7 +11,7 @@ from app.agents.remotion.service import (
     generate_remotion_code,
 )
 from app.core.config import get_settings
-from app.models.core import Episode, NodeRun, NodeStatus
+from app.models.core import Episode, EpisodeStatus, NodeRun, NodeStatus
 from app.workflow.cancel import TaskCancelled, ensure_not_cancelled
 from app.workflow.celery_app import celery_app
 from app.db.task import run_async, task_session
@@ -53,11 +53,19 @@ async def _mark_no_render(episode_id: str, reason: str) -> None:
 
 
 async def _queue_render(episode_id: str) -> None:
-    from app.render.service import start_render
+    from app.render.service import rerender_episode, start_render
 
     async with task_session() as session:
         try:
-            await start_render(session, episode_id)
+            episode = await session.get(Episode, episode_id)
+            if episode is not None and episode.status in {
+                EpisodeStatus.READY,
+                EpisodeStatus.PUBLISHED,
+                EpisodeStatus.QC,
+            }:
+                await rerender_episode(session, episode_id)
+            else:
+                await start_render(session, episode_id)
             await session.commit()
             logger.info("auto render queued after remotion codegen episode=%s", episode_id)
         except Exception:
@@ -79,6 +87,7 @@ async def _run(
     node_run_id: str,
     shot_ids: list[str] | None,
     auto_render: bool = False,
+    instructions: dict[str, str] | None = None,
 ) -> None:
     async with task_session() as session:
         episode = await session.get(Episode, episode_id)
@@ -109,6 +118,7 @@ async def _run(
                 episode_id,
                 node_run_id,
                 shot_ids=shot_ids,
+                instructions=instructions,
                 cancel_check=lambda: _codegen_cancelled(episode_id),
             )
         except TaskCancelled:
@@ -181,9 +191,12 @@ def remotion_generate_task(
     node_run_id: str,
     shot_ids: list[str] | None = None,
     auto_render: bool = False,
+    instructions: dict[str, str] | None = None,
 ):
     try:
-        run_async(_run(episode_id, node_run_id, shot_ids, auto_render))
+        run_async(
+            _run(episode_id, node_run_id, shot_ids, auto_render, instructions)
+        )
     except TaskCancelled:
         logger.info("remotion codegen cancelled episode=%s", episode_id)
         raise

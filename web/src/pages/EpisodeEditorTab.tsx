@@ -6,6 +6,7 @@ import {
   Card,
   Empty,
   Form,
+  Image,
   Input,
   InputNumber,
   Modal,
@@ -19,6 +20,7 @@ import {
 import {
   PictureOutlined,
   ReloadOutlined,
+  RobotOutlined,
   SaveOutlined,
   ThunderboltOutlined,
   UploadOutlined,
@@ -27,6 +29,7 @@ import { api } from "../api";
 import type {
   Asset,
   Episode,
+  QcFocusIssue,
   RemotionEpisode,
   ScriptRead,
   Shot,
@@ -83,12 +86,23 @@ interface Props {
   episode: Episode;
   refreshKey: number;
   onChanged: () => void;
+  focusShotSeq?: number | null;
+  focusIssue?: QcFocusIssue | null;
+  onIssueHandled?: () => void;
 }
 
-export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Props) {
+export default function EpisodeEditorTab({
+  episode,
+  refreshKey,
+  onChanged,
+  focusShotSeq,
+  focusIssue,
+  onIssueHandled,
+}: Props) {
   const { message, modal } = App.useApp();
   const [form] = Form.useForm();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const agentCardRef = useRef<HTMLDivElement>(null);
   const [storyboard, setStoryboard] = useState<StoryboardRead | null>(null);
   const [script, setScript] = useState<ScriptRead | null>(null);
   const [characterAssets, setCharacterAssets] = useState<Asset[]>([]);
@@ -109,6 +123,8 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
   const [aiCandidates, setAiCandidates] = useState<Asset[]>([]);
   const [remotion, setRemotion] = useState<RemotionEpisode | null>(null);
   const [remotionBusy, setRemotionBusy] = useState(false);
+  const [agentInstruction, setAgentInstruction] = useState("");
+  const [agentBusy, setAgentBusy] = useState(false);
   const [codeModal, setCodeModal] = useState<{ title: string; code: string } | null>(
     null,
   );
@@ -122,6 +138,41 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
     (episode.status === "RENDERING" && !episode.current_node);
   const shots = storyboard?.shots ?? [];
   const selected = shots.find((shot) => shot.id === selectedId) ?? null;
+  const issueForSelected =
+    focusIssue && selected && focusIssue.seq === selected.seq ? focusIssue : null;
+  const selectedRemotion = remotion?.shots.find(
+    (shot) => shot.shot_id === selected?.id,
+  );
+
+  useEffect(() => {
+    if (!focusShotSeq) return;
+    const target = shots.find((shot) => shot.seq === focusShotSeq);
+    if (target) setSelectedId(target.id);
+  }, [focusShotSeq, storyboard]);
+
+  useEffect(() => {
+    if (!focusIssue || !selected || selected.seq !== focusIssue.seq) return;
+    const lines = [
+      `修复镜头 #${focusIssue.seq} 的质检问题：${focusIssue.message}`,
+      focusIssue.suggestion ? `建议：${focusIssue.suggestion}` : "",
+      "只修改这个镜头，保留整体构图、角色和未涉及的元素，输出完整 TSX。",
+    ];
+    setAgentInstruction(lines.filter(Boolean).join("\n"));
+  }, [focusIssue?.reviewId, selected?.id]);
+
+  useEffect(() => {
+    if (!focusIssue || !selected || selected.seq !== focusIssue.seq) return;
+    const timer = window.setTimeout(() => {
+      agentCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [focusIssue, selected?.id]);
+
+  useEffect(() => {
+    if (!selected) return;
+    if (focusIssue && selected.seq === focusIssue.seq) return;
+    setAgentInstruction("");
+  }, [selected?.id, focusIssue?.reviewId]);
   const lineByShot = useMemo(() => {
     const map = new Map<string, string>();
     (script?.lines ?? []).forEach((line) => map.set(line.id, line.text));
@@ -208,6 +259,9 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
         selected.character_position === "none"
           ? undefined
           : selected.character_position,
+      character_height: selected.card_payload?.character_height ?? 1000,
+      character_scale: selected.card_payload?.character_scale ?? 1,
+      character_bottom: selected.card_payload?.character_bottom ?? 52,
       bg: selected.bg,
       motion: selected.card_payload?.motion ?? "idle_breathe",
       move: selected.card_payload?.move ?? "none",
@@ -398,6 +452,9 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
         character_position: values.character_image
           ? values.character_position
           : "none",
+        character_height: values.character_height,
+        character_scale: values.character_scale,
+        character_bottom: values.character_bottom,
         bg: values.bg,
         motion: values.motion,
         move: values.move,
@@ -450,6 +507,36 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
       message.error(String(error));
     } finally {
       setRemotionBusy(false);
+    }
+  };
+
+  const reviseWithAgent = async () => {
+    if (!selected) return;
+    const instruction = agentInstruction.trim();
+    if (!instruction) {
+      message.warning("请先写下要修改的内容");
+      return;
+    }
+    if (selectedRemotion?.status !== "READY") {
+      message.error("当前镜头还没有可修改的 Remotion 代码，请先生成");
+      return;
+    }
+    if (dirty) {
+      const saved = await save();
+      if (!saved) return;
+    }
+    setAgentBusy(true);
+    try {
+      await api.reviseRemotion(episode.id, selected.id, instruction);
+      message.success("已提交给 Remotion Agent，完成后会自动重渲染");
+      setAgentInstruction("");
+      onIssueHandled?.();
+      setRemotion(await api.getRemotion(episode.id));
+      onChanged();
+    } catch (error) {
+      message.error(String(error));
+    } finally {
+      setAgentBusy(false);
     }
   };
 
@@ -560,10 +647,10 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
       <Card
         title="Remotion 渲染"
         extra={
-          remotion?.meta?.enabled ? (
-            <Tag color="green">Remotion 默认</Tag>
-          ) : remotion?.meta?.status === "generating" ? (
+          remotion?.meta?.status === "generating" ? (
             <Tag color="processing">生成中</Tag>
+          ) : remotion?.meta?.enabled ? (
+            <Tag color="green">Remotion 默认</Tag>
           ) : (
             <Tag color="gold">Remotion 未就绪</Tag>
           )
@@ -668,6 +755,97 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
       >
         {selected ? (
           <>
+            <div ref={agentCardRef}>
+              <Card
+                size="small"
+                title={
+                  <Space>
+                    <RobotOutlined />
+                    让 Agent 修改这个镜头
+                  </Space>
+                }
+                extra={
+                  selectedRemotion?.status === "READY" ? (
+                    <Tag color="green">代码已就绪</Tag>
+                  ) : (
+                    <Tag color="gold">尚未生成代码</Tag>
+                  )
+                }
+                style={{ marginBottom: 16 }}
+              >
+                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                  {issueForSelected ? (
+                    <Alert
+                      type="error"
+                      showIcon
+                      message={`质检问题：${issueForSelected.checkItem}`}
+                      description={
+                        <Space direction="vertical" size={6}>
+                          <Typography.Text>
+                            {issueForSelected.message}
+                          </Typography.Text>
+                          {issueForSelected.suggestion ? (
+                            <Typography.Text type="secondary">
+                              建议：{issueForSelected.suggestion}
+                            </Typography.Text>
+                          ) : null}
+                          {issueForSelected.evidencePath ? (
+                            <Image
+                              width={220}
+                              src={`/api/v1/episodes/${episode.id}/qc/evidence?path=${encodeURIComponent(
+                                issueForSelected.evidencePath,
+                              )}`}
+                            />
+                          ) : null}
+                        </Space>
+                      }
+                    />
+                  ) : (
+                    <Typography.Text type="secondary">
+                      直接描述画面要怎么改，Agent 会在当前镜头 TSX 上修改；提交后自动重渲染这一镜。
+                    </Typography.Text>
+                  )}
+                  <Input.TextArea
+                    rows={4}
+                    maxLength={4000}
+                    showCount
+                    value={agentInstruction}
+                    onChange={(event) => setAgentInstruction(event.target.value)}
+                    placeholder="例如：右上角的星形装饰挡住了“抓包分析”，请把它移到卡片外，其他布局不变。"
+                    disabled={!canEdit || waiting || agentBusy}
+                  />
+                  <Space wrap>
+                    <Button
+                      type="primary"
+                      icon={<RobotOutlined />}
+                      onClick={reviseWithAgent}
+                      loading={agentBusy}
+                      disabled={
+                        !canEdit ||
+                        waiting ||
+                        remotion?.meta?.status === "generating" ||
+                        selectedRemotion?.status !== "READY" ||
+                        !agentInstruction.trim()
+                      }
+                    >
+                      提交修改并重渲染
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setAgentInstruction("");
+                        onIssueHandled?.();
+                      }}
+                      disabled={agentBusy}
+                    >
+                      清空
+                    </Button>
+                    <Typography.Text type="secondary">
+                      只重建当前镜头代码，其他镜头继续复用缓存。
+                    </Typography.Text>
+                  </Space>
+                </Space>
+              </Card>
+            </div>
             <Form
               form={form}
               layout="vertical"
@@ -727,7 +905,17 @@ export default function EpisodeEditorTab({ episode, refreshKey, onChanged }: Pro
                     options={POSITION_OPTIONS}
                     disabled={!characterImage}
                   />
-                </Form.Item>              </Space>
+                </Form.Item>
+                <Form.Item name="character_height" label="高度" style={{ width: 120 }}>
+                  <InputNumber min={500} max={1200} step={20} disabled={!characterImage} />
+                </Form.Item>
+                <Form.Item name="character_scale" label="缩放" style={{ width: 120 }}>
+                  <InputNumber min={0.5} max={1.5} step={0.05} disabled={!characterImage} />
+                </Form.Item>
+                <Form.Item name="character_bottom" label="底部距离" style={{ width: 130 }}>
+                  <InputNumber min={0} max={300} step={10} disabled={!characterImage} />
+                </Form.Item>
+              </Space>
 
               <Card size="small" title="贴图层（可选）" style={{ marginTop: 16 }}>
                 <Space wrap align="start">

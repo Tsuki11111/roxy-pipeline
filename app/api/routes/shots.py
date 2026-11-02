@@ -84,6 +84,9 @@ async def update_shot(
         if payload.character_position not in POSITIONS:
             raise HTTPException(status_code=422, detail="invalid character_position")
         shot.character_position = payload.character_position
+    for field in ("character_height", "character_scale", "character_bottom"):
+        if field in fields and getattr(payload, field) is not None:
+            card_payload[field] = getattr(payload, field)
     if "duration_ms" in fields and payload.duration_ms is not None:
         if not 3000 <= payload.duration_ms <= 30000:
             raise HTTPException(status_code=422, detail="duration_ms must be 3000–30000")

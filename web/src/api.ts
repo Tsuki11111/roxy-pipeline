@@ -165,6 +165,11 @@ export const api = {
     request<import("./types").RemotionCode>(
       `/api/v1/episodes/${id}/remotion/shots/${shotId}`,
     ),
+  reviseRemotion: (id: string, shotId: string, instruction: string) =>
+    request<EpisodeActionAccepted>(
+      `/api/v1/episodes/${id}/remotion/shots/${shotId}/revise`,
+      { method: "POST", body: JSON.stringify({ instruction }) },
+    ),
   videoUrl: (id: string, version = 0) =>
     `${BASE}/api/v1/episodes/${id}/video?v=${version}`,
   resolveReview: (reviewId: string, resolvedBy = "operator") =>

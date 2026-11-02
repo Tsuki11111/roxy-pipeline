@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +28,7 @@ from app.schemas.core import (
 )
 from app.voice.align_service import AlignConflict, AlignRequestError, start_align
 from app.voice.service import VoiceConflict, VoiceRequestError, start_voice
+from app.storage.paths import PROJECT_ROOT
 
 router = APIRouter(prefix="/api/v1/episodes", tags=["episodes"])
 
@@ -210,6 +214,21 @@ async def retry_qc(
     session: AsyncSession = Depends(get_session),
 ) -> EpisodeActionAccepted:
     return await _qc_action(session, episode_id, retry=True)
+
+
+@router.get("/{episode_id}/qc/evidence")
+async def get_qc_evidence(
+    episode_id: str,
+    path: str = Query(min_length=1),
+) -> FileResponse:
+    root = (PROJECT_ROOT / "tmp" / "qc" / episode_id).resolve()
+    candidate = Path(path).expanduser()
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    candidate = candidate.resolve()
+    if not candidate.is_relative_to(root) or not candidate.is_file():
+        raise HTTPException(status_code=404, detail="evidence not found")
+    return FileResponse(candidate)
 
 
 @router.get("/{episode_id}/qc", response_model=QcReport)

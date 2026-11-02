@@ -745,11 +745,11 @@ M6 起，镜头画面只由 Remotion 渲染（`REMOTION_ONLY=true`）；Playwrig
 - 单镜头代码 ≤7000 字符/180 行，避免 `max_tokens` 截断。
 - 浅色纸纹背景必须深色字；白字只能放在 alpha ≥0.75 的深色实底上。
 - Remotion 不做关键词标签；画面文字用 `PaperCard` Claude 暖纸卡（6 variant × 4 tone），Python 按镜头排期约 1/3 纯演示、其余指定 variant/tone/transition；切换配方 slide/zoom/flip/drop/reveal/push 轮换。
-- 背景由 `Stage` 统一渲染暖纸底色 + 纸纹 + 底部浅阴影 + 手绘星；字幕由 `SubtitleTrack` 渲染暖纸底、墨字、陶土短线。
+- 背景由 `Stage` 统一渲染暖纸底色 + 纸纹 + 底部浅阴影 + 手绘星；字幕由 `SubtitleTrack` 渲染深色半透明底、白字、圆角字幕条。
 - 角色必须有动效：入场冲入（offsetX ±400–600、opacity/scale/rotate）、呼吸轻摆、至少一次手势/让位；静态 `<Character>` 会被生成检查拒绝。
 - 卡片切换用大幅运动：位移 ≥240px、缩放 0.72–0.82→1、旋转 ±4°–8°，spring 允许过冲；文本卡与演示段错开 3–8 帧。
 - 视觉风格必须服务内容：先判断主题再选色调、材质、线条和图形语言；同一期保持统一，禁止与内容无关的赛博霓虹/故障/机器人装饰。
-- 字幕由 Python 生成 `Root.tsx` 时统一叠加 `SubtitleTrack`：句级 chunks 转为镜头内相对时间，暖纸字幕条；生成代码不画字幕。
+- 字幕由 Python 生成 `Root.tsx` 时统一叠加 `SubtitleTrack`：句级 chunks 转为镜头内相对时间，深色半透明底 + 白字字幕条；生成代码不画字幕。
 - 画面长段文本由生成代码的 `PaperCard` 组件渲染，Python 只加载底部字幕；文本长度和分段由模型决定，优先直接用 `narration`/`card.text` 的长段。
 - 输入有 `character` 时必须出现 Roxy。
 - 禁止随机、时间、CSS 动画与外部资源，保证确定性。
@@ -1277,6 +1277,8 @@ reuse_key → 查 asset 表
 | GET | `/episodes/{id}/video` | 成片视频流（支持 Range） | 登录用户 |
 | POST | `/episodes/{id}/actions/rerender` | 视觉编辑后重建 spec 并重新渲染（READY/PUBLISHED/QC） | operator/admin |
 | PATCH | `/shots/{shot_id}` | 编辑单个镜头（含卡片文案与视觉属性） | operator/admin |
+| POST | `/episodes/{id}/actions/generate-remotion` | 为整期或指定镜头生成 Remotion TSX | operator/admin |
+| POST | `/episodes/{id}/remotion/shots/{shot_id}/revise` | 按用户修改说明重生成单个镜头并自动重渲染 | operator/admin |
 | GET | `/episodes/{id}/rhythm-report` | 节奏规则检查结果 | 登录用户 |
 | GET | `/episodes/{id}/qc` | 质检报告 | 登录用户 |
 | POST | `/reviews/{review_id}/resolve` | 处理人工介入项 | reviewer/admin |

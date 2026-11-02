@@ -57,6 +57,17 @@ class FakeRemotionLLM:
         }
 
 
+class CapturingRemotionLLM(FakeRemotionLLM):
+    def __init__(self) -> None:
+        self.user = ""
+
+    async def chat_json(self, system, user, *, temperature=0.7, max_tokens=2000):
+        self.user = user
+        return await super().chat_json(
+            system, user, temperature=temperature, max_tokens=max_tokens
+        )
+
+
 class CardRemotionLLM:
     async def chat_json(self, system, user, *, temperature=0.7, max_tokens=2000):
         return {
@@ -406,6 +417,34 @@ async def test_auto_render_requires_remotion_in_only_mode(
         await start_auto_render(session, ep["id"])
 
 
+async def test_generate_one_revision_includes_current_code_and_instruction():
+    llm = CapturingRemotionLLM()
+    payload = {
+        "shot_id": "shot-1",
+        "component_name": "Shot_0001",
+        "assets": [],
+        "previous_tail": "",
+        "card_style": None,
+    }
+    result = await _generate_one(
+        llm,
+        context={
+            "title": "测试",
+            "topic": "测试",
+            "summary": "",
+            "outline": "[]",
+        },
+        payload=payload,
+        skill="",
+        instruction="把右上角的星星移出卡片",
+        current_code=CODE,
+    )
+    assert result.code == CODE.strip()
+    assert "把右上角的星星移出卡片" in llm.user
+    assert "当前 TSX" in llm.user
+    assert "Shot_0001" in llm.user
+
+
 async def test_start_remotion_codegen_queues_task(client, episode, session):
     _, ep = episode
     await seed_ready_episode(session, ep["id"])
@@ -427,6 +466,46 @@ async def test_start_remotion_codegen_queues_task(client, episode, session):
     )
     assert event is not None
     assert event.payload["episode_id"] == ep["id"]
+
+
+async def test_revise_remotion_shot_queues_instruction(client, episode, session):
+    _, ep = episode
+    await seed_ready_episode(session, ep["id"])
+    shot = await session.scalar(select(Shot).where(Shot.episode_id == ep["id"]))
+    session.add(
+        RemotionShot(
+            episode_id=ep["id"],
+            shot_id=shot.id,
+            composition_id="Shot-0001",
+            code_hash="abc",
+            code_path="src/shots/shot_0001.tsx",
+            input_hash="input",
+            status="READY",
+            attempts=1,
+            prompt_hash="prompt",
+            model="test",
+            image_digest="sha256:test",
+        )
+    )
+    await session.commit()
+
+    response = await client.post(
+        f"/api/v1/episodes/{ep['id']}/remotion/shots/{shot.id}/revise",
+        json={"instruction": "把右上角的星星移出卡片，其他不变"},
+    )
+    assert response.status_code == 202, response.text
+    body = response.json()
+    assert body["node_key"] == "remotion.codegen"
+
+    event = await session.scalar(
+        select(OutboxEvent).where(OutboxEvent.event_type == "remotion.generate")
+    )
+    assert event is not None
+    assert event.payload["shot_ids"] == [shot.id]
+    assert event.payload["auto_render"] is True
+    assert event.payload["instructions"] == {
+        shot.id: "把右上角的星星移出卡片，其他不变"
+    }
 
 
 async def test_generate_remotion_code_persists_component_and_meta(

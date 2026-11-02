@@ -111,10 +111,18 @@ def build_episode_spec(
             character = CharacterSpec(
                 image=shot.character_image,
                 position=position,
-                height_px=1000,
+                height_px=max(
+                    500, min(1200, int(payload.get("character_height", 1000)))
+                ),
+                bottom=max(
+                    0, min(300, int(payload.get("character_bottom", 52)))
+                ),
                 motion=motion,
                 move=move,
                 anchor_y=0 if bust else None,
+                scale=max(
+                    0.5, min(1.5, float(payload.get("character_scale", 1.0)))
+                ),
             )
 
         overlay = None

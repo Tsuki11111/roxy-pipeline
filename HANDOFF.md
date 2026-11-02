@@ -26,7 +26,7 @@
 **M1 渲染原型 + M1.1 API/DB + M1.2 队列/渲染 worker + 文章导入/文稿优化 Agent + M3 分镜 Agent + 资产复用/持久化 + M4.1 逐句配音 + M4.2 句级对齐（字级可选） + M4.3 质检 + M5.1 局部修改/续跑/发布包 + Web 控制台 + 分镜时间线编辑器 + Remotion 逐镜头代码生成 Agent（唯一生产渲染器）+ 真实音轨成片已跑通（2026-10-30）；按主题自动生成脚本已移除。**
 
 - **2026-11-01 运行时简化（当前有效）**：已移除 PostgreSQL、RabbitMQ、MinIO 和 VM 部署；默认 SQLite `data/db/roxy.db` + 单 Redis（Celery broker）+ 本地文件系统，FastAPI 托管 `web/dist`，TTS 为可选组件。Playwright 依赖、渲染器、模板、相关测试和 demo 也已移除，Remotion 是唯一渲染器。下文 2026-11-01 之前的历史条目里出现的 Postgres/RabbitMQ/MinIO/VM/Playwright 只作记录，不再是当前运行方式。
-- 本地运行时已验证：`uv run pytest -q` 88 passed；Redis-only compose + API + 2 worker + beat；`/health` 正常，SQLite 5 期数据可见。
+- 本地运行时已验证：`uv run pytest -q` 93 passed；Redis-only compose + API + 2 worker + beat；`/health` 正常，SQLite 6 期数据可见。
 - **2026-11-01 脚本/分镜/连续性改造（当前有效）**：新建期不再填时长，脚本生成后由 AI 估算 `estimated_duration_s`；润色增加完整性校验（数字/英文 token、总字数下限）。分镜允许 1–4 句合并成一个镜头（`shot_line`），单镜 3–20 秒；新增 `continuity_group`/`scene`，同组共享背景与实体，Remotion 同组串行生成并要求 `data-entity`。旧期通过迁移回填单句 `shot_line`，行为不变。
 
 - 需求文档 v1.2、架构方案 v1.10、ADR-001～010 已写完。
@@ -77,16 +77,17 @@
 - M4 音色已定：本地 **IndexTTS2** zero-shot 克隆，用户试听长文本后确认“效果非常好”。模型 `IndexTeam/IndexTTS-2` 在 `data/assets/voice/indextts2/`，参考音固定为 `data/assets/voice/indextts2/reference.wav`；RVC v3 / MeloTTS / Piper 已停用并清理，旧模型与工具链约 5GB 已删除。
 - M4.1 逐句配音已跑通：`line_audio` 表按 `(script_line, text_hash, voice_key)` 缓存；`voice.episode` 在 media 队列逐句合成，音频按内容寻址存 `data/audio/lines/`，自动回写镜头时长并装配 `audio.wav`（-14 LUFS），句级对齐写入 `episode.audio_meta`；默认自动进入 RENDERING，成片封装真实 AAC 音轨。实测 3 句 / 10.25 秒成片通过。
 - M4.2 对齐已跑通：默认句级（`ALIGN_LEVEL=sentence`），`voice.episode` 产出每句 start/end 并写 `audio_meta`，字幕整句显示，不加载对齐模型。字级为可选：`align.episode` 用中文 wav2vec2（`jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn`）对每句做 CTC 强制对齐，字级时间写入 `audio_meta.lines[].chars` 和 `alignment.json`；模型在 `data/assets/voice/align/wav2vec2-chinese/`（1.2GB），显存不足自动回退 CPU。
-- M4.3 质检已跑通：`render.concat` 完成后默认进入 QC；规则检查流参数/时长/响度/对齐/字幕/资产，再按镜头抽首帧+中间帧送 `deepseek-flash` 多模态；结果写 `review` 表与 `episode.qc_meta`。一般视觉问题默认 warning，`QC_VISION_BLOCKING=true` 才作为 error；但 `text_occlusion`/`card_overlap`（角色遮挡卡片或图示文字）固定为 ERROR。图片资产可单独 `POST /assets/{id}/check`。
+- M4.3 质检已跑通：`render.concat` 完成后默认进入 QC；规则检查流参数/时长/响度/对齐/字幕/资产，再按镜头抽首帧+中间帧送 `deepseek-flash` 多模态；结果写 `review` 表与 `episode.qc_meta`。一般视觉问题默认 warning，`QC_VISION_BLOCKING=true` 才作为 error；但 `text_occlusion`/`card_overlap`（角色遮挡卡片或图示文字）固定为 ERROR。QC Tab 显示证据帧和「去修复」，可直接跳到剪辑 Tab 对应镜头；编辑器支持角色高度/缩放/底部距离。图片资产可单独 `POST /assets/{id}/check`。
 - M5.1 已跑通：`POST /episodes/{id}/actions/revise-line` 改单句后重置到 VOICING，只重合成变化句、重对齐并重渲染；镜头片段带 hash 缓存，未变化镜头直接复用；`POST /actions/resume` 按当前状态续跑；`workflow.reconcile_nodes` 清理 stale RUNNING 节点；`POST /actions/package` / `POST /actions/publish` 生成本地发布包（视频、封面、SRT、脚本、metadata、音频）。
 - 最终视频输出：渲染完成后复制到 `output/YYYYMMDD-HHMMSS_<episode_id前8位>/episode.mp4`，同目录写 `metadata.json`；`episode.output_path` 指向该路径，`episode.output_meta` 记录本地路径与 MinIO URI。MinIO 上传由 `MINIO_UPLOAD_ENABLED` 控制，VM 可设 `MINIO_REQUIRED=true` 强制成功。
 - M6 Remotion 代码生成 Agent 已跑通（2026-10-30）：`app/agents/remotion/` 每镜头调用一次 DeepSeek 生成自由 TSX，Python 生成 `Root.tsx`/Composition（ID 用 `Shot-0001`，组件名 `Shot_0001`）；代码在 Docker 沙箱 `tsc --noEmit` + `remotion compositions` 校验，失败带编译错误重试一次；全部镜头 READY 才 `remotion_meta.enabled=true`，`POST /actions/rerender` 自动切 Remotion，失败直接报错，不再回退 Playwright。
+- 镜头级 Agent 修改已跑通（2026-11-02）：编辑器「镜头属性」顶部新增修改说明框，QC「去修复」自动带入问题/建议/证据并选中镜头；`POST /episodes/{id}/remotion/shots/{shot_id}/revise` 将当前 TSX + 说明交给 Agent，仅重生成该镜头，校验通过后自动 rerender。实测修掉 shot 12 的 `card_overlap`，重渲染后 QC 0 error / 0 warning。
 - Remotion 沙箱镜像 `roxy-remotion:4.0.539` 由 `infra/remotion/Dockerfile` 构建；运行参数 `--network none --read-only --user 10001 --cpus 2 -m 3g --pids-limit 256`，`/tmp` 与 `/app/node_modules/.cache` 挂 tmpfs。
 - **新期自动 codegen（2026-10-31 补）**：配音/对齐完成后 `start_auto_render` 先排队 `remotion.generate`（`REMOTION_AUTO_CODEGEN=true`），codegen 成功后自动 `start_render`；失败/部分 READY 时标记失败，不回退 Playwright。这样新导入的期不需要手动点「生成 Remotion 代码」。
 - Remotion 实测：11 镜头整期真实 DeepSeek 生成 + Docker 渲染 + ffmpeg `-c copy` 拼接 + QC 全通过（最终 `health=OK`，0 warning）。首版因生成代码“浅底浅字”被 QC 报 4 条对比度 warning；补 Skill 配色约束并重生成后消失。最终改为 Claude 暖纸 `PaperCard` + 纯演示镜头混排。生成代码在 `tmp/remotion/<episode_id>/`，不进仓库。
 - Remotion 生成质量约束：单个镜头代码 ≤7000 字符/180 行；浅色纸纹背景必须用深色字，白字只能放在 alpha ≥0.75 的深色实底上；有 `character` 时必须画 Roxy。早期不写这些约束时会出现“浅底浅字”与整镜头无角色。
 - Remotion 缓存键：`shot_render_hash` 包含 renderer、Remotion 版本、镜像 digest、该镜头 code hash；代码或镜像变化只失效受影响镜头。
-- Remotion 字幕（2026-10-30 补）：Python 生成 Root 时给每个 Composition 包一层 `SubtitleTrack`，按 `build_timeline` 的句级 chunks（转成镜头内相对时间）显示底部字幕；生成代码不画字幕。`renderer_version=m6.1-subtitles`，字幕层变化会让镜头缓存失效。
+- Remotion 字幕（2026-10-30 补，2026-11-02 改样式）：Python 生成 Root 时给每个 Composition 包一层 `SubtitleTrack`，按 `build_timeline` 的句级 chunks（转成镜头内相对时间）显示底部字幕；生成代码不画字幕。当前为深色半透明底 + 白字，`renderer_version=m6.5-black-subtitle`，字幕层变化会让镜头缓存失效。
 - Remotion 前端：编辑器「Remotion 渲染」卡片支持整期/单镜头生成、状态表、代码预览、「用 Remotion 重渲染」；API 为 `POST /actions/generate-remotion`、`GET /episodes/{id}/remotion`、`GET /episodes/{id}/remotion/shots/{shot_id}`。
 - DeepSeek 输出上限：Remotion 单镜头代码用 `max_tokens=16384`（6000/8192 都会截断长镜头）；provider 会检测 `finish_reason=length` 并按失败重试，不再把截断 JSON 当成功。
 - 当前阶段仍以角色立绘为主；背景/舞台/演示物件可按需通过 Asset Agent 生成，不再固定暂停。
@@ -300,11 +301,12 @@ M1 计划新增的目录见架构方案附录 A：`app/`（api/workflow/agents/d
 - 布局约束：Remotion 不做关键词标签；画面文字用 `PaperCard` Claude 暖纸卡（variant：note/quote/index/letter/sticky/specimen；tone：cream/sand/peach/sage；transition：slide/zoom/flip/drop/reveal/push）。Python 按镜头序号排期：约 1/3 镜头 `card_style=null` 做纯演示，其余给卡并指定样式/动效；切换位移 ≥300px、缩放变化 ≥0.3、旋转 ≥5° 或 rotateY ≥45°。
 - 镜头分组：`shot_line` 关联 1–4 句连续台词，单镜 3–20 秒；详细讲解保持一个镜头，用 `<Sequence>` 演分子动画；章节台词 ≥4 句时至少一个多句镜头。
 - 视觉连续性：`continuity_group` + `scene`（setting/entities）同组共享；Remotion 同组按 seq 串行生成，后一镜 payload 带 `previous.code`，实体节点必须带 `data-entity="<id>"`，缺失重试一次后失败。
-- 角色层级：`Stage` 使用 `isolation:isolate` 建立层叠上下文，`Character` 固定 `zIndex:-1`，所有 SVG/PaperCard/文字在其上方；渲染前会把 `infra/remotion/template/src/components` 同步到现有 workdir，`renderer_version=m6.4-layer-css` 使旧片段缓存失效。
+- 镜头级 Agent 修改：编辑器「镜头属性」顶部有「让 Agent 修改这个镜头」输入框；QC Tab 的「去修复」会把问题、建议和证据帧带进修改说明并选中对应镜头。提交 `POST /episodes/{id}/remotion/shots/{shot_id}/revise`（`instruction`）后，后端把当前 TSX + 修改说明交给 Remotion Agent 只重生成该镜头，校验通过后自动重渲染；其他镜头复用缓存。
+- 角色层级：`Stage` 使用 `isolation:isolate` 建立层叠上下文，`Character` 固定 `zIndex:-1`，所有 SVG/PaperCard/文字在其上方；渲染前会把 `infra/remotion/template/src/components` 同步到现有 workdir，`renderer_version=m6.5-black-subtitle` 使旧片段缓存失效。
 - 角色动效：有 `character` 的镜头必须有入场（offsetX ±400–600、opacity 0→1、scale 0.94→1、rotate ±2°）、呼吸轻摆和至少一次手势/让位；生成检查会拒绝只有 `src/side/height` 的静态 `<Character>`。
-- 背景与字幕：`Stage` 统一渲染 Claude 暖纸背景（纸纹 + 底部浅阴影 + 手绘星），不再使用旧纸纹/木地板资产；`SubtitleTrack` 改为暖纸底 + 墨字 + 陶土短线。
-- 改动 `infra/remotion/template/` 后必须重建镜像 `roxy-remotion:4.0.539`，否则沙箱仍用旧组件。
-- Remotion 字幕由 Root 里的 `SubtitleTrack` 统一叠加（bottom 40，暖纸字幕条）；生成代码不画字幕，y 940–1080 的底部区留给字幕。
+- 背景与字幕：`Stage` 统一渲染 Claude 暖纸背景（纸纹 + 底部浅阴影 + 手绘星），不再使用旧纸纹/木地板资产；`SubtitleTrack` 为深色半透明底 + 白字圆角字幕条。
+- 改动 `infra/remotion/template/` 后必须重建镜像 `roxy-remotion:4.0.539`，否则沙箱仍用旧组件。根目录 `.dockerignore` 只保留 `infra/remotion/template` 作为构建上下文，Dockerfile 的 apt 源使用阿里云镜像；否则会把 `data/output/tmp` 共十几 GB 送进 Docker，且 `deb.debian.org` 在国内容易卡死。
+- Remotion 字幕由 Root 里的 `SubtitleTrack` 统一叠加（bottom 40，深色半透明底 + 白字字幕条）；生成代码不画字幕，y 940–1080 的底部区留给字幕。
 - 画面长段文本由生成代码的 `PaperCard` 组件渲染（Claude 暖纸/墨字/陶土），Python 只负责底部字幕 `SubtitleTrack`。文本长度和分段由模型决定，优先直接用 `narration`/`card.text` 的长段。
 - Docker 不可用或镜像缺失时 Remotion 生成失败，期次标记失败；`REMOTION_ONLY=true` 下不回退其他渲染器。
 

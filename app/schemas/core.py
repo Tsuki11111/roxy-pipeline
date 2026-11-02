@@ -260,6 +260,9 @@ class ShotUpdate(BaseModel):
     card_text: str | None = Field(default=None, max_length=500)
     character_image: str | None = None
     character_position: str | None = None
+    character_height: int | None = Field(default=None, ge=500, le=1200)
+    character_scale: float | None = Field(default=None, ge=0.5, le=1.5)
+    character_bottom: int | None = Field(default=None, ge=0, le=300)
     duration_ms: int | None = None
     bg: str | None = None
     transition: str | None = None
@@ -280,6 +283,10 @@ class ShotUpdateResult(BaseModel):
 
 class RemotionGenerateRequest(BaseModel):
     shot_ids: list[str] | None = None
+
+
+class RemotionReviseRequest(BaseModel):
+    instruction: str = Field(min_length=1, max_length=4000)
 
 
 class RemotionShotRead(BaseModel):
